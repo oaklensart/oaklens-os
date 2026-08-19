@@ -58,7 +58,7 @@ Six places you'll actually use, whatever the screen size:
 
 - **BUFFER** — everything you've dropped in, newest first. Raw, unsorted, yours.
 - **FN** — Field Notes. The writing.
-- **ARCHIVE** — the curated work, with titles and camera details.
+- **ARCHIVE** — the curated work, with titles and gear details.
 - **LIBRARY** — images staged for reuse without being published anywhere.
 - **PUBLISH** — the button that sends it all live, plus sync and export.
 - **⚙** — session status and sign-out.
@@ -412,7 +412,12 @@ link into a message to yourself and watch it unfurl.
 archive — the work with a title, a location, and the camera details.
 
 **Do it.** Click **▲** on the frame, then fill in the fields: title, subtitle,
-location, camera, lens, and whether it's digital or film.
+location, and the three gear fields — camera, lens, medium. Those three are
+write-in, so put whatever fits your work in them ("Hasselblad 500", "35mm",
+"oil on linen"), and leave any of them blank if it doesn't apply. What you type
+is remembered on this device and offered back next time, so you only type your
+setup once. Shooting with something borrowed? Switch **Remember this gear** off
+for that frame.
 
 **How you know it worked.** The frame says **ARCHIVED**, and it turns up under
 **ARCHIVE** with everything you typed.

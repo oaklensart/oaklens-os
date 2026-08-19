@@ -25,6 +25,33 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-08-19
+
+**Fixed: the archive's Camera, Lens and Medium fields were somebody else's
+gear.** They were dropdowns with a fixed set of options — two camera bodies, two
+lens types, Digital or Film — which meant a frame you made on anything else
+could not be described without editing the HTML, and a brand-new site arrived
+listing equipment it had never seen.
+
+**They're write-in fields now, and they remember.** Type whatever fits your work
+— a camera, a scanner, a pen, "iPhone 15", "oil on linen". What you type comes
+back as a suggestion the next time, and the last gear you staged prefills the
+next frame, so a session of frames from one setup is typed once.
+
+- **Remember this gear** (the toggle under the fields) is on by default. Switch
+  it off for a borrowed camera you don't want in the list — the frame still
+  records it, your device just doesn't keep it.
+- **Forget saved** clears the suggestions on that device.
+- Suggestions live in your browser, not on your site: nothing to set up, nothing
+  published, and each device keeps its own list.
+
+**Any of the three can be left blank now.** A blank one simply drops out of the
+line under the photo instead of leaving a stray `|` behind it — on the frame
+card and in the lightbox alike.
+
+Nothing to do on your side. Your existing frames keep their gear exactly as it
+is, and it shows up as suggestions the first time you open the Archive view.
+
 ## 2026-08-14 (third change today)
 
 **Fixed: taking tracks off the homepage audio card left you with no way to

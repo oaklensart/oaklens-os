@@ -19,6 +19,16 @@ function localDay(iso) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// The frame's gear line. Camera / lens / medium are free text the owner types
+// in the console (they were fixed dropdowns until 2026-08-19), so any of the
+// three can be blank — joining unconditionally left a dangling "|". Blank parts
+// drop out; all three blank drops the line.
+function gearLine(entry) {
+  return [entry.camera, entry.lens, entry.medium]
+    .map(v => (v || '').trim()).filter(Boolean)
+    .join('<span class="pipe">|</span>');
+}
+
 // ---- Render archive card ----
 function renderCard(entry) {
   const card = document.createElement('div');
@@ -46,7 +56,7 @@ function renderCard(entry) {
       ${entry.sub ? `<div class="archive-card-sub">${entry.sub}</div>` : ''}
       <div class="archive-card-location">${entry.location}</div>
       <div class="archive-card-meta">
-        ${entry.camera}<span class="pipe">|</span>${entry.lens}<span class="pipe">|</span>${entry.medium}
+        ${gearLine(entry)}
       </div>
       ${hashLine}
     </div>
@@ -184,7 +194,7 @@ function openLightbox(entry) {
   lbTitle.textContent = entry.title;
   lbSub.textContent = entry.sub || '';
   lbLocation.textContent = entry.location;
-  lbMeta.innerHTML = `${entry.camera}<span class="pipe">|</span>${entry.lens}<span class="pipe">|</span>${entry.medium}`;
+  lbMeta.innerHTML = gearLine(entry);
   lbHash.textContent = entry.hash || '';
   lightbox.classList.add('is-open');
   document.body.style.overflow = 'hidden';

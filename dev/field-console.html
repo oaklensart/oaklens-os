@@ -36,7 +36,7 @@ try {
 <script async src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.umd.js" integrity="sha384-KRanV2NRwHPanp7iM6nlLQC5jPCTscSYMko30dLJHzNXJaUNtcucWv+SOi3jV3PE" crossorigin="anonymous"></script>
 <script async src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
 
-<link rel="stylesheet" href="/css/field-console.css?v=40">
+<link rel="stylesheet" href="/css/field-console.css?v=41">
 </head>
 <body>
 
@@ -237,27 +237,40 @@ try {
             <label class="field-label">Location, Year</label>
             <input class="field-input" id="arch-loc" placeholder="Location, Year">
           </div>
+          <!-- Gear is free text, not a fixed list: one instance shoots two bodies,
+               the next paints or scans, and hardcoding either one into the engine
+               made the form wrong for every fork (these were three fixed option
+               lists until 2026-08-19). The <datalist> is the memory — values you
+               have used before, offered back. See js/console/archive.js. -->
           <div class="field-row cols-3">
             <div class="field" style="margin:0;">
               <label class="field-label">Camera</label>
-              <select class="field-select" id="arch-cam">
-                <option>LUMIX G85</option>
-                <option>LUMIX GX85</option>
-              </select>
+              <input class="field-input" id="arch-cam" list="arch-cam-memory"
+                     placeholder="Camera / tool" autocomplete="off" spellcheck="false">
+              <datalist id="arch-cam-memory"></datalist>
             </div>
             <div class="field" style="margin:0;">
               <label class="field-label">Lens</label>
-              <select class="field-select" id="arch-lens">
-                <option>Prime</option>
-                <option>Telephoto</option>
-              </select>
+              <input class="field-input" id="arch-lens" list="arch-lens-memory"
+                     placeholder="Lens" autocomplete="off" spellcheck="false">
+              <datalist id="arch-lens-memory"></datalist>
             </div>
             <div class="field" style="margin:0;">
               <label class="field-label">Medium</label>
-              <select class="field-select" id="arch-med">
-                <option>Digital</option>
-                <option>Film</option>
-              </select>
+              <input class="field-input" id="arch-med" list="arch-med-memory"
+                     placeholder="Medium" autocomplete="off" spellcheck="false">
+              <datalist id="arch-med-memory"></datalist>
+            </div>
+          </div>
+          <div class="gear-memory">
+            <label class="gear-memory-toggle" for="arch-gear-remember">
+              <input type="checkbox" id="arch-gear-remember" checked>
+              <span>Remember this gear</span>
+            </label>
+            <button class="btn btn-sm btn-ghost" onclick="archiveForgetGear()"
+                    title="Clear the saved camera / lens / medium suggestions">Forget saved</button>
+            <div class="gear-memory-hint">
+              Saved on this device · what you type comes back as a suggestion and prefills the next frame
             </div>
           </div>
 
@@ -270,7 +283,7 @@ try {
             <strong>Title</strong><br>
             Subtitle<br>
             Location, Year<br>
-            <span class="meta">LUMIX G85 <span class="pipe">|</span> Prime <span class="pipe">|</span> Digital</span>
+            <span class="meta">Camera <span class="pipe">|</span> Lens <span class="pipe">|</span> Medium</span>
           </div>
 
           <div class="btn-row gap-12">
@@ -1270,7 +1283,7 @@ Capture first. Process later."></textarea>
     "/js/console/sync.js":      "/js/console/sync.js?v=1",
     "/js/console/upload.js":    "/js/console/upload.js?v=2",
     "/js/console/more-views.js": "/js/console/more-views.js?v=4",
-    "/js/console/archive.js":   "/js/console/archive.js?v=1",
+    "/js/console/archive.js":   "/js/console/archive.js?v=2",
     "/js/console/buffer.js":    "/js/console/buffer.js?v=2",
     "/js/console/fn-editor.js": "/js/console/fn-editor.js?v=4",
     "/js/console/focal.js":     "/js/console/focal.js?v=3",
@@ -1281,7 +1294,7 @@ Capture first. Process later."></textarea>
     "/js/console/bench.js":     "/js/console/bench.js?v=1",
     "/js/pulse-packs.js":       "/js/pulse-packs.js?v=2",
     "/js/console/pulse.js":     "/js/console/pulse.js?v=2",
-    "/js/console/init.js":      "/js/console/init.js?v=7",
+    "/js/console/init.js":      "/js/console/init.js?v=8",
     "/js/markdown-engine.js":   "/js/markdown-engine.js?v=4",
     "/js/jpeg-privacy.js":      "/js/jpeg-privacy.js?v=1",
     "/js/raw-lens.js":          "/js/raw-lens.js?v=5",

@@ -728,6 +728,45 @@ button { font-family: inherit; cursor: pointer; }
   letter-spacing: 0.16em;
 }
 .compose-form { display: flex; flex-direction: column; gap: 14px; }
+
+/* ---- Gear memory (2026-08-19) ----
+   Camera / lens / medium are free text now, so the form needs the affordance a
+   fixed <select> gave away for free: not retyping the same body every frame.
+   The toggle decides whether the staged values are saved as suggestions and as
+   the next frame's prefill; the button forgets them. Device-local, no server. */
+.gear-memory {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: -4px;
+}
+.gear-memory-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-micro);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.gear-memory-toggle input {
+  width: 14px;
+  height: 14px;
+  /* Deliberately NOT the accent: this box is checked by default, and a
+     permanent red mark beside STAGE TO ARCHIVE spends the one red the console
+     reserves for actions. */
+  accent-color: var(--text-dim);
+  cursor: pointer;
+}
+.gear-memory-hint {
+  flex: 1 1 100%;
+  font-size: var(--t-micro);
+  color: var(--text-faint);
+  letter-spacing: 0.13em;
+  line-height: 1.6;
+}
 .archive-tag-preview {
   /* Simulates the public site's frame tag — dark island in both modes. */
   background: #000;
@@ -2879,6 +2918,10 @@ html, body { overscroll-behavior: none; }
   .btn, .btn-sm, .uqp-btn, .filter-btn, .status-btn, .nav-btn,
   .modal-close, .ledger-ack, .login-btn,
   .field-input, .field-select { min-height: 44px; }
+  /* The gear toggle is a label + a 14px box — too small for a finger on its
+     own, so the whole label grows and the box with it. */
+  .gear-memory-toggle { min-height: 44px; }
+  .gear-memory-toggle input { width: 18px; height: 18px; }
 
   /* …icon buttons keep their visual size (dense overlays) but inflate their
      tappable area with an invisible halo to an effective ~44px. */

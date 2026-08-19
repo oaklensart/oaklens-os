@@ -21,7 +21,7 @@ import { registerView, registerLongPress, refreshStageIndicators, themeInit, wir
 import { updatePurgeR2Button } from './sync.js';
 import { _libraryUploadsPending } from './upload.js';
 import { renderWall, renderBarrel, renderNetwork, renderLibrary, wallIngest, libraryIngest } from './more-views.js';
-import { renderArchive, archiveIngestPhoto, archiveUpdatePreview } from './archive.js';
+import { renderArchive, archiveIngestPhoto, archiveUpdatePreview, restoreGearMemory, setGearRemember } from './archive.js';
 import { renderBuffer, bufferIngest, bufferPromote, bufferRemove, burstLinkMode, burstToggleFrame, enterBurstLinkMode, exitBurstLinkMode } from './buffer.js';
 import { renderFN, fnHeroIngest, fnHeroClear, fnSetupEnhancements, _applyFnFrontmatter } from './fn-editor.js';
 import { FocalModal, bufferFocal, loadOgCards } from './focal.js';
@@ -181,10 +181,18 @@ export function init() {
   _initLongPress();
   setInterval(_checkSessionExpiry, 60_000);
 
+  // All six are text inputs now — camera/lens/medium stopped being <select>s
+  // when the gear list opened up (2026-08-19), and "input" covers typing and
+  // picking a saved suggestion alike.
   ["arch-title","arch-sub","arch-loc","arch-cam","arch-lens","arch-med"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener("input", archiveUpdatePreview);
-    if (el && el.tagName === "SELECT") el.addEventListener("change", archiveUpdatePreview);
+    document.getElementById(id)?.addEventListener("input", archiveUpdatePreview);
+  });
+  // Gear memory: fill the camera/lens/medium suggestion lists and prefill the
+  // compose form with the last gear staged. Safe here — load() ran at the top
+  // of init(), so the lists can already draw on the frames in STATE.
+  restoreGearMemory();
+  document.getElementById("arch-gear-remember")?.addEventListener("change", e => {
+    setGearRemember(e.target.checked);
   });
   archiveUpdatePreview();
 
