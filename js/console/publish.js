@@ -586,7 +586,11 @@ export async function syncFromServer() {
       // and that re-syncing is what puts it back.
       logEvent(`⚠ sync: main HEAD unavailable (${data.headShaError || 'unknown'}) — `
         + 'stale-base guard is disarmed for this snapshot; sync again to re-arm', 'error');
-      showToast('⚠ Couldn\'t read main\'s revision — cross-device publish check is off until the next sync',
+      // The reason rides along in the toast too, not just the event log: this
+      // warning is the only thing most authors will see, and "couldn't read it"
+      // without "because GitHub said X" is a dead end for whoever debugs it.
+      showToast(`⚠ Couldn't read main's revision (${data.headShaError || 'unknown'}) — `
+        + 'cross-device publish check is off until the next sync',
         { kind: 'warning', id: 'sync-nohead' });
     }
     // (github-down says its piece once, below — a disarmed-guard warning under

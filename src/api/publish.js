@@ -54,6 +54,36 @@ function _utf8ToBase64(str) {
   return btoa(binary);
 }
 
+// main's current commit SHA, by two roads.
+//
+// The git-refs endpoint is the direct one, but it is not the only one that
+// knows the answer, and it fails on its own sometimes — a transient 5xx, a
+// secondary rate limit on a burst of parallel calls, a token whose grant
+// covers the contents API but not the git plumbing. A sync that reads eight
+// manifests fine and then reports "couldn't read main's revision" is that
+// case: the link is up, one endpoint blinked.
+//
+// So when it does, ask the commits endpoint — same REST family as the file
+// reads that just succeeded, same answer. Only if BOTH roads fail does the
+// caller get null, and the stale-base guard genuinely has nothing to stand on.
+// The first road's error is the one reported: it is the one that describes the
+// intended call.
+export async function _headSha(token, owner, repo) {
+  try {
+    const ref = await _ghFetch(token, owner, repo, 'git/ref/heads/main');
+    return ref.object.sha;
+  } catch (refErr) {
+    try {
+      const commit = await _ghFetch(token, owner, repo, 'commits/main');
+      if (!commit?.sha) throw new Error('commits/main returned no sha');
+      console.warn('[sync] git/ref/heads/main failed (%s) — fell back to commits/main', refErr.message);
+      return commit.sha;
+    } catch {
+      throw refErr;
+    }
+  }
+}
+
 // ---- Publish safety guard ----
 // Every published data manifest (data/*.json) is a JSON array. The Field Console
 // rebuilds each manifest from its in-memory state on every publish, so if that
@@ -347,8 +377,7 @@ export async function handleSync(request, env) {
   // snapshot. So the response says so (`headShaError`) and the console surfaces
   // it, rather than the protection quietly evaporating.
   let headShaError = null;
-  const headShaPromise = _ghFetch(env.GITHUB_TOKEN, owner, repo, 'git/ref/heads/main')
-    .then(ref => ref.object.sha)
+  const headShaPromise = _headSha(env.GITHUB_TOKEN, owner, repo)
     .catch((err) => {
       headShaError = err.message || 'ref fetch failed';
       console.error('[sync] main HEAD unavailable:', headShaError);

@@ -164,12 +164,21 @@ describe('empty-overwrite guard — anything else is the absence of information'
 });
 
 describe('GET /api/sync — a missing headSha is announced, not silent', () => {
-  function stubSync({ refOk }) {
+  // `refOk` is the git-refs endpoint; `commitsOk` is the commits/main fallback.
+  // Both down is the only combination that leaves the snapshot without a base.
+  function stubSync({ refOk, commitsOk = false }) {
+    const seen = [];
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
       const u = String(url);
+      seen.push(u);
       if (u.includes('git/ref/heads/main')) {
         return refOk
           ? new Response(JSON.stringify({ object: { sha: 'HEAD_SHA' } }), { status: 200 })
+          : new Response(JSON.stringify({ message: 'API rate limit exceeded' }), { status: 403 });
+      }
+      if (u.includes('/commits/main')) {
+        return commitsOk
+          ? new Response(JSON.stringify({ sha: 'HEAD_SHA' }), { status: 200 })
           : new Response(JSON.stringify({ message: 'API rate limit exceeded' }), { status: 403 });
       }
       if (u.includes('/contents/')) {
@@ -177,6 +186,7 @@ describe('GET /api/sync — a missing headSha is announced, not silent', () => {
       }
       throw new Error(`unexpected fetch: ${u}`);
     });
+    return seen;
   }
 
   const syncReq = async () => new Request('https://example.com/api/sync?files=data/posts.json', {
@@ -187,7 +197,7 @@ describe('GET /api/sync — a missing headSha is announced, not silent', () => {
     // headSha null means the next publish carries no baseSha, which disarms
     // the stale-base guard for that snapshot. The sync still succeeds — the
     // files are good — but the console has to be able to say so.
-    stubSync({ refOk: false });
+    stubSync({ refOk: false, commitsOk: false });
     const res = await worker.fetch(await syncReq(), env, ctx);
     expect(res.status).toBe(200);
 
@@ -205,6 +215,33 @@ describe('GET /api/sync — a missing headSha is announced, not silent', () => {
     expect(body.headSha).toBe('HEAD_SHA');
     expect(body.staleBaseGuard).toBeUndefined();
     expect(body.headShaError).toBeUndefined();
+  });
+
+  it('falls back to commits/main when the refs endpoint blinks', async () => {
+    // The live case (2026-08-17): eight manifests read fine and only the refs
+    // call failed. One endpoint being down is not the same as GitHub being
+    // down, and the guard should not be disarmed for it.
+    const seen = stubSync({ refOk: false, commitsOk: true });
+    const body = await (await worker.fetch(await syncReq(), env, ctx)).json();
+    expect(body.headSha).toBe('HEAD_SHA');
+    expect(body.staleBaseGuard, 'the guard stays armed').toBeUndefined();
+    expect(body.headShaError).toBeUndefined();
+    expect(seen.some((u) => u.includes('/commits/main'))).toBe(true);
+  });
+
+  it('does not spend the fallback call when the refs endpoint works', async () => {
+    const seen = stubSync({ refOk: true });
+    await worker.fetch(await syncReq(), env, ctx);
+    expect(seen.some((u) => u.includes('/commits/main'))).toBe(false);
+  });
+
+  it('reports the refs error, not the fallback\'s, when both are down', async () => {
+    // The refs call is the one that describes what we meant to do; leading with
+    // the fallback's failure would send a reader after the wrong endpoint.
+    stubSync({ refOk: false, commitsOk: false });
+    const body = await (await worker.fetch(await syncReq(), env, ctx)).json();
+    expect(body.headSha).toBeNull();
+    expect(body.headShaError).toMatch(/rate limit/i);
   });
 
   it('names the repo it asked GitHub for', async () => {
