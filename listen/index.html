@@ -186,9 +186,59 @@
   padding: 40px 0;
 }
 
+/* ---- subscribe ----
+   Rendered by js/page-listen.js only when the registry actually holds an
+   episode, so a site that has never marked one never grows the block. Lives
+   here rather than in css/main.css: fifteen rules used by one page are not
+   worth a ?v= bump across every other page that loads the stylesheet. */
+.lt-subscribe {
+  margin-top: 56px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.lt-sub-head {
+  font-family: var(--font-meta);
+  font-size: 0.58rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+  margin-bottom: 7px;
+}
+
+.lt-sub-note {
+  font-family: var(--font-meta);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+  margin-bottom: 13px;
+}
+
+.lt-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* The address is readable text first and a link second — a clipboard write can
+   be refused, and a URL you can see is a URL you can retype. */
+.lt-sub-url {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  margin-right: auto;
+  border-bottom: 1px solid var(--line-2);
+  padding-bottom: 1px;
+}
+@media (hover: hover) { .lt-sub-url:hover { color: var(--accent); } }
+
 @media (max-width: 560px) {
   .listen-wrap { padding: 36px 20px 110px; }
   .lt-row { grid-template-columns: 1.7rem 1fr; gap: 0 10px; }
+  .lt-sub-url { font-size: 0.66rem; }
 }
 </style>
 </head>
@@ -232,8 +282,8 @@
 </footer>
 
 <script src="/js/site-common.js?v=2"></script>
-<script src="/js/audio-player.js?v=6" defer></script>
-<script src="/js/page-listen.js?v=1" defer></script>
+<script src="/js/audio-player.js?v=7" defer></script>
+<script src="/js/page-listen.js?v=2" defer></script>
 
 </body>
 </html>

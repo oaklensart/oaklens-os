@@ -95,11 +95,32 @@ export const SHAPE = Object.freeze({
   webring: { node: null, slug: '' },
   // Channel-level fields for /podcast.xml. SHAPE, not BACKFILL: omitting the
   // block means "this show is just the site" — title and description fall back
-  // to the site's own name and tagline, and no <itunes:image> is emitted.
-  // Artwork is the one field Apple requires before it will accept a
-  // submission, and it must be square; there is nothing on a photography site
-  // to derive that from, so it is asked for rather than guessed at.
-  podcast: { title: '', description: '', image: '' },
+  // to the site's own name and tagline, and every submission-gating tag is
+  // simply not emitted.
+  //
+  // Apple hard-requires THREE of these before it will accept a submission —
+  // `image` (square, 1400px minimum), `category`, and `owner.email` — and
+  // rejects the feed outright without them. Nothing here is guessed: there is
+  // nothing on a creative site to derive Apple's fixed taxonomy from, and
+  // `owner.email` is NEVER defaulted to `email` above, because Apple
+  // republishes the feed and that would publish a fork owner's contact address
+  // into a public directory listing without anyone opting in.
+  //
+  // `locked` is null rather than false on purpose: `<podcast:locked>no</…>` is
+  // a real statement ("any platform may import this show"), and an instance
+  // that never mentioned it has not made it. See src/shared/podcast.js for the
+  // three-tier posture and which tag each field lands in.
+  podcast: {
+    title: '', description: '', image: '',
+    category: '', subcategory: '',
+    owner: { name: '', email: '' },
+    copyright: '', locked: null,
+    funding: { url: '', label: '' },
+    // Tier 1 — always emitted, and these defaults are true statements about a
+    // fork that has configured nothing (the shipped pages are `<html lang="en">`,
+    // and a show is episodic until it says otherwise).
+    language: '', type: '', explicit: false,
+  },
 });
 
 function isPlainObject(v) {

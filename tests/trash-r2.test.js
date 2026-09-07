@@ -11,7 +11,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 let renderCalls = 0;
 globalThis.renderTrash = () => { renderCalls++; };
 
-const { sessionTrash, dropTrashForDeletedR2 } = await import('../js/console-state.js');
+const { sessionTrash, dropTrashForDeletedR2, cancelPendingDeleteForKeys, _pendingR2Deletes, setPendingR2Deletes } =
+  await import('../js/console-state.js');
 
 function seedTrash(entries) {
   sessionTrash.length = 0;
@@ -62,5 +63,54 @@ describe('dropTrashForDeletedR2', () => {
     expect(dropTrashForDeletedR2([{ keys: ['k'] }])).toBe(0); // no entryId
     expect(sessionTrash).toHaveLength(1);
     expect(renderCalls).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The other half of the queue's lifetime: a key that something LIVE takes back
+// before the queued delete ever fires.
+//
+// The trap this closes: trash `x.mp3` (queues audio/x.mp3) → re-attach a new
+// file with the same name → the upload overwrites that object → publish commits
+// a registry pointing at it → the queue THEN deletes it. Every step reported
+// success and the site was left with a manifest entry whose media was gone.
+describe('cancelPendingDeleteForKeys', () => {
+  beforeEach(() => { setPendingR2Deletes([]); });
+
+  it('un-arms a queued delete when the same key is uploaded again', () => {
+    setPendingR2Deletes([{ surface: 'audio', entryId: 'old', keys: ['audio/x.mp3'] }]);
+    const dropped = cancelPendingDeleteForKeys(['audio/x.mp3']);
+    expect(dropped).toBe(1);
+    expect(_pendingR2Deletes, 'nothing left to delete, so no row survives').toHaveLength(0);
+  });
+
+  it('leaves other queued deletes alone', () => {
+    setPendingR2Deletes([
+      { surface: 'audio', entryId: 'a', keys: ['audio/keep.mp3'] },
+      { surface: 'audio', entryId: 'b', keys: ['audio/x.mp3'] },
+    ]);
+    cancelPendingDeleteForKeys(['audio/x.mp3']);
+    expect(_pendingR2Deletes.map((d) => d.entryId)).toEqual(['a']);
+  });
+
+  it('drops only the re-claimed key from a multi-variant entry', () => {
+    // An image entry queues three variants; re-uploading one size must not
+    // strand the other two as un-deletable orphans in R2.
+    setPendingR2Deletes([{
+      surface: 'archive', entryId: 'f1',
+      keys: ['archive/f1-480w.webp', 'archive/f1-1024w.webp', 'archive/f1-2048w.webp'],
+    }]);
+    const dropped = cancelPendingDeleteForKeys(['archive/f1-1024w.webp']);
+    expect(dropped).toBe(1);
+    expect(_pendingR2Deletes[0].keys).toEqual([
+      'archive/f1-480w.webp', 'archive/f1-2048w.webp',
+    ]);
+  });
+
+  it('is a no-op for an empty or absent key list', () => {
+    setPendingR2Deletes([{ surface: 'audio', entryId: 'a', keys: ['audio/x.mp3'] }]);
+    expect(cancelPendingDeleteForKeys([])).toBe(0);
+    expect(cancelPendingDeleteForKeys(undefined)).toBe(0);
+    expect(_pendingR2Deletes).toHaveLength(1);
   });
 });

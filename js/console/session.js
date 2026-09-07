@@ -20,6 +20,7 @@ import { toast, hideOverlay, renderBuildStamp, renderViewportStamp } from './chr
 import { _librarySyncFailed } from './sync.js';
 import { _hasNetFailedUploads } from './upload.js';
 import { syncFromServer, _resumeAfterReconnect, _syncPendingReconnect } from './publish.js';
+import { applyPodcastPosture } from './audio.js';
 
 // ============== SESSION AUTH (UI) ==============
 // Token storage, JWT parsing, and the /api/auth request live in
@@ -188,6 +189,11 @@ export async function applyInstancePosture() {
     }
   }
   applyRingPosture(s.webring);
+  // The Audio shelf's feed card. Fed from HERE rather than fetched again: this
+  // is the one place the console reads GET /api/site/settings, and audio.js
+  // sits below this module in the layer order, so a plain import is legal and
+  // a second request would only be a second chance to disagree.
+  applyPodcastPosture(s.podcast);
 }
 
 // ---- ANALOGS.NETWORK: the ring card in the NETWORK view ----

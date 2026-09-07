@@ -53,7 +53,18 @@ function resolveBaseRef() {
   // was just made still gets checked. On a root commit there is nothing behind
   // HEAD; returning base makes this a no-op rather than a false alarm.
   const head = tryGit('rev-parse HEAD');
-  if (base === head) return tryGit('rev-parse HEAD~1') ?? base;
+  if (base === head) {
+    // …UNLESS the change under test is still in the working tree. Stepping back
+    // then compares against HEAD~1, and HEAD's own (correct) bump satisfies the
+    // check on the LATER edit's behalf — so a second round of changes to the
+    // same file, on top of a commit that is already on origin/main, sails
+    // through at the version that commit published. Found the hard way, in
+    // exactly that shape: field-console.css bumped 51→52 and pushed, then
+    // edited again, and this guard saw 52 ≠ 51 and passed.
+    const dirty = tryGit('status --porcelain -- js css');
+    if (dirty) return base;
+    return tryGit('rev-parse HEAD~1') ?? base;
+  }
   return base;
 }
 

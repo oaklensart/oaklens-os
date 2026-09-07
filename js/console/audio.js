@@ -22,9 +22,10 @@
 // rows, which run in global scope, so every one of them must stay an exported
 // function (see the asset-library header for what happens otherwise).
 
-import { STATE, save, stageChange, trashItem } from '../console-state.js';
+import { STATE, save, stageChange, unstageChange, ledgerRowFor, trashItem, sessionTrash,
+  _pendingR2Deletes, cancelPendingDeleteForKeys } from '../console-state.js';
 import { logEvent } from '../console-telemetry.js';
-import { toast, escapeHTML, escapeAttrJS, refreshSurface, hideOverlay } from './chrome.js';
+import { toast, escapeHTML, escapeAttrJS, hideOverlay } from './chrome.js';
 import { todayISO, uid, cleanFilename } from './utils.js';
 import { _enqueueUpload } from './upload.js';
 import { fnInsertAtCursor } from './fn-editor.js';
@@ -189,6 +190,17 @@ export async function audioAddFiles(files, opts) {
       toast(`⚠ Already on the shelf: ${filename}`, 'error');
       continue;
     }
+    // A trashed track is not on the shelf but still OWNS its R2 key, and its
+    // deletion is armed until publish. Re-adding the same filename used to
+    // overwrite that object and then have publish delete it. The upload path
+    // now un-arms the delete (cancelPendingDeleteForKeys), so this is no longer
+    // destructive — but silently resurrecting a file the author just threw away
+    // is not what they asked for either. Point them at RESTORE, which brings
+    // the metadata back too.
+    if (sessionTrash.some((t) => t.surface === 'audio' && t.item.filename === filename)) {
+      toast(`⚠ ${filename} is in the trash — use ↩ RESTORE to bring it back`, 'error');
+      continue;
+    }
 
     // Title defaults to the filename with its extension and separators tidied
     // — a sensible thing to publish if the author never opens the edit field.
@@ -280,8 +292,59 @@ export function _audioPromote(id) {
   if (typeof renderAudio === 'function') renderAudio();
 }
 
+// What the last CLEAR CARD took down, so it can be put back. Layer 2 of the
+// reversibility rule (CLAUDE.md): one chip naming what a displacing action
+// pushed out — the `↩ RE-PIN` shape — not a history.
+//
+// ⚠️ Module memory, deliberately, NOT orphaned `featured_order` values left in
+// the registry as a stateless marker. js/recent-index.js picks the card with
+// `a.featured || a.featured_order`, so an order left behind would keep that
+// track ON THE LIVE HOMEPAGE — the clear would not have cleared anything.
+let _lastCardClear = null;
+
+// Resolve the chip against the shelf AS IT IS NOW. A track that has since been
+// deleted, trashed or re-featured is dropped, and when nothing restorable is
+// left the chip disappears rather than becoming a button that does nothing.
+export function _audioCardRestoreTarget() {
+  if (!_lastCardClear || !_lastCardClear.length) return null;
+  const live = _lastCardClear
+    .filter(({ id }) => {
+      const t = STATE.audio.find((a) => a.id === id);
+      return t && !t.featured;
+    })
+    .sort((a, b) => (Number(a.featured_order) || 0) - (Number(b.featured_order) || 0));
+  return live.length ? live : null;
+}
+
+export function _audioRestoreCard() {
+  const target = _audioCardRestoreTarget();
+  if (!target) return;
+  // Re-feature THROUGH _audioPromote rather than by writing the flags back, so
+  // the 6-track cap, the dense renumber and one staged gesture per track all
+  // stay honest by construction. Ascending order, so the card comes back in the
+  // sequence it went down in.
+  target.forEach(({ id }) => _audioPromote(id));
+  _lastCardClear = null;
+  if (typeof renderAudio === 'function') renderAudio();
+  toast(`✓ Homepage card restored (${target.length} track${target.length === 1 ? '' : 's'})`, 'success');
+}
+
 export function _audioClearCard() {
-  const clearedIds = STATE.audio.filter((a) => a.featured).map((a) => a.id);
+  const cleared = STATE.audio
+    .filter((a) => a.featured)
+    .map((a) => ({ id: a.id, featured_order: Number(a.featured_order) || 0 }));
+  if (!cleared.length) return;
+
+  const names = STATE.audio.filter((a) => a.featured)
+    .map((a) => a.title || a.filename || 'Untitled').join(', ');
+  // Single-track delete has always asked; clearing up to six tracks did not.
+  if (!confirm(
+    `Take ${cleared.length} track${cleared.length === 1 ? '' : 's'} off the homepage card?\n\n${names}\n\n` +
+    'The tracks stay on the shelf. You can put the card back with ↩ RESTORE CARD until you leave this tab.'
+  )) return;
+
+  _lastCardClear = cleared;
+  const clearedIds = cleared.map((c) => c.id);
   STATE.audio.forEach((a) => {
     a.featured = false;
     delete a.featured_order;
@@ -289,16 +352,14 @@ export function _audioClearCard() {
   // One gesture, one staged change — see _audioPromote above for why this is
   // not `-count`. Every cleared track's id rides the one row: each of them
   // changed, so each needs sync protection.
-  if (clearedIds.length > 0) {
-    stageChange('audio', {
-      ids: clearedIds,
-      label: `homepage card cleared (${clearedIds.length} track${clearedIds.length === 1 ? '' : 's'})`,
-      kind: 'feature',
-    });
-  }
+  stageChange('audio', {
+    ids: clearedIds,
+    label: `homepage card cleared (${clearedIds.length} track${clearedIds.length === 1 ? '' : 's'})`,
+    kind: 'feature',
+  });
   save();
   if (typeof renderAudio === 'function') renderAudio();
-  toast('Homepage audio card cleared', 'info');
+  toast('Homepage audio card cleared — ↩ RESTORE CARD puts it back', 'info');
 }
 
 export function _audioToggleEpisode(id) {
@@ -327,6 +388,51 @@ export function _audioToggleDownload(id) {
     entry.download ? 'success' : 'warning');
 }
 
+// The last ✎ EDIT, kept so the gesture has a named reverse.
+//
+// The reversibility rule (CLAUDE.md) calls out this exact shape: *"a
+// window.prompt that overwrites a field with no way back"*. Two prompts in a
+// row, no confirm, no undo — type over a title, press OK, and what was there is
+// gone. This is layer 2: ONE chip, not a history, resolved against the shelf as
+// it is now.
+//
+// `ledgerRow` is the ledger row as it stood BEFORE the edit — a deep copy,
+// because stageChange folds repeated gestures into an existing row (bumping
+// `n`, overwriting `label`, letting the newest `kind` win). Deleting that row on
+// undo would discard the item's earlier pending changes and un-protect it from
+// the next sync. Snapshot, then hand it back.
+let _lastAudioEdit = null;
+
+/**
+ * Resolve the undo chip live. It is offered only while the entry still exists
+ * AND still holds exactly what the edit wrote — so a track that was trashed, or
+ * edited again since, drops the chip instead of leaving a button that would
+ * write two-edits-ago values over one-edit-ago values.
+ */
+export function _audioEditUndoTarget() {
+  if (!_lastAudioEdit) return null;
+  const entry = STATE.audio.find((a) => a.id === _lastAudioEdit.id);
+  if (!entry) return null;
+  const { after } = _lastAudioEdit;
+  if (entry.title !== after.title || entry.sub !== after.sub || entry.slug !== after.slug) return null;
+  return { entry, before: _lastAudioEdit.before };
+}
+
+export function _audioUndoEdit() {
+  const target = _audioEditUndoTarget();
+  if (!target) return;
+  const { entry, before } = target;
+  entry.title = before.title;
+  entry.sub = before.sub;
+  entry.slug = before.slug;
+  // The exact reverse of the one gesture the edit staged, ledger row included.
+  unstageChange('audio', entry.id, _lastAudioEdit.ledgerRow);
+  _lastAudioEdit = null;
+  save();
+  renderAudio();
+  toast('✓ Edit undone', 'success');
+}
+
 export function _audioEdit(id) {
   const entry = STATE.audio.find((a) => a.id === id);
   if (!entry) return;
@@ -334,6 +440,12 @@ export function _audioEdit(id) {
   if (title === null) return;
   const sub = window.prompt('Subtitle (artist, episode number, anything):', entry.sub || '');
   if (sub === null) return;
+
+  // Captured before anything is written, and only kept if something actually
+  // changed — an OK on an unedited prompt is not a gesture to offer an undo for.
+  const before = { title: entry.title, sub: entry.sub, slug: entry.slug };
+  const ledgerRow = ledgerRowFor('audio', entry.id);
+
   entry.title = title.trim() || entry.title;
   entry.sub = sub.trim();
   // The slug is the permanent address: once published, a share link and every
@@ -343,10 +455,21 @@ export function _audioEdit(id) {
   if (!entry._imported) {
     entry.slug = audioUniqueSlug(entry.title, STATE.audio, entry.id);
   }
+
+  if (entry.title === before.title && entry.sub === before.sub && entry.slug === before.slug) {
+    return;   // nothing changed: no stage, no chip, no toast claiming otherwise
+  }
+
+  _lastAudioEdit = {
+    id: entry.id,
+    before,
+    after: { title: entry.title, sub: entry.sub, slug: entry.slug },
+    ledgerRow,
+  };
   stageChange('audio', { id: entry.id, label: `${entry.title || entry.filename} — details edited` });
   save();
   renderAudio();
-  toast('✓ Updated', 'success');
+  toast('✓ Updated — ↩ UNDO EDIT puts the old details back', 'success');
 }
 
 export function _audioInsert(id) {
@@ -355,9 +478,101 @@ export function _audioInsert(id) {
   audioInsertShortcode(entry.slug);
 }
 
+// ---- retiring a PUBLISHED track ----
+//
+// A slug is a track's permanent address. Once published, three things point at
+// it and none of them are ours to break: a share link, every post shortcode
+// carrying that slug, and the episode's <guid> in /podcast.xml — which is how
+// every subscriber's app knows what it has already downloaded.
+//
+// Deleting the entry outright freed the slug for immediate reuse, and that is
+// the quiet failure: name a new track the same thing and it takes the dead
+// address. The old share link then plays DIFFERENT audio, and the new episode
+// is invisible to everyone already subscribed, because its guid is one their
+// app has seen. Nothing errors. Nothing looks wrong in the console.
+//
+// So a published track is RETIRED to a tombstone — `retired: true` plus the id
+// and the slug, every display field stripped, the R2 object queued for delete.
+// Exactly the dark-frame rule for buffer frames (manual §5.20), for exactly the
+// same reason: the address outlives the media.
+//
+// The slug reservation costs nothing to enforce: the tombstone is still in
+// STATE.audio, so audioUniqueSlug already counts its slug as taken, and it
+// travels in data/audio.json so a second device knows too. Every public
+// consumer already requires `filename`, so a tombstone is invisible on the site.
+export function _audioRetire(id) {
+  const entry = STATE.audio.find((a) => a.id === id);
+  if (!entry || entry.retired) return;
+  if (!confirm(
+    `RETIRE "${entry.title || entry.filename}"?\n\n`
+    + `This track is published, so its address /listen/?a=${entry.slug} stays reserved forever — `
+    + `a share link or a post shortcode pointing at it will never quietly play something else, `
+    + `and no future episode can reuse its podcast id.\n\n`
+    + `The audio file is deleted from the CDN on the next publish. `
+    + `↩ UNDO RETIRE puts it back until you leave this tab.`
+  )) return;
+
+  const ledgerRow = ledgerRowFor('audio', entry.id);
+  const tombstone = {
+    id: entry.id,
+    slug: entry.slug,
+    retired: true,
+    retired_at: new Date().toISOString(),
+  };
+  if (entry._imported) tombstone._imported = true;   // still tracked as "on main"
+  const index = STATE.audio.indexOf(entry);
+  STATE.audio[index] = tombstone;
+
+  // One canonical object per track — no derived variants to chase.
+  const keys = entry.filename ? [`audio/${entry.filename}`] : [];
+  if (keys.length) _pendingR2Deletes.push({ keys, surface: 'audio', entryId: entry.id });
+
+  _lastAudioRetire = { id: entry.id, entry, index, ledgerRow, keys };
+  stageChange('audio', {
+    id: entry.id,
+    label: `${entry.title || entry.filename || entry.slug} — retired`,
+    kind: 'remove',
+  });
+  save();
+  renderAudio();
+  toast('◼ retired — the address stays reserved, media queued for delete', 'success');
+}
+
+// The last retire, for the layer-2 chip. Nothing is irreversible before
+// publish: the R2 delete is only QUEUED, so putting the track back is a matter
+// of un-arming it and restoring the entry.
+let _lastAudioRetire = null;
+
+export function _audioRetireUndoTarget() {
+  if (!_lastAudioRetire) return null;
+  const current = STATE.audio.find((a) => a.id === _lastAudioRetire.id);
+  // Valid only while the tombstone is still exactly the tombstone we wrote.
+  return (current && current.retired) ? _lastAudioRetire : null;
+}
+
+export function _audioUndoRetire() {
+  const target = _audioRetireUndoTarget();
+  if (!target) return;
+  const i = STATE.audio.findIndex((a) => a.id === target.id);
+  if (i < 0) return;
+  STATE.audio[i] = target.entry;
+  // The delete never fired — it was queued for the next publish — so un-arming
+  // it is the whole reversal. Same primitive the re-upload path uses.
+  if (target.keys.length) cancelPendingDeleteForKeys(target.keys);
+  unstageChange('audio', target.id, target.ledgerRow);
+  _lastAudioRetire = null;
+  save();
+  renderAudio();
+  toast('✓ Retire undone — the track is back', 'success');
+}
+
 export function _audioDelete(id) {
   const entry = STATE.audio.find((a) => a.id === id);
   if (!entry) return;
+  if (entry.retired) return;   // a tombstone has nothing left to delete
+  // A published track keeps its address; a never-published one has nothing
+  // pointing at it yet, so it goes to the trash and can come straight back.
+  if (entry._imported) return _audioRetire(id);
   if (!confirm(`Move "${entry.title || entry.filename}" to trash?\n\nIts audio file is removed from the CDN on the next publish.`)) return;
   trashItem('audio', id);
 }
@@ -395,17 +610,182 @@ function _sparkline(peaksStr) {
   return `<div class="aud-spark">${bars.join('')}</div>`;
 }
 
+// ============================================================
+// THE PODCAST FEED CARD
+// ============================================================
+//
+// "Feed management… a way to get the feed links" — the owner's ask, and until
+// now the only way to learn your feed was not submittable was a rejection
+// email from Apple days later. This card says it here instead.
+//
+// Three facts, in the order you need them: WHERE the feed is, HOW MUCH is in
+// it, and WHAT is still blocking a submission — naming the exact config key,
+// because "add a category" is not actionable and `podcast.category` is.
+//
+// ⚠️ THE COPY BELOW IS THE SERVER'S CONTRACT, DUPLICATED. The readiness
+// booleans come from GET /api/site/settings (src/shared/podcast.js), which is
+// browser-unreachable as an import — the same duplication the ring card's
+// discipline list carries. tests/podcast-console-card.test.js pins the two key
+// sets together so neither can grow a member the other has never heard of.
+//
+// ⚠️ That endpoint is PUBLIC AND UNAUTHENTICATED and returns booleans only.
+// Nothing here should ever start rendering a value from it.
+
+const FEED_PATH = '/podcast.xml';
+
+// ---- the beta label ----
+//
+// This card is honest about what a directory wants and silent about how much
+// road the feed has actually seen. One short show has been through a real
+// submission; that is not enough to promise anyone else a clean one. So the
+// card says BETA next to its own name rather than letting a fork owner find
+// out from a rejection email — the same reason the checklist exists at all.
+//
+// Scoped deliberately to the FEED. The player, the waveforms, the per-track
+// addresses and the tracklists in posts are not beta and must not read as if
+// they were; the label lives here, on the feed card, and nowhere else on the
+// shelf.
+//
+// The address is the engine's issue tracker, not this instance's — it travels
+// to every fork, and a fork owner's rejection message is the only way this
+// label ever comes off. Mirrored in CHANGELOG.md and site.config.example.js.
+const BETA_ISSUES = 'https://github.com/oaklensart/oaklens-os/issues';
+const BETA_TITLE = 'The feed works and is valid RSS — but only one short show '
+  + 'has been through a real directory submission so far.';
+const BETA_NOTE = `<div class="aud-feed-note beta">🧪 <strong>Podcast publishing is in beta.</strong>
+    The feed is valid and this checklist is accurate, but one short show has been through a real
+    directory submission so far. Everything else on this shelf is not beta. If you send your feed
+    to Apple, Spotify or Overcast, please say how it went at
+    <a href="${BETA_ISSUES}" target="_blank" rel="noopener">${BETA_ISSUES.replace('https://', '')}</a>
+    — paste the rejection in full if you got one.</div>`;
+
+// Blocking first, then the ones worth having. `key` is what the owner types
+// into site.config.js; `unlocks` is one plain sentence on why they would.
+const FEED_CHECKS = [
+  { flag: 'hasArtwork', blocking: true, key: 'podcast.image',
+    unlocks: 'Square cover art, 1400px or larger. Every directory refuses a show without it.' },
+  { flag: 'hasCategory', blocking: true, key: 'podcast.category',
+    unlocks: 'One of Apple\'s fixed categories, spelled exactly. A missing or invented one is an instant rejection.' },
+  { flag: 'hasOwnerEmail', blocking: true, key: 'podcast.owner.email',
+    unlocks: 'Where Apple writes to you about the show. It travels in the feed, so anyone can read it — put one there only if you mean to.' },
+  { flag: 'listenPage', blocking: true, key: 'pages.listen',
+    unlocks: 'Every episode links back to /listen. Switched off, the feed keeps serving and every episode 404s in every subscriber\'s app.' },
+  { flag: 'hasCopyright', blocking: false, key: 'podcast.copyright',
+    unlocks: 'Your own claim on the recordings. Never written for you — it is a legal statement.' },
+  { flag: 'hasLocked', blocking: false, key: 'podcast.locked',
+    unlocks: 'Tells hosting platforms they may not import your show without asking you first. The reason to self-host, in one tag.' },
+  { flag: 'hasFunding', blocking: false, key: 'podcast.funding.url',
+    unlocks: 'Puts a support link inside the listener\'s podcast app, beside the play button.' },
+];
+
+// Set once at boot from applyInstancePosture (js/console/session.js, which sits
+// above this module and may import it). null means "not read yet, or the fetch
+// failed" — a state the card renders as an honest silence rather than as a
+// clean bill of health.
+let _feedReadiness = null;
+
+export function applyPodcastPosture(readiness) {
+  _feedReadiness = (readiness && typeof readiness === 'object') ? readiness : null;
+  renderPodcastCard();
+}
+
+export function feedUrl() {
+  return location.origin + FEED_PATH;
+}
+
+export function copyFeedUrl() {
+  navigator.clipboard.writeText(feedUrl()).then(
+    () => toast('✓ feed address copied', 'success'),
+    () => toast('Copy failed — the address is ' + feedUrl(), 'warning'),
+  );
+}
+
+export function renderPodcastCard() {
+  const host = document.getElementById('audio-feed-card');
+  if (!host) return;
+
+  // Retired tombstones are reserved addresses, not tracks — they are in neither
+  // number, or "1 of 4 tracks" would count things that cannot be played.
+  const total = STATE.audio.filter((a) => !a.retired).length;
+  const episodes = STATE.audio.filter((a) => a.episode && a.slug && a.filename).length;
+
+  const url = feedUrl();
+  const head = `<div class="aud-feed-head">
+      <span class="aud-feed-tag">◉ PODCAST FEED</span>
+      <span class="aud-feed-beta" title="${escapeHTML(BETA_TITLE)}">BETA</span>
+      <a class="aud-feed-url" href="${escapeHTML(FEED_PATH)}" target="_blank" rel="noopener">${escapeHTML(url)}</a>
+      <button class="btn btn-sm btn-ghost" onclick="copyFeedUrl()" title="Copy the feed address">⧉ COPY</button>
+    </div>`;
+
+  // No episodes is not a blocked submission — it is an empty show, and saying
+  // so plainly beats a checklist of things to fix about a feed with nothing in
+  // it. The ○ EPISODE button is named because that is the next gesture.
+  if (!episodes) {
+    host.innerHTML = `<div class="aud-feed">${head}
+      <div class="aud-feed-note">No tracks are marked EPISODE yet, so the feed serves an empty show.
+        ${total ? 'Press ○ EPISODE on any track below to put it in the feed.' : 'Drop a track above, then press ○ EPISODE on it.'}</div>
+      ${BETA_NOTE}
+    </div>`;
+    return;
+  }
+
+  const count = `<div class="aud-feed-note">${episodes} of ${total} track${total === 1 ? '' : 's'}
+    ${episodes === 1 ? 'is' : 'are'} in the feed — that is what a subscriber downloads.</div>`;
+
+  // A failed settings read must not render as "everything is fine". Say what
+  // is unknown and stop.
+  if (!_feedReadiness) {
+    host.innerHTML = `<div class="aud-feed">${head}${count}
+      <div class="aud-feed-note dim">// could not read this site's config — reload to check what a directory still needs</div>
+      ${BETA_NOTE}
+    </div>`;
+    return;
+  }
+
+  const rows = FEED_CHECKS.map((c) => {
+    const ok = _feedReadiness[c.flag] === true;
+    const mark = ok ? '✓' : (c.blocking ? '✕' : '·');
+    const cls = ok ? 'ok' : (c.blocking ? 'blocked' : 'opt');
+    return `<li class="aud-feed-check ${cls}">
+      <span class="aud-feed-mark">${mark}</span>
+      <code class="aud-feed-key">${escapeHTML(c.key)}</code>
+      <span class="aud-feed-why">${escapeHTML(c.unlocks)}</span>
+    </li>`;
+  }).join('');
+
+  const blocked = FEED_CHECKS.filter((c) => c.blocking && _feedReadiness[c.flag] !== true);
+  const verdict = blocked.length
+    ? `<div class="aud-feed-verdict blocked">Apple would reject this feed today — ${blocked.length} required
+        ${blocked.length === 1 ? 'field is' : 'fields are'} missing. Edit site.config.js and deploy.</div>`
+    : '<div class="aud-feed-verdict ok">Ready to submit — paste the address above into Apple Podcasts, Spotify or Overcast.</div>';
+
+  host.innerHTML = `<div class="aud-feed">${head}${count}${verdict}
+    <ul class="aud-feed-list">${rows}</ul>
+    ${BETA_NOTE}
+  </div>`;
+}
+
 export function renderAudio() {
+  // Before the empty-shelf early return below: a site with no tracks still
+  // wants to be told where its feed is and that nothing is in it.
+  renderPodcastCard();
+
   const host = document.getElementById('audio-display');
   if (!host) return;
 
+  // A tombstone is a reserved address, not a track: it holds no media, no
+  // duration and nothing to play, so it is counted separately everywhere.
+  const live = STATE.audio.filter((a) => !a.retired);
+  const retired = STATE.audio.length - live.length;
+
   const count = document.getElementById('audio-count');
-  if (count) count.textContent = STATE.audio.length;
+  if (count) count.textContent = live.length;
   const stats = document.getElementById('audio-stats');
   if (stats) {
-    const total = STATE.audio.reduce((n, a) => n + (a.duration || 0), 0);
-    stats.textContent = STATE.audio.length
-      ? `${STATE.audio.length} track${STATE.audio.length === 1 ? '' : 's'} · ${_fmtDuration(total)}`
+    const total = live.reduce((n, a) => n + (a.duration || 0), 0);
+    stats.textContent = live.length
+      ? `${live.length} track${live.length === 1 ? '' : 's'} · ${_fmtDuration(total)}`
+        + (retired ? ` · ${retired} retired` : '')
       : '— tracks';
   }
 
@@ -417,15 +797,33 @@ export function renderAudio() {
   const featured = STATE.audio.filter((a) => a.featured)
     .sort((a, b) => (Number(a.featured_order) || 0) - (Number(b.featured_order) || 0));
 
+  // The restore chip is rendered wherever the banner is: beside CLEAR CARD when
+  // a card is up (a clear-then-restore is one gesture away), and ALONE when the
+  // card is empty but the last clear is still undoable. Resolved live, so it
+  // vanishes the moment it stops being real.
+  const restorable = _audioCardRestoreTarget();
+  const restoreBtn = restorable
+    ? `<button class="btn btn-sm btn-ghost" onclick="_audioRestoreCard()"
+        title="Put the ${restorable.length} track${restorable.length === 1 ? '' : 's'} you just cleared back on the homepage card">↩ RESTORE CARD</button>`
+    : '';
+
   let playlistBanner = '';
-  if (featured.length > 1) {
+  if (!featured.length && restorable) {
+    playlistBanner = `<div class="aud-playlist-banner">
+      <div class="aud-pl-info">
+        <span class="aud-pl-tag">☆ NO HOMEPAGE CARD</span>
+        <span class="aud-pl-names">Cleared ${restorable.length} track${restorable.length === 1 ? '' : 's'} — restorable until you leave this tab</span>
+      </div>
+      <div class="aud-pl-actions">${restoreBtn}</div>
+    </div>`;
+  } else if (featured.length > 1) {
     playlistBanner = `<div class="aud-playlist-banner">
       <div class="aud-pl-info">
         <span class="aud-pl-tag">★ HOMEPAGE PLAYLIST</span>
         <span class="aud-pl-names">${featured.length} tracks pinned · ${escapeHTML(featured.map((t) => t.title || t.filename || 'Untitled').join(', '))}</span>
       </div>
       <div class="aud-pl-actions">
-        <button class="btn btn-sm btn-ghost" onclick="_audioClearCard()">CLEAR CARD</button>
+        <button class="btn btn-sm btn-ghost" onclick="_audioClearCard()">CLEAR CARD</button>${restoreBtn}
       </div>
     </div>`;
   } else if (featured.length === 1) {
@@ -435,12 +833,33 @@ export function renderAudio() {
         <span class="aud-pl-names">Single track: "${escapeHTML(featured[0].title || featured[0].filename || 'Untitled')}"</span>
       </div>
       <div class="aud-pl-actions">
-        <button class="btn btn-sm btn-ghost" onclick="_audioClearCard()">CLEAR CARD</button>
+        <button class="btn btn-sm btn-ghost" onclick="_audioClearCard()">CLEAR CARD</button>${restoreBtn}
       </div>
     </div>`;
   }
 
+  // Resolved once per render, against the shelf as it is now — the chip appears
+  // on exactly the row whose details were last overwritten, and nowhere else.
+  const undoTarget = _audioEditUndoTarget();
+
+  const retireUndo = _audioRetireUndoTarget();
+
   const rows = STATE.audio.map((a) => {
+    // The tombstone cell — inert, and deliberately visible. The owner should be
+    // able to see that an address is spoken for; a reservation nothing shows is
+    // a rule that surprises you later.
+    if (a.retired) {
+      return `<div class="aud-row aud-row-retired">
+      <div class="aud-main">
+        <div class="aud-title">// RETIRED<span class="aud-badge retired">ADDRESS RESERVED</span></div>
+        <div class="aud-meta">${escapeHTML(`/listen/?a=${a.slug}`)}${a.retired_at ? ` · ${escapeHTML(a.retired_at.slice(0, 10))}` : ''}</div>
+      </div>
+      <div class="aud-actions">${retireUndo && retireUndo.id === a.id ? `
+        <button class="btn btn-sm btn-ghost aud-undo" onclick="_audioUndoRetire()"
+          title="Put this track back and cancel the queued file deletion">↩ UNDO RETIRE</button>` : ''}
+      </div>
+    </div>`;
+    }
     const state = a._uploadError ? 'err' : a._uploading ? 'up' : '';
     const badge = a._uploadError ? '<span class="aud-badge err">✕ FAILED</span>'
       : a._uploading ? '<span class="aud-badge up">↑ UPLOADING</span>'
@@ -466,13 +885,15 @@ export function renderAudio() {
           title="Toggle on/off homepage audio card playlist">${cardLabel}</button>
         <button class="btn btn-sm ${a.episode ? 'btn-stage' : 'btn-ghost'}"
           onclick="_audioToggleEpisode('${escapeAttrJS(a.id)}')"
-          title="Include in the podcast feed (feed.xml enclosure)">${a.episode ? '◉ EPISODE' : '○ EPISODE'}</button>
+          title="Include this track in the podcast feed at /podcast.xml">${a.episode ? '◉ EPISODE' : '○ EPISODE'}</button>
         <button class="btn btn-sm ${a.download ? 'btn-stage' : 'btn-ghost'}"
           onclick="_audioToggleDownload('${escapeAttrJS(a.id)}')"
           title="Offer a download link on the track page">↓ DL</button>
         <button class="btn btn-sm btn-ghost" onclick="_audioInsert('${escapeAttrJS(a.id)}')"
           title="Insert into the open field note">✎ INSERT</button>
-        <button class="btn btn-sm btn-ghost" onclick="_audioEdit('${escapeAttrJS(a.id)}')">✎ EDIT</button>
+        <button class="btn btn-sm btn-ghost" onclick="_audioEdit('${escapeAttrJS(a.id)}')">✎ EDIT</button>${undoTarget && undoTarget.entry.id === a.id ? `
+        <button class="btn btn-sm btn-ghost aud-undo" onclick="_audioUndoEdit()"
+          title="Put back the title and subtitle this track had before your last edit">↩ UNDO EDIT</button>` : ''}
         <button class="btn btn-sm btn-danger" onclick="_audioDelete('${escapeAttrJS(a.id)}')">✕</button>
       </div>
     </div>`;
@@ -481,11 +902,6 @@ export function renderAudio() {
   host.innerHTML = playlistBanner + rows;
 }
 
-// Mark an upload as landed. The queue speaks surfaces, and `audio` is one, so
-// this rides the existing refreshSurface seam rather than inventing another.
-export function _audioUploadDone() {
-  refreshSurface('audio');
-}
 
 // ============================================================
 // AUDIO LIBRARY / PICKER MODAL
@@ -572,7 +988,7 @@ export function renderAudioLibrary() {
   const caretPos = prevSearch ? prevSearch.selectionStart : null;
 
   toolbar.innerHTML = `
-    <button class="audio-lib-pill${_audioLibFilter === 'all' ? ' active' : ''}" onclick="_audioLibSetFilter('all')">ALL (${STATE.audio.length})</button>
+    <button class="audio-lib-pill${_audioLibFilter === 'all' ? ' active' : ''}" onclick="_audioLibSetFilter('all')">ALL (${(STATE.audio || []).filter((a) => a.filename && a.slug).length})</button>
     <button class="audio-lib-pill${_audioLibFilter === 'card' ? ' active' : ''}" onclick="_audioLibSetFilter('card')">ON CARD</button>
     <button class="audio-lib-pill${_audioLibFilter === 'episodes' ? ' active' : ''}" onclick="_audioLibSetFilter('episodes')">EPISODES</button>
     <input class="audio-lib-search" id="audio-lib-search" placeholder="search audio…"
@@ -593,6 +1009,8 @@ export function renderAudioLibrary() {
     }
   }
 
+  // `a.filename` already excludes retired tombstones — they hold a reserved
+  // address and no media, so there is nothing to insert or play.
   let items = (STATE.audio || []).filter((a) => !a._uploadError && a.filename && a.slug);
 
   if (_audioLibFilter === 'card') {

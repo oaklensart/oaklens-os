@@ -278,7 +278,24 @@ export function buildBundle() {
     // waveform (a comma string, ~400 bytes) so no visitor ever downloads audio
     // just to draw a card; `featured` pins the homepage card the same way a
     // buffer frame's `featured` pins the RAW daily.
-    "data/audio.json":     JSON.stringify(STATE.audio.filter(a => !a._uploadError && !a._uploading).map(a => ({
+    "data/audio.json":     JSON.stringify(STATE.audio.filter(a => !a._uploadError && !a._uploading).map(a => {
+      // A retired track is a tombstone: its media is deleted from R2, but its
+      // SLUG is reserved forever — a share link, a post shortcode and the
+      // episode's <guid> in /podcast.xml all point at it, and letting a future
+      // track reuse the address would silently serve different audio to every
+      // one of them. Emit only the id and the slug, exactly as the dark frame
+      // does for a buffer slot.
+      //
+      // ⚠️ Running it through the live-track whitelist below would DROP
+      // `retired` (it isn't in it) and republish the tombstone as a live track
+      // pointing at gone media — a retire that silently un-retires on the next
+      // publish. That is the dark-frame bug, and this branch is why it cannot
+      // happen here. Every public consumer requires `filename`, so a tombstone
+      // renders nowhere on the site.
+      if (a.retired) return {
+        id: a.id, slug: a.slug, retired: true, retired_at: a.retired_at,
+      };
+      return {
       id: a.id,
       slug: a.slug,
       filename: a.filename || null,
@@ -294,7 +311,8 @@ export function buildBundle() {
       ...(a.featured_order ? { featured_order: a.featured_order } : {}),
       ...(a.episode ? { episode: true } : {}),
       ...(a.download ? { download: true } : {}),
-    })), null, 2),
+      };
+    }), null, 2),
   };
   // Posts as individual markdown files
   STATE.posts.forEach(p => {
@@ -415,12 +433,15 @@ export function publishClearStaged() {
 }
 
 // ============== IMPORT EXISTING DATA ==============
+// Derived from SURFACE_MANIFEST rather than listed, because a hand-written list
+// of surfaces is the exact thing that drifts: this one silently omitted
+// friends, library AND audio, which made "nothing staged" wrong for three
+// surfaces. SURFACE_MANIFEST is declared below, which is fine — this function
+// is only ever CALLED after module evaluation, never during it.
 export function hasImported() {
-  return STATE.buffer.some(e => e._imported) ||
-         STATE.archive.some(e => e._imported) ||
-         STATE.posts.some(e => e._imported) ||
-         STATE.wallpapers.some(e => e._imported) ||
-         STATE.barrel.some(e => e._imported);
+  return Object.keys(SURFACE_MANIFEST).some(
+    surface => STATE[surface].some(e => e._imported)
+  );
 }
 
 export async function handleImportFiles(fileList) {
@@ -921,9 +942,20 @@ export async function publishToServer() {
     // (_imported is stripped from the published JSON in buildBundle, so this never
     // leaks into committed data; save() drops these from localStorage and the
     // next login sync re-imports them as the canonical copy.)
-    ['buffer', 'archive', 'wallpapers', 'barrel', 'library'].forEach(surface => {
-      STATE[surface].forEach(e => { e._imported = true; });
-    });
+    // Derived from SURFACE_MANIFEST, not listed. The hand-written list this
+    // replaced omitted `audio` and `friends`, which re-opened BOTH August audio
+    // wedges through a side door: deleting a track published earlier in the same
+    // session decremented the counter instead of staging a removal (publish then
+    // said NO PENDING CHANGES — 2026-08-14), and _vouchedEmptyManifests() below
+    // could not vouch for a deliberate 1 → 0 (publish then 409'd —
+    // 2026-08-12). It also let _audioEdit re-slug a just-published track,
+    // silently moving a permalink that manual §5.29 promises is permanent.
+    // posts is handled separately below, so it is the one exclusion.
+    Object.keys(SURFACE_MANIFEST)
+      .filter(surface => surface !== 'posts')
+      .forEach(surface => {
+        STATE[surface].forEach(e => { e._imported = true; });
+      });
     // Only published posts were committed — drafts stay local & unpublished.
     STATE.posts.forEach(p => { if (!p.status || p.status === 'published') p._imported = true; });
 

@@ -14,6 +14,10 @@ import siteConfig from '../shared/config.js';
 import { cdnBase } from '../shared/site.js';
 import { PAGE_ROUTES, pageDisabled, publicPages } from '../shared/pages.js';
 import { configuredNode, analogsToken } from '../shared/webring.js';
+import {
+  configuredPodcast, podcastReadiness, categoryTag, ownerTag,
+  podcastNamespaceTags, generatorName, artworkHref, PODCAST_NS,
+} from '../shared/podcast.js';
 import { escapeHtml, baseName, localDay } from '../shared/text.js';
 import { CORS_HEADERS, jsonRes } from '../shared/http.js';
 import { loadDataJson, _deployToken } from '../edge/data.js';
@@ -86,6 +90,20 @@ export function handleSiteSettings(request, env) {
     // so this exposes nothing new. It lets the console's ring card show the
     // real state without a second request.
     webring: configuredNode(),
+    // Podcast submission readiness for the console's feed card — WHICH keys are
+    // filled in, never WHAT is in them.
+    //
+    // ⚠️ BOOLEANS ONLY. This endpoint is public and unauthenticated, so the
+    // owner email, the funding URL and the copyright line must never travel
+    // here — the whole point of the card is to say "you still need
+    // podcast.owner.email", which needs no value at all. podcastReadiness()
+    // enforces the shape; keep it that way.
+    //
+    // `listenPage` rides along because it is the one blocker you cannot see by
+    // reading the feed: every item's <link> and <guid> is /listen/?a=<slug>, so
+    // pages.listen:false 404s every episode in every subscriber's app while the
+    // feed itself keeps serving happily.
+    podcast: podcastReadiness(siteConfig.podcast, pages.listen !== false),
   }, 200);
 }
 
@@ -231,8 +249,19 @@ export async function handleSitemap(request, env) {
   if (!pageDisabled('/listen')) {
     try {
       const audio = await loadDataJson(HOST, env, 'data/audio.json');
-      if (Array.isArray(audio) && audio.length) {
+      // `t.filename` excludes retired tombstones — reserved addresses with no
+      // media. A registry holding only those has nothing to play, so /listen is
+      // still the empty page this gate exists to keep out of the sitemap.
+      if (Array.isArray(audio) && audio.some((t) => t && t.filename)) {
         xml += `\n  <url><loc>${HOST}/listen</loc></url>`;
+      }
+      // /podcast.xml on the same terms, and off the same read — the registry is
+      // already in hand, so this costs nothing. Gated on an actual EPISODE
+      // rather than on any track: the feed serves either way, but listing a
+      // channel with no items invites a crawler to fetch an empty show, and a
+      // podcast client that sees zero items can drop the subscription.
+      if (Array.isArray(audio) && audio.some((t) => t && t.episode && t.filename && t.slug)) {
+        xml += `\n  <url><loc>${HOST}/podcast.xml</loc></url>`;
       }
     } catch { /* no registry, no listing */ }
   }
@@ -418,13 +447,21 @@ export async function handlePodcastFeed(request, env) {
     .sort((a, b) => String(b.added_at || '').localeCompare(String(a.added_at || '')))
     .slice(0, PODCAST_MAX_ENTRIES);
 
-  const artwork = siteConfig.podcast && siteConfig.podcast.image;
-  const artworkUrl = artwork
-    ? (/^https?:/i.test(artwork) ? artwork : `${origin}${artwork.startsWith('/') ? '' : '/'}${artwork}`)
-    : null;
-  const title = (siteConfig.podcast && siteConfig.podcast.title) || siteConfig.name;
-  const description = (siteConfig.podcast && siteConfig.podcast.description)
-    || siteConfig.tagline || '';
+  // One home for the channel's submission-gating fields (src/shared/podcast.js),
+  // so this document and the console's readiness card cannot disagree about
+  // what is still missing. Every tier-2 builder returns '' when unset — an
+  // unconfigured fork renders fewer lines, never a placeholder.
+  const p = configuredPodcast();
+
+  const artworkUrl = artworkHref(p, origin);
+  // The show's own title/description when it has them, the site's otherwise —
+  // "this show is just the site" is a complete and common answer.
+  const title = p.title || siteConfig.name;
+  const description = p.description || siteConfig.tagline || '';
+  // Channel-level explicit is the show's own rating and every item inherits it.
+  // Apple treats a missing item value as the channel's anyway, but stating it
+  // per item is what keeps a re-hosted single episode honest.
+  const explicit = p.explicit ? 'true' : 'false';
 
   const items = episodes.map((t) => {
     const link = `${origin}/listen/?a=${encodeURIComponent(t.slug)}`;
@@ -439,23 +476,46 @@ export async function handlePodcastFeed(request, env) {
       <enclosure url="${escapeHtml(url)}" length="${Number(t.size) || 0}" type="${escapeHtml(audioMime(t))}"/>${dur ? `
       <itunes:duration>${dur}</itunes:duration>` : ''}
       <itunes:title>${escapeHtml(t.title || t.slug)}</itunes:title>
-      <itunes:explicit>false</itunes:explicit>
+      <itunes:explicit>${explicit}</itunes:explicit>
     </item>`;
   }).join('\n');
 
+  // ⚠️ THE NEWEST EPISODE'S pubDate, NEVER `new Date()`. A body that changes on
+  // every request defeats the one-hour cache above and every conditional GET a
+  // podcast client makes — and it is not true: nothing was built. With no
+  // episodes there is no build date to state, so the tag is omitted rather
+  // than invented.
+  const lastBuild = episodes.length ? rssDate(episodes[0].added_at) : '';
+
+  // The podcast: namespace is declared ONLY when one of its tags is emitted.
+  // An unused namespace declaration on every fork's feed is noise a validator
+  // is entitled to complain about.
+  const nsTags = podcastNamespaceTags(p);
+  const nsAttr = nsTags.length ? ` xmlns:podcast="${PODCAST_NS}"` : '';
+
+  const channelLines = [
+    `    <title>${escapeHtml(title)}</title>`,
+    `    <link>${origin}/listen</link>`,
+    `    <description>${escapeHtml(description)}</description>`,
+    `    <language>${escapeHtml(p.language)}</language>`,
+    `    <generator>${escapeHtml(generatorName())}</generator>`,
+    lastBuild ? `    <lastBuildDate>${lastBuild}</lastBuildDate>` : '',
+    p.copyright ? `    <copyright>${escapeHtml(p.copyright)}</copyright>` : '',
+    `    <atom:link href="${origin}/podcast.xml" rel="self" type="application/rss+xml"/>`,
+    `    <itunes:author>${escapeHtml(siteConfig.name)}</itunes:author>`,
+    `    <itunes:summary>${escapeHtml(description)}</itunes:summary>`,
+    `    <itunes:type>${escapeHtml(p.type)}</itunes:type>`,
+    `    <itunes:explicit>${explicit}</itunes:explicit>`,
+    categoryTag(p),
+    ownerTag(p),
+    artworkUrl ? `    <itunes:image href="${escapeHtml(artworkUrl)}"/>` : '',
+    ...nsTags,
+  ].filter(Boolean).join('\n');
+
   const xml = `<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom"${nsAttr}>
   <channel>
-    <title>${escapeHtml(title)}</title>
-    <link>${origin}/listen</link>
-    <description>${escapeHtml(description)}</description>
-    <language>en</language>
-    <atom:link href="${origin}/podcast.xml" rel="self" type="application/rss+xml"/>
-    <itunes:author>${escapeHtml(siteConfig.name)}</itunes:author>
-    <itunes:summary>${escapeHtml(description)}</itunes:summary>
-    <itunes:explicit>false</itunes:explicit>${artworkUrl ? `
-    <itunes:image href="${escapeHtml(artworkUrl)}"/>` : ''}
-${items}
+${[channelLines, items].filter(Boolean).join('\n')}
   </channel>
 </rss>`;
 

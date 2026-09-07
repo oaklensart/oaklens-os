@@ -55,7 +55,13 @@ your own domain later changes nothing in the code.
   numbers, and nothing downloads until someone presses play. You get a player on
   the homepage, a permanent address per track, numbered tracklists inside posts,
   and a real RSS 2.0 podcast feed at `/podcast.xml`. No library, no iframe, no
-  CSP change.
+  CSP change. **The podcast half of this is in beta** — the feed is valid RSS and
+  the console tells you which fields a directory still wants, but exactly one
+  short show has been through a real submission so far. If you point an app at
+  your feed or send it to a directory, please
+  [say what happened](https://github.com/oaklensart/oaklens-os/issues) — a
+  rejection message is worth more to us than a bug report. The rest of the audio
+  layer is not beta.
 - **Writing that stands on its own.** Field Notes is Markdown with a live
   editor, and a post with no picture in it still gets a homepage card — sized to
   the writing, so a single good line lands like a pull quote instead of rattling

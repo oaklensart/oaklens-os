@@ -1,6 +1,7 @@
 // Config-derived helpers shared by worker.js and the portal worker.
 
 import siteConfig from './config.js';
+import { declaresShow } from './podcast.js';
 import { escapeHtml } from './text.js';
 
 // The CDN root for image/video assets: the configured custom domain, or the
@@ -75,7 +76,19 @@ export function siteMetaTags(origin) {
     // plain link. CSP frame-src is the enforcement; this keeps the rendered
     // page honest about it.
     `<meta name="site-apple-music" content="${siteConfig.appleMusicEmbeds === true ? 'on' : 'off'}">` +
-    `<link rel="alternate" type="application/atom+xml" title="${attrEscape(`${siteConfig.name} — Field Notes`)}" href="/feed.xml">`
+    `<link rel="alternate" type="application/atom+xml" title="${attrEscape(`${siteConfig.name} — Field Notes`)}" href="/feed.xml">` +
+    // The podcast feed, for the crawlers and podcast apps that look for one.
+    //
+    // ⚠️ GATED ON CONFIG, NOT ON EPISODE COUNT, and it has to be: this runs
+    // synchronously inside an HTMLRewriter element handler, which cannot await
+    // a read of data/audio.json — and adding a data fetch to every HTML
+    // response is exactly the hot-path cost the working agreement forbids. So
+    // config declares the show for machines (an instance that filled in a
+    // `podcast` block means to have one), while the human-facing Subscribe
+    // block on /listen and the sitemap listing are both driven by the data.
+    (declaresShow()
+      ? `<link rel="alternate" type="application/rss+xml" title="${attrEscape(`${siteConfig.name} — Podcast`)}" href="/podcast.xml">`
+      : '')
   );
 }
 

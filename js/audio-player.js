@@ -219,24 +219,35 @@
   }
   API.marquee = marquee;
 
-  // ---- share (mirrors js/page-wall.js shareWallpaper) ----
+  // ---- copy / share (mirrors js/page-wall.js shareWallpaper) ----
+  //
+  // Split apart because /listen's Subscribe block needs the clipboard on its
+  // own: a feed address goes INTO a podcast app, so a button labelled COPY has
+  // to copy on every device rather than open an OS share sheet on some of
+  // them. `share` still prefers the sheet where there is one and falls back to
+  // exactly this, so there remains one clipboard implementation and one
+  // copied-state affordance.
+  function copy(url, btn) {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return;
+    navigator.clipboard.writeText(url).then(function () {
+      if (!btn) return;
+      var was = btn.getAttribute('aria-label') || '';
+      btn.classList.add('copied');
+      btn.setAttribute('aria-label', 'Link copied');
+      setTimeout(function () {
+        btn.classList.remove('copied');
+        btn.setAttribute('aria-label', was);
+      }, 1500);
+    }).catch(function () {});
+  }
+  API.copy = copy;
+
   function share(url, title, btn) {
     if (navigator.share) {
       navigator.share({ title: title || '', url: url }).catch(function () {});
       return;
     }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(function () {
-        if (!btn) return;
-        var was = btn.getAttribute('aria-label') || '';
-        btn.classList.add('copied');
-        btn.setAttribute('aria-label', 'Link copied');
-        setTimeout(function () {
-          btn.classList.remove('copied');
-          btn.setAttribute('aria-label', was);
-        }, 1500);
-      }).catch(function () {});
-    }
+    copy(url, btn);
   }
   API.share = share;
 

@@ -355,6 +355,36 @@ describe('staging counts changes, not things', () => {
     ).toEqual([]);
   });
 
+  it('every surface in SURFACE_MANIFEST is promoted to _imported after publish', () => {
+    // A surface missing from the post-publish promotion is invisible in exactly
+    // the way the 2026-08-14 log warned about: items published this session stay
+    // flagged "new/local", so trashing one DECREMENTS instead of staging a
+    // removal, _vouchedEmptyManifests() cannot vouch for a deliberate 1 → 0, and
+    // an edit re-slugs a permalink that is supposed to be permanent. `audio` and
+    // `friends` were both missing from a hand-written list for two weeks.
+    //
+    // The fix was to DERIVE both lists from SURFACE_MANIFEST, so this guard
+    // pins the derivation rather than re-typing the surfaces — a hand-written
+    // list here would drift the same way the code did.
+    const pub = readFileSync(join(ROOT, 'js', 'console', 'publish.js'), 'utf8');
+
+    const manifest = pub.match(/const SURFACE_MANIFEST = \{([\s\S]*?)\};/);
+    expect(manifest, 'SURFACE_MANIFEST is the single source of truth here').toBeTruthy();
+    const surfaces = [...manifest[1].matchAll(/(\w+):\s*'data\//g)].map((m) => m[1]);
+    expect(surfaces, 'audio must be a published surface').toContain('audio');
+    expect(surfaces, 'friends must be a published surface').toContain('friends');
+
+    expect(
+      pub,
+      'the post-publish _imported promotion must derive from SURFACE_MANIFEST, not a literal list',
+    ).toMatch(/Object\.keys\(SURFACE_MANIFEST\)\s*\n?\s*\.filter\(surface => surface !== 'posts'\)/);
+
+    expect(
+      pub,
+      'hasImported() must derive from SURFACE_MANIFEST too — it drifted three surfaces',
+    ).toMatch(/hasImported\(\)\s*\{[\s\S]{0,200}Object\.keys\(SURFACE_MANIFEST\)/);
+  });
+
   it('the publish summary can show every surface that stages changes', () => {
     // A staged surface with no card on the publish screen moves the total badge
     // and shows its delta nowhere — which is how audio shipped.

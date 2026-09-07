@@ -190,6 +190,22 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   exclusive scope) only unlocks *serving the console document* — it can never
   authorize an API mutation (no CSRF surface). Secrets live in Worker bindings,
   never the browser. Any new gate ships with a test.
+- **Reversibility is a rule, and it has exactly three layers — there is no undo
+  stack.** Every destructive or overwriting gesture must be undoable *from the
+  view that made it*: **(1) structural** — the reverse is the same affordance,
+  still on screen (un-star by tapping the star again), and it runs the *same
+  mutator*, so the staging arithmetic stays honest by construction; **(2) one
+  chip, not a history** — a single `↩ RE-PIN`-shaped control naming what a
+  displacing action pushed out, resolved against state *as it is now* so it can
+  never be a dead button; **(3) the publish horizon** — nothing is live until
+  publish, and the session trash holds deletions until then. A `window.prompt`
+  that overwrites a field with no way back, a bulk clear with no confirm, and a
+  delete that frees a published address for reuse are each a violation of it.
+  ⚠️ **A generic undo stack is explicitly rejected** — don't re-derive it. The
+  four bullets that follow (frame permanence, the publish guards, trash
+  lifetime) are *instances* of this rule, not separate rules; a new surface
+  inherits it whether or not anyone remembers to say so. Session trash covers
+  deletions; a toggle is its own undo.
 - **Frame permanence — do not renumber the buffer.** Frame numbers are
   *positional* and citable as `f#234` (in field notes and share links).
   Deleting a *published* frame would renumber every frame after it and
@@ -197,6 +213,15 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   `dark: true` tombstone that keeps its number and renders as an inert `//` cell)
   — true delete is only for never-published frames. See manual §5.20 and
   `tests/lighttable.test.js`.
+  **Audio has the same rule for the same reason** (2026-09-02): a track's slug is
+  its permanent address, pointed at by a share link, every post shortcode
+  carrying it, and the episode's `<guid>` in `/podcast.xml` — so a published
+  track retires to a `retired: true` tombstone that reserves the slug forever.
+  Freeing it means the old link plays *different audio* and the new episode is
+  invisible to everyone already subscribed. ⚠️ Both tombstones need their **own
+  branch in `buildBundle()`**: the live whitelist drops the tombstone flag and
+  republishes the entry as live, pointing at media that was just deleted.
+  (manual §4.7, `tests/audio-retire.test.js`)
 - **Publish is an all-or-nothing snapshot.** `buildBundle()` serializes *every*
   `data/*.json` from full in-memory state and commits atomically to GitHub. Two
   guards protect it: the **empty-overwrite guard** (refuses to blank a non-empty

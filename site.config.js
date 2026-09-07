@@ -175,13 +175,56 @@ export default Object.freeze({
   // track you marked as an EPISODE on the Audio shelf. The feed serves with or
   // without this block (title and description fall back to your site name and
   // tagline), and R2 charges nothing for bandwidth, so the site can host a show
-  // outright. Apple Podcasts will not accept a submission without square
-  // artwork, though — 1400×1400 minimum, 3000×3000 ideal — so add `image`
-  // before you submit anywhere. Spotify and Overcast take the URL directly.
+  // outright.
+  //
+  // 🧪 BETA — the one part of the audio layer that is. The feed is valid RSS
+  // and the readiness card on your Audio shelf names every field a directory
+  // wants, but exactly one short show has been through an actual submission so
+  // far. Nothing is switched off; the label is here so you are not the first to
+  // find out something in your own inbox. If you submit your feed anywhere,
+  // please say how it went at github.com/oaklensart/oaklens-os/issues — paste
+  // the rejection in full if you got one. The rest of the audio layer (player,
+  // waveforms, track addresses, tracklists in posts) is not beta.
+  //
+  // ⚠️ SUBMITTING IT ANYWHERE NEEDS THREE FIELDS. Apple Podcasts rejects a feed
+  // that is missing any of `image`, `category` or `owner.email` — Spotify and
+  // Overcast are looser, but Apple's listing is the one everything else copies
+  // from. The Audio shelf in your console shows exactly which of the three you
+  // are still missing, so you can check before you submit rather than after a
+  // rejection email. Nothing here is guessed for you, and your `email` above is
+  // deliberately NOT reused: Apple republishes this feed, so the owner address
+  // becomes public the moment you submit. Put one here only if you mean to.
+  //
+  //   image        square artwork, 1400×1400 minimum, 3000×3000 ideal
+  //   category     one of Apple's fixed categories, spelled exactly —
+  //                Arts · Business · Comedy · Education · Fiction · Government ·
+  //                History · Health & Fitness · Kids & Family · Leisure · Music ·
+  //                News · Religion & Spirituality · Science · Society & Culture ·
+  //                Sports · Technology · TV & Film · True Crime
+  //   subcategory  optional, and only one that belongs to your category
+  //                (e.g. 'Visual Arts' under 'Arts'); a mismatch is dropped
+  //   owner.email  where Apple writes about the show. Not shown to listeners,
+  //                but it IS in the feed, which anyone can read
+  //
+  // The rest are optional. `explicit: true` marks the whole show explicit,
+  // `language` takes a BCP-47 tag if your show is not in English, `type:
+  // 'serial'` tells apps to play oldest-first, `copyright` is your own claim to
+  // make, `locked: true` tells hosting platforms they may not import your show
+  // without asking you first (the reason to self-host, in one tag), and
+  // `funding` puts a support link inside the listener's podcast app.
   // podcast: {
   //   title: 'Your Show',
   //   description: 'What it is, in a sentence.',
   //   image: '/assets/podcast-cover.png',
+  //   category: 'Arts',
+  //   subcategory: 'Visual Arts',
+  //   owner: { name: 'Your Name', email: 'show@example.com' },
+  //   explicit: false,
+  //   language: 'en',
+  //   type: 'episodic',
+  //   copyright: '© 2026 Your Name',
+  //   locked: true,
+  //   funding: { url: 'https://example.com/support', label: 'Support the show' },
   // },
   // Search-engine entity (Organization + WebSite JSON-LD on the homepage).
   // sameAs: only live, crawlable profile URLs — an empty list is fine.

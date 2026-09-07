@@ -46,9 +46,10 @@ const cards = await import('../js/console/cards.js');
 const {
   _stagedFeaturedRaw, _stagedInputs, _slotOf, _cardSlots, _diffSlots, renderCards,
   _refeatureReady, _repinTarget, cardsToggleRaw, cardsRepinSwap, cardsRefeature,
-  cardsDemoteAudio, cardsClearAudioCard, cardsOpen,
+  cardsDemoteAudio, cardsClearAudioCard, cardsRestoreAudioCard, cardsOpen,
 } = cards;
 const { getLastFeaturedSwap } = await import('../js/console/focal.js');
+const { _audioCardRestoreTarget } = await import('../js/console/audio.js');
 
 let buildBundle;
 beforeAll(async () => {
@@ -390,9 +391,26 @@ describe('actions route through the real mutators', () => {
       track('t-two', { featured: true, featured_order: 2 }),
       track('t-three', { featured: true, featured_order: 3 }),
     ];
+    // Taking three tracks down now asks first (2026-08-31) — happy-dom has no
+    // real dialog, and this case is about the staging, not the confirm.
+    window.confirm = () => true;
     cardsClearAudioCard();
     expect(STATE.audio.every((a) => !a.featured)).toBe(true);
     expect(STATE.staged.audio).toBe(1);
+  });
+
+  it('and offers the cleared card back, through the real promote path', () => {
+    STATE.audio = [
+      track('t-one', { featured: true, featured_order: 1 }),
+      track('t-two', { featured: true, featured_order: 2 }),
+    ];
+    window.confirm = () => true;
+    cardsClearAudioCard();
+    expect(_audioCardRestoreTarget().map((t) => t.id)).toEqual(['a-t-one', 'a-t-two']);
+
+    cardsRestoreAudioCard();
+    expect(STATE.audio.filter((a) => a.featured).map((a) => a.featured_order)).toEqual([1, 2]);
+    expect(_audioCardRestoreTarget(), 'the chip retires once it is spent').toBeNull();
   });
 
   it('opening a surface routes rather than mutating', () => {

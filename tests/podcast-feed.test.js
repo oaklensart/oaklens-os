@@ -12,6 +12,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import worker from '../worker.js';
 import { cdnBase } from '../src/shared/site.js';
+import siteConfig from '../src/shared/config.js';
 
 const ORIGIN = 'https://example.com';
 // Derived, never hardcoded: an instance with a custom CDN domain and a
@@ -188,5 +189,87 @@ describe('a site with no show', () => {
     // to satisfy a validator would be worse than leaving it out.
     const xml = await body(envWith(TRACKS));
     expect(xml).not.toContain('<itunes:image');
+  });
+});
+
+// ---- the three-tier posture, unconfigured half ----
+//
+// This file runs against the repo's real site.config.js, which declares no
+// `podcast` block — so it IS the fork case. Its pair,
+// tests/podcast-feed-configured.test.js, proves the same fields appear once
+// they are configured; vi.mock is hoisted per file, so the split is structural
+// rather than stylistic.
+
+describe('tier 1 — always emitted, because the default is a true statement', () => {
+  it('declares a language', async () => {
+    // The shipped pages are `<html lang="en">`, so `en` is not a guess here.
+    expect(await body(envWith(TRACKS))).toContain('<language>en</language>');
+  });
+
+  it('declares the show episodic and not explicit', async () => {
+    const xml = await body(envWith(TRACKS));
+    expect(xml).toContain('<itunes:type>episodic</itunes:type>');
+    expect(xml).toContain('<itunes:explicit>false</itunes:explicit>');
+  });
+
+  it('names the software that built it', async () => {
+    expect(await body(envWith(TRACKS))).toContain('<generator>');
+  });
+});
+
+describe('lastBuildDate', () => {
+  it('is the newest episode\'s pubDate, never the current time', async () => {
+    // ⚠️ THE LOAD-BEARING ASSERTION. `new Date()` here would change the body on
+    // every request, defeating the one-hour cache and every conditional GET a
+    // podcast client makes — and it would not be true, because nothing was
+    // built. The newest episode is ep-004, added 2026-08-12.
+    const xml = await body(envWith(TRACKS));
+    expect(xml).toContain('<lastBuildDate>Wed, 12 Aug 2026 00:00:00 GMT</lastBuildDate>');
+    expect(xml).not.toContain(new Date().getUTCFullYear() + ' ' + new Date().getUTCHours());
+  });
+
+  it('is omitted entirely when there are no episodes', async () => {
+    // Nothing was ever built, so there is no date to state.
+    expect(await body(envWith([TRACKS[2]]))).not.toContain('<lastBuildDate>');
+  });
+});
+
+describe('tier 2 — absent, and the absence IS the un-submittability', () => {
+  it('emits no category, owner or copyright on an unconfigured instance', async () => {
+    const xml = await body(envWith(TRACKS));
+    expect(xml).not.toContain('<itunes:category');
+    expect(xml).not.toContain('<itunes:owner>');
+    expect(xml).not.toContain('<copyright>');
+  });
+
+  it('never invents an owner email from the site contact address', async () => {
+    // ⚠️ The single worst available idea in this file. Apple republishes the
+    // feed, so defaulting the owner to siteConfig.email would publish a fork
+    // owner's contact address into a public directory listing without anyone
+    // opting in. Asserted against the real config, so the instance's own
+    // address is what would show up if this ever regressed.
+    const xml = await body(envWith(TRACKS));
+    expect(xml).not.toContain('<itunes:email>');
+    expect(xml).not.toContain(siteConfig.email);
+  });
+
+  it('declares no podcast: namespace when it emits no podcast: tag', async () => {
+    // An unused namespace on every fork's feed is noise a validator may flag.
+    const xml = await body(envWith(TRACKS));
+    expect(xml).not.toContain('xmlns:podcast');
+    expect(xml).not.toContain('<podcast:');
+  });
+
+  it('still serves valid, parseable RSS — un-submittable is not broken', async () => {
+    // The serving contract: an unconfigured fork that uploads a voice memo gets
+    // a real feed. Only a directory submission is gated, and the console card
+    // is what makes that discoverable before Apple does.
+    const res = await feed(envWith(TRACKS));
+    expect(res.status).toBe(200);
+    const xml = await res.text();
+    expect(xml).toContain('<rss version="2.0"');
+    expect(xml).toContain('</rss>');
+    expect(xml).not.toContain('undefined');
+    expect(xml).not.toContain('[object Object]');
   });
 });

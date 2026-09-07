@@ -28,6 +28,17 @@
       });
   }
 
+  // The Subscribe block is DATA-driven, not config-driven: a site earns the
+  // affordance by actually having an episode in the feed. (The crawler-facing
+  // <link rel="alternate"> is the mirror image — config-driven, because it is
+  // injected at the edge where the registry cannot be read. Two gates, one
+  // truth, for a reason each.)
+  function hasEpisodes(list) {
+    return (Array.isArray(list) ? list : []).some(function (t) {
+      return t && t.episode && t.slug && t.filename;
+    });
+  }
+
   function findTrack(list, slug) {
     if (!slug) return null;
     var found = (Array.isArray(list) ? list : []).find(function (t) {
@@ -49,6 +60,7 @@
 
   g.PageListen = {
     sortTracks: sortTracks,
+    hasEpisodes: hasEpisodes,
     findTrack: findTrack,
     slugFromSearch: slugFromSearch,
   };
@@ -176,6 +188,49 @@
     });
   }
 
+  // ---- subscribe ----
+  //
+  // The feed is the whole point of marking a track as an EPISODE, and until now
+  // nothing on the site pointed at it — you had to already know the address.
+  // The address is shown as text as well as wired to a button, because "copy"
+  // fails silently in a browser with no clipboard permission and a URL you can
+  // read is a URL you can retype.
+  //
+  // ⚠️ Public pages run a STRICT CSP: no inline <script>, no onclick=. Wired
+  // with addEventListener, like every other control on this page.
+  function renderSubscribe(host) {
+    var url = location.origin + '/podcast.xml';
+
+    var box = el('div', 'lt-subscribe');
+
+    var head = el('div', 'lt-sub-head');
+    head.textContent = 'Subscribe';
+    box.appendChild(head);
+
+    var note = el('div', 'lt-sub-note');
+    note.textContent = 'Paste this address into Apple Podcasts, Overcast, Pocket Casts — any podcast app.';
+    box.appendChild(note);
+
+    var row = el('div', 'lt-sub-row');
+
+    var link = el('a', 'lt-sub-url');
+    link.href = '/podcast.xml';
+    link.textContent = url;
+    row.appendChild(link);
+
+    var copy = el('button', 'lt-action');
+    copy.type = 'button';
+    copy.setAttribute('aria-label', 'Copy feed address');
+    copy.innerHTML = SHARE_SVG + '<span>Copy</span>';
+    copy.addEventListener('click', function () {
+      if (AP) AP.copy(url, copy);
+    });
+    row.appendChild(copy);
+
+    box.appendChild(row);
+    host.appendChild(box);
+  }
+
   function render() {
     var host = document.getElementById('listen');
     if (!host) return;
@@ -212,6 +267,10 @@
         } else {
           renderList(host, tracks, tracks.length + (tracks.length === 1 ? ' track' : ' tracks'));
         }
+
+        // Last, on both views: someone reading one episode is exactly who wants
+        // the feed, and someone reading the index has just been shown the show.
+        if (hasEpisodes(tracks)) renderSubscribe(host);
       });
   }
 

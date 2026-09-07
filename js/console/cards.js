@@ -56,7 +56,7 @@ import { escapeHTML, escapeAttrJS, registerView, showView } from './chrome.js';
 import { cdnThumb } from './assets.js';
 import { getBufferFrameNumbers } from './fn-editor.js';
 import { toggleBufferFeatured, getLastFeaturedSwap, bufferCardFocal } from './focal.js';
-import { _audioPromote, _audioClearCard } from './audio.js';
+import { _audioPromote, _audioClearCard, _audioRestoreCard, _audioCardRestoreTarget } from './audio.js';
 
 // How many slots the homepage fetches. Not a knob: the 3-visible/4-fetched grid
 // is a recorded owner decision (docs/pulse-card-vision.md §4) and the ground the
@@ -358,6 +358,15 @@ export function cardsDemoteAudio(id) {
 
 // The whole playlist at once. Per-track ordering belongs on the shelf, which is
 // one tap away on the same tile.
+// The Cards view's mirror of the shelf's ↩ RESTORE CARD. Same module memory,
+// same live resolution — the chip is offered here because this is the view that
+// shows the card coming down, and reversibility layer 2 says the reverse of a
+// displacing action belongs in the view that made it.
+export function cardsRestoreAudioCard() {
+  _audioRestoreCard();
+  renderCards();
+}
+
 export function cardsClearAudioCard() {
   _audioClearCard();
   _repaint();
@@ -510,7 +519,14 @@ function undoHtml() {
   const label = (id) => `f#${String(nums.get(id) || 0).padStart(3, '0')}`;
   const prev = _repinTarget();
   const ready = _refeatureReady();
-  if (!prev && !ready.length) return '';
+  const audioBack = _audioCardRestoreTarget();
+  if (!prev && !ready.length && !audioBack) return '';
+
+  const audioChip = audioBack
+    ? `<button class="cards-chip cards-chip--undo" onclick="cardsRestoreAudioCard()"
+         title="Put the ${audioBack.length} track${audioBack.length === 1 ? '' : 's'} you just cleared back on the audio card">
+         ↩ RESTORE AUDIO CARD</button>`
+    : '';
 
   const chip = prev
     ? `<button class="cards-chip cards-chip--undo" onclick="cardsRepinSwap()"
@@ -531,7 +547,7 @@ function undoHtml() {
        </div>`
     : '';
 
-  return `<div class="cards-undo">${chip}${shelf}</div>`;
+  return `<div class="cards-undo">${chip}${audioChip}${shelf}</div>`;
 }
 
 // The degraded state that must never be a throw: recent-index.js is a separate

@@ -53,6 +53,33 @@ export function setPendingR2Deletes(items) {
   _pendingR2Deletes.push(...items);
 }
 
+// Un-arm a queued R2 delete when something LIVE has taken that key back.
+//
+// The queue is armed at trash time and fires AFTER the publish commit, so a
+// key can be re-claimed in between: trash `x.mp3` (queues `audio/x.mp3`) →
+// re-attach a new `x.mp3` → the upload overwrites the same object → publish
+// commits a registry pointing at it → the queue then deletes it. The site is
+// left with a manifest entry whose media is gone, and the console shows no
+// error because every step "succeeded".
+//
+// Called from the upload path, so the rule is simply: uploading a key is a
+// statement that you want the object at that key. Surface-general on purpose —
+// the same trap bites a re-added photo whose basename matches a trashed one.
+export function cancelPendingDeleteForKeys(keys) {
+  if (!keys || !keys.length) return 0;
+  const claimed = new Set(keys);
+  let dropped = 0;
+  const kept = [];
+  for (const d of _pendingR2Deletes) {
+    const survivors = (d.keys || []).filter(k => !claimed.has(k));
+    dropped += (d.keys || []).length - survivors.length;
+    // An entry whose every key has been re-claimed has nothing left to delete.
+    if (survivors.length) kept.push({ ...d, keys: survivors });
+  }
+  if (dropped) setPendingR2Deletes(kept);
+  return dropped;
+}
+
 // ============== PERSISTENCE ==============
 export function save() {
   try {
@@ -105,6 +132,20 @@ export function save() {
       }
     } catch { /* non-critical — main STATE was already saved */ }
 
+    // Session trash, on the same terms and for a much bigger reason than the
+    // ↩ RESTORE button. Three things read it, and a reload used to silently
+    // drop all three:
+    //   1. ↩ RESTORE — the layer-2 affordance the reversibility rule requires.
+    //   2. importIntoSurface's `trashedIds` guard — without it, the next sync
+    //      RESURRECTS an item you deleted (delete → refresh → sync → it's back).
+    //   3. _vouchedEmptyManifests() — a deliberate 1 → 0 is vouched for by a
+    //      trash row holding the last _imported item. Lose the row and the
+    //      empty-overwrite guard 409s a legitimate publish. That is the
+    //      2026-08-12 last-track wedge, re-opened by a refresh.
+    // Blobs are stripped exactly as above: a restored entry comes back the same
+    // way a non-trashed one does across a reload, so this adds no new loss.
+    persistSessionTrash();
+
     // Warn when approaching 4MB (localStorage limit is ~5MB)
     if (sizeKB > 4000) {
       console.warn(`[save] localStorage: ${sizeKB}KB — approaching 5MB limit`);
@@ -117,15 +158,35 @@ export function save() {
   }
 }
 export function load() {
+  // ⚠️ `return` here would abort the WHOLE function, not just this block —
+  // and everything below it (the session trash, the R2 delete queue, the
+  // interrupted-upload reconciliation) is restored from OTHER keys. A console
+  // whose STATE key is absent or unreadable still has those to restore, and
+  // silently skipping them is the failure this shape invites. Guard the block,
+  // never the function.
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    Object.assign(STATE, data);
+    if (raw) Object.assign(STATE, JSON.parse(raw));
   } catch(e){ console.warn("load failed", e); }
   // States saved before the ledger existed have no stagedLog key (or a
   // corrupted one) — normalize so every reader can assume an array.
   if (!Array.isArray(STATE.stagedLog)) STATE.stagedLog = [];
+
+  // Restore the session trash BEFORE anything reads it — importIntoSurface's
+  // resurrection guard and _vouchedEmptyManifests both consult it, and a login
+  // sync can run before the first render.
+  try {
+    const trashRaw = localStorage.getItem('oaklens_session_trash');
+    if (trashRaw) {
+      const restored = JSON.parse(trashRaw);
+      if (Array.isArray(restored) && restored.length) {
+        sessionTrash.length = 0;
+        // Rows written before this shipped, or hand-edited storage, must not
+        // put a shapeless object where every reader expects `.item.id`.
+        sessionTrash.push(...restored.filter((t) => t && t.item && t.item.id && t.surface));
+      }
+    }
+  } catch { /* non-critical — an unreadable trash is an empty trash */ }
 
   // Restore persisted R2 deletion queue (survives tab close)
   try {
@@ -213,6 +274,45 @@ export function stageChange(surface, meta = {}) {
   bumpStage(surface, delta);   // bumpStage runs the indicator refresh + save
 }
 
+/**
+ * The exact reverse of ONE stageChange: give back the gesture it counted, and
+ * put the ledger row back the way it was.
+ *
+ * A caller cannot just delete the row. `stageChange` FOLDS repeated gestures on
+ * an item into one row — bumping `n`, refreshing `ts`, overwriting `label`, and
+ * letting the newest `kind` win the glyph — so the row after an edit may be a
+ * pre-existing row that now reads differently. Deleting it would silently
+ * discard the item's earlier pending changes and un-protect it from the next
+ * sync (the 2026-08-23 loss class). So the caller snapshots the row BEFORE the
+ * gesture and hands it back here; `null` means there was no row, and the row
+ * the gesture created goes.
+ *
+ * This is layer 1 of the reversibility rule (CLAUDE.md): the reverse runs
+ * through the same accounting as the forward gesture, so the counters stay
+ * honest by construction rather than by arithmetic that has to be got right
+ * twice.
+ *
+ * @param {string} surface
+ * @param {string} id primary entry id — the ledger's dedupe key
+ * @param {object|null} rowSnapshot deep copy of the row before the gesture
+ */
+export function unstageChange(surface, id, rowSnapshot = null) {
+  const i = STATE.stagedLog.findIndex(r => r.surface === surface && r.ids[0] === id);
+  if (rowSnapshot) {
+    if (i >= 0) STATE.stagedLog[i] = rowSnapshot;
+    else STATE.stagedLog.push(rowSnapshot);
+  } else if (i >= 0) {
+    STATE.stagedLog.splice(i, 1);
+  }
+  bumpStage(surface, -1);   // bumpStage runs the indicator refresh + save
+}
+
+/** The ledger row a gesture is about to fold into, deep-copied for the reverse. */
+export function ledgerRowFor(surface, id) {
+  const row = STATE.stagedLog.find(r => r.surface === surface && r.ids[0] === id);
+  return row ? JSON.parse(JSON.stringify(row)) : null;
+}
+
 // Every id on a surface with a ledger-tracked unpublished change. Derived on
 // demand, never stored — the protection set importIntoSurface and save() key on.
 export function stagedIdsFor(surface) {
@@ -240,6 +340,39 @@ export function totalStaged() {
 // ============== SESSION TRASH ==============
 export const sessionTrash = [];
 
+// A trash row, minus the base64 blobs — the same four fields save() strips from
+// STATE, for the same reason (the ~5MB localStorage budget). A restored entry
+// therefore comes back exactly as a non-trashed one does across a reload:
+// _imported and _uploaded items re-draw from the CDN, and a never-uploaded local
+// item loses its preview either way. No new loss class, one smaller record.
+function _leanTrashRow(t) {
+  const item = { ...t.item };
+  delete item.image;
+  if (typeof item.hero === 'string' && item.hero.startsWith('data:')) delete item.hero;
+  if (typeof item.src === 'string' && item.src.startsWith('data:')) delete item.src;
+  return { ...t, item };
+}
+
+/**
+ * Write the trash to its own storage key. Standalone rather than only inside
+ * save(), so the two callers that mutate the trash from the PUBLISH path
+ * (dropTrashForDeletedR2, trashClearAll) can persist without dragging a full
+ * STATE serialization — and, more importantly, without routing a storage
+ * failure through save()'s error latch and toast, which are UI.
+ *
+ * Swallows everything: a trash that cannot be written is worth strictly less
+ * than the publish it must not interrupt.
+ */
+export function persistSessionTrash() {
+  try {
+    if (sessionTrash.length) {
+      localStorage.setItem('oaklens_session_trash', JSON.stringify(sessionTrash.map(_leanTrashRow)));
+    } else {
+      localStorage.removeItem('oaklens_session_trash');
+    }
+  } catch { /* non-critical */ }
+}
+
 export function trashItem(surface, id) {
   const arr = STATE[surface];
   const idx = arr.findIndex(x => x.id === id);
@@ -260,19 +393,33 @@ export function trashItem(surface, id) {
     }
   }
 
+  // How many staged gestures this trash actually cancels. Counted from the
+  // ledger rows we just harvested rather than assumed to be 1, because both
+  // assumptions were wrong:
+  //   - a FAILED upload never staged anything (stageChange only fires on upload
+  //     success, js/console/upload.js), so the old flat -1 silently cancelled
+  //     some OTHER item's pending add;
+  //   - an item edited three times then trashed staged +3 and un-staged -1,
+  //     leaving the counter permanently high.
+  // Staging counts gestures, not things — so the cancellation has to count them
+  // too. `n` is the fold count stageChange keeps on a repeated row.
+  const cancelled = ledgerRows.reduce((sum, r) => sum + (r.n || 1), 0);
+
   sessionTrash.unshift({
     surface,
     item: removed,
     deletedAt: new Date().toLocaleTimeString(),
     label,
     ledgerRows,
+    cancelled,
   });
   // Imported items were already published — trashing them is a new pending deletion (+1).
-  // Newly-added items (never published) — trashing cancels the pending add (-1).
+  // Newly-added items (never published) — trashing cancels exactly the gestures
+  // they staged, which may be zero (a failed upload) or many (an edited draft).
   if (removed._imported) {
     stageChange(surface, { id, label, kind: 'remove' });
-  } else {
-    bumpStage(surface, -1);
+  } else if (cancelled) {
+    bumpStage(surface, -cancelled);
   }
 
   // Queue R2 cleanup for uploaded items
@@ -341,7 +488,12 @@ export function trashRestore(trashIndex) {
   if (Array.isArray(trashed.ledgerRows) && trashed.ledgerRows.length) {
     STATE.stagedLog.push(...trashed.ledgerRows);
   }
-  bumpStage(trashed.surface, trashed.item._imported ? -1 : 1);
+  // Mirror of the count trashItem cancelled — not a flat 1. A restored draft
+  // that carried three staged edits owes three gestures back, and a restored
+  // failed upload owes none. `cancelled` is absent on rows trashed before this
+  // shipped, so fall back to the old behaviour for them.
+  const owed = trashed.cancelled == null ? 1 : trashed.cancelled;
+  bumpStage(trashed.surface, trashed.item._imported ? -1 : owed);
   // Cancel any queued R2 deletion for this item
   setPendingR2Deletes(_pendingR2Deletes.filter(d => d.entryId !== trashed.item.id));
   save();
@@ -390,6 +542,7 @@ export function trashClearAll() {
   }
 
   sessionTrash.length = 0;
+  persistSessionTrash();   // the emptied trash is persisted state now
   renderTrash();
   if (!_pendingR2Deletes.length) showToast("Trash emptied", { kind: 'success' });
   updatePurgeR2Button();
@@ -416,7 +569,7 @@ export function dropTrashForDeletedR2(firedDeletes) {
       dropped++;
     }
   }
-  if (dropped) renderTrash();
+  if (dropped) { persistSessionTrash(); renderTrash(); }
   return dropped;
 }
 
@@ -483,7 +636,13 @@ export function restoreFnBar() {
 export function resetConsole() {
   if (!confirm("Wipe ALL in-memory data? This clears localStorage. Cannot be undone.")) return;
   localStorage.removeItem(STORAGE_KEY);
+  // The trash and the R2 queue live under their own keys — a wipe that left
+  // them behind would repopulate the trash from storage on the next reload,
+  // which is not what "wipe ALL" says.
+  try { localStorage.removeItem('oaklens_session_trash'); } catch {}
+  try { localStorage.removeItem('oaklens_pending_r2_deletes'); } catch {}
   sessionTrash.length = 0;
+  setPendingR2Deletes([]);
   Object.assign(STATE, {
     buffer: [], archive: [], posts: [], wallpapers: [], barrel: [], friends: [], library: [], audio: [],
     staged: { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0 },

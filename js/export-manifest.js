@@ -154,7 +154,7 @@ export const EXPORT_MANIFEST = {
   // Worker-rendered documents worth carrying for completeness even though
   // they only mean anything online (their links are absolute by design).
   // Fetched best-effort — a 501/absent route never sinks the export.
-  extras: ['/sitemap.xml', '/feed.xml'],
+  extras: ['/sitemap.xml', '/feed.xml', '/podcast.xml'],
 
   // Which CDN objects the data implies. `source` names a dataFile; `expand`
   // maps one entry to CDN keys + tiers. Keys referenced directly in HTML,

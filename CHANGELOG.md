@@ -25,6 +25,162 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-07 (the podcast feed is in beta, and we'd like to hear from you)
+
+**No code changed here — this is a label.** `/podcast.xml` and the readiness
+card on the Audio shelf now say **BETA** out loud, because that is the honest
+state of them: the feed is valid RSS, the card names every field Apple wants,
+and exactly **one** short show has actually been through a directory submission
+— the author's, as a test. Everything else on the Audio shelf is not beta. The
+player, the waveforms, the per-track addresses and the tracklists inside posts
+have been live and unchanged for weeks.
+
+Nothing is switched off and nothing needs doing. Publish a show if you want one;
+the feed serves the same way it did yesterday.
+
+**What would help.** If you point a podcast app at your feed, or submit it to
+Apple, Spotify or Overcast, tell us how it went at
+<https://github.com/oaklensart/oaklens-os/issues>. A rejection message pasted in
+full is more useful than a careful bug report — the directories each fail in
+their own way, and one person's show cannot find all of it.
+
+The label comes off when enough real feeds have landed in enough real apps.
+
+---
+
+## 2026-09-02 (undo where there wasn't any, and a deleted track keeps its address)
+
+**Editing a track's title can now be undone.** ✎ EDIT asked you two questions
+and overwrote what was there, with nothing to click if you'd typed the wrong
+thing. The row now grows a **↩ UNDO EDIT** button that puts the old title and
+subtitle back. It disappears once you edit that track again or delete it, so it
+is never a button that would undo something other than what you just did.
+
+**Deleting a published track no longer frees up its web address.** This one was
+quiet and it mattered. A track's address — the `/listen/?a=name` in a share
+link, in every post that embeds it, and in the id every podcast app uses to
+recognise an episode — used to become available again the moment you deleted the
+track. Name a new track the same thing and it inherited that address: the link
+you'd shared started playing something else, and the new episode was invisible
+to everyone already subscribed, because their app had seen that id before.
+Nothing looked wrong anywhere.
+
+A published track is now **retired** instead: the shelf keeps a dimmed
+`// RETIRED` row showing the address it holds, the audio file is still deleted
+from the CDN on the next publish, and nothing new can ever take that address.
+Your site shows no trace of it. A track you never published still goes to the
+trash exactly as before — nothing was pointing at it yet. And **↩ UNDO RETIRE**
+brings it straight back until you publish, because up to that moment the file
+deletion has only been queued.
+
+**Your trash survives a refresh.** Delete something, reload the console, and it
+used to be as if you'd never deleted it — the ↩ RESTORE button was gone, the
+next sync could quietly bring the item back, and publishing could refuse to run
+when you'd deleted the last item on a page. All three are fixed. The trash is
+now saved the same way your pending file cleanups already were.
+
+---
+
+## 2026-09-01 (your podcast feed, ready for Apple — and findable)
+
+> ⚠️ **ACTION REQUIRED — only if you want your show in a podcast directory.**
+> Apple Podcasts refuses a feed missing any of **three** fields, and until now
+> your site had a config key for one of them. Add the other two to
+> `site.config.js` before you submit anywhere:
+>
+> ```js
+> podcast: {
+>   image: '/assets/podcast-cover.png',   // square, 1400×1400 or larger
+>   category: 'Arts',                     // one of Apple's fixed categories
+>   owner: { name: 'Your Name', email: 'show@example.com' },
+> },
+> ```
+>
+> `site.config.example.js` lists every category and every optional field. **Your
+> console now tells you which ones you are still missing** — Audio shelf, top of
+> the page — so you can check before you submit rather than after a rejection.
+> If you have no podcast, or you never submit it anywhere, nothing here needs
+> doing: your feed keeps serving exactly as before.
+
+**Your feed can now be accepted by a podcast directory.** It was always valid —
+it just quietly omitted things Apple treats as mandatory, and the only way to
+find that out was a rejection email days later. The feed now carries a category,
+an owner contact, a copyright line, a language, and whether the show is explicit
+or episodic — each one only when you have actually said so. Two optional extras
+came along: **`podcast.locked`** tells hosting platforms they may not import your
+show without asking you first (the whole reason to host it yourself, in one
+line), and **`podcast.funding`** puts a support link inside the listener's
+podcast app, next to the play button.
+
+Nothing is filled in for you. Your contact email is **never** reused as the
+show's owner address — a podcast feed gets republished by Apple, so that address
+becomes public the moment you submit, and that is your decision to make. The
+same goes for the copyright line: it is a legal claim, and the engine does not
+write one on your behalf.
+
+**Your console now shows you the feed.** The Audio shelf has a card at the top
+with the feed's address and a COPY button — the "where is my feed link" answer,
+which previously you had to already know. Under it: how many of your tracks are
+actually in the feed, and a checklist naming the exact setting still standing
+between you and a submission, with one sentence on what each one gets you. With
+nothing marked as an episode it says so plainly instead of showing you a list of
+problems with an empty show.
+
+**People can now find your feed.** Nothing on the site pointed at it before —
+not the pages, not the sitemap, not the export. Now: podcast apps and search
+engines discover it from any page on your site, it is listed in your sitemap
+once you have an episode, it travels in **Export Site**, and **/listen grows a
+Subscribe block** with the address and a copy button as soon as one of your
+tracks is marked as an episode. A site with tracks but no episodes shows none of
+this — demos are not a show.
+
+**One thing deliberately left alone:** the address each episode is identified by
+in your subscribers' apps. Changing it would make everyone who follows you
+re-download your entire back catalogue.
+
+---
+
+## 2026-08-31 (undo on the audio shelf, and four fixes to publishing)
+
+**Clearing your homepage audio card can now be undone.** It used to take up to
+six tracks off with no warning and no way back — the order they were in was
+simply gone. It now asks first, names the tracks, and leaves a **↩ RESTORE
+CARD** button that puts the card back exactly as it was, until you close the
+tab. The same button appears in the Cards view next to ↩ RE-PIN.
+
+**Fixed: deleting something could cancel a different pending change.** If an
+upload failed and you removed the failed row, the console quietly cancelled some
+*other* item's pending change instead — so something you meant to publish
+stopped being counted. Editing an item several times and then deleting it left
+the opposite problem: a change counter stuck above zero for something that no
+longer existed. Both now count correctly, and putting an item back out of the
+trash restores exactly what it cancelled.
+
+**Fixed: publishing could delete a file you had just re-uploaded.** Throw a file
+away, add a new one with the same name, and publish would save your site
+pointing at the new file and then delete it — with every step reporting success.
+Uploading a file now cancels any pending deletion for that name. The Audio shelf
+also stops you re-adding a track that is sitting in the trash, and points you at
+↩ RESTORE, which brings its details back too.
+
+**Fixed: removing a track you had published in the same session.** Audio (and
+your Friends list) were missing from a step that runs after publishing, which
+meant the console still thought those items were brand new. Three things went
+wrong because of it: deleting a track you had just published showed no pending
+change, so **Publish refused to run**; deleting your *only* track blocked the
+publish outright; and renaming a track you had just published silently moved its
+web address — breaking the link you had shared, every post that embedded it, and
+its entry for anyone subscribed to your podcast feed.
+
+**The Audio shelf looks like a list again.** It was being drawn into the photo
+grid's layout, so every track sat in a narrow column with its six buttons
+wrapped underneath, and most of the styling the page asked for did not exist at
+all. Tracks now stack cleanly and fold sensibly on a phone.
+
+Nothing for you to do — merge and publish once.
+
+---
+
 ## 2026-08-27 (homepage pin fix)
 
 **Fixed: a starred frame could land in the card only a tablet shows.** Your
@@ -499,6 +655,10 @@ fetched when someone presses play.
 > accept a feed without square cover art. Add a `podcast` block to
 > `site.config.js` (see `site.config.example.js` for the shape) pointing at a
 > square image, 1400×1400 or larger. Everywhere else works without it.
+>
+> **Correction, 2026-09-01:** cover art is not Apple's only requirement — a
+> category and an owner email are mandatory too, and there were no config keys
+> for them until that date's entry above. Follow that one instead.
 
 **Fixed: text-only posts shared as a broken image.** A field note with no hero
 photo was sending an empty image reference to social platforms, so the preview

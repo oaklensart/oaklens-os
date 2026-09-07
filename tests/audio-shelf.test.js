@@ -7,9 +7,10 @@
 //  · The SLUG is a track's permanent address — /listen/?a=<slug> is what gets
 //    shared, and a post shortcode carries nothing else. So it has to be
 //    collision-proof, and renaming a PUBLISHED track must not move it.
-//  · Featuring is EXCLUSIVE. The homepage shows one audio card, so promoting a
-//    track has to demote the incumbent; two featured entries would make which
-//    card appears depend on registry order.
+//  · Featuring is CAPPED, not exclusive. The homepage audio card holds up to
+//    six tracks (the Soundboard, 2026-08-14), ordered by `featured_order`, and
+//    the cap is duplicated in js/recent-index.js — so the two must agree or the
+//    console pins a seventh track the card will never draw.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,8 +25,10 @@ const { STATE } = await import('../js/console-state.js');
 const {
   audioSlugify, audioUniqueSlug, audioNormalizePeaks, audioPeaksToString,
   _audioPromote, _audioToggleEpisode, _audioToggleDownload, renderAudio,
-  audioWeightHint, _audioClearCard,
+  audioWeightHint, _audioClearCard, _audioEdit, audioAddFiles,
+  _audioRestoreCard, _audioCardRestoreTarget,
 } = await import('../js/console/audio.js');
+const { sessionTrash } = await import('../js/console-state.js');
 
 beforeEach(() => {
   document.body.innerHTML = `
@@ -36,6 +39,11 @@ beforeEach(() => {
   `;
   STATE.audio = [];
   STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0 };
+  STATE.stagedLog = [];
+  sessionTrash.length = 0;
+  // CLEAR CARD asks before taking up to six tracks down (2026-08-31); happy-dom
+  // has no real dialog, so cases that are not ABOUT the confirm assume "yes".
+  window.confirm = () => true;
 });
 
 const track = (over) => ({
@@ -314,5 +322,137 @@ describe('leaving the feed is a change too', () => {
     _audioToggleEpisode('a1');
     expect(STATE.audio[0].episode).toBe(false);
     expect(STATE.staged.audio).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Slug permanence — the contract manual §5.29 states and nothing pinned.
+//
+// A published track's slug is its address: /listen/?a=<slug> is what gets
+// shared, every post shortcode carries nothing else, and the podcast feed uses
+// that permalink as <guid isPermaLink="true">. Moving it breaks all three at
+// once, and for a subscriber it silently re-downloads the episode.
+//
+// This is why the post-publish `_imported` promotion has to include audio: it
+// is the ONLY thing telling _audioEdit that a track is already out in the world.
+describe('a published track keeps its address', () => {
+  it('renaming a published track does not move its slug', () => {
+    STATE.audio = [track({ _imported: true })];
+    window.prompt = (label) => (/^Title/.test(label) ? 'A Completely Different Name' : '');
+
+    _audioEdit('a1');
+
+    expect(STATE.audio[0].title).toBe('A Completely Different Name');
+    expect(STATE.audio[0].slug, 'the permalink is permanent once published').toBe('take-one');
+  });
+
+  it('renaming a never-published track DOES move its slug', () => {
+    // Nothing points at it yet, so the address can still follow the name.
+    STATE.audio = [track({ _imported: false })];
+    window.prompt = (label) => (/^Title/.test(label) ? 'Second Thoughts' : '');
+
+    _audioEdit('a1');
+
+    expect(STATE.audio[0].slug).toBe('second-thoughts');
+  });
+
+  it('a slug already taken by another track is never handed out twice', () => {
+    STATE.audio = [
+      track({ id: 'a1', slug: 'take-one', _imported: false }),
+      track({ id: 'a2', slug: 'second-thoughts', filename: 'b.mp3' }),
+    ];
+    window.prompt = (label) => (/^Title/.test(label) ? 'Second Thoughts' : '');
+
+    _audioEdit('a1');
+
+    expect(STATE.audio[0].slug).not.toBe('second-thoughts');
+    expect(new Set(STATE.audio.map((a) => a.slug)).size, 'slugs stay unique').toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A trashed track still owns its R2 key until publish fires the queued delete.
+describe('re-adding a trashed filename', () => {
+  it('is refused, and points at RESTORE instead', async () => {
+    sessionTrash.push({
+      surface: 'audio',
+      item: { id: 'gone', filename: 'take-one.mp3', slug: 'take-one', _imported: true },
+      label: 'Take One',
+      deletedAt: '12:00:00',
+      ledgerRows: [],
+    });
+
+    const file = new File([new Uint8Array(8)], 'take-one.mp3', { type: 'audio/mpeg' });
+    const added = await audioAddFiles([file]);
+
+    expect(added, 'the shelf refuses the duplicate').toHaveLength(0);
+    expect(STATE.audio, 'and nothing was minted').toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Reversibility, layer 2 (CLAUDE.md): one chip naming what a displacing action
+// pushed out, resolved against state as it is NOW so it is never a dead button.
+describe('↩ RESTORE CARD', () => {
+  beforeEach(() => { window.confirm = () => true; });
+
+  it('puts the cleared tracks back in their original order', () => {
+    STATE.audio = [
+      track({ id: 'a1', slug: 's1', filename: '1.mp3', featured: true, featured_order: 1 }),
+      track({ id: 'a2', slug: 's2', filename: '2.mp3', featured: true, featured_order: 2 }),
+      track({ id: 'a3', slug: 's3', filename: '3.mp3', featured: true, featured_order: 3 }),
+    ];
+    _audioClearCard();
+    expect(STATE.audio.every((a) => !a.featured), 'card is down').toBe(true);
+    expect(STATE.audio.every((a) => a.featured_order === undefined),
+      'no orphaned order — recent-index.js would keep those tracks live').toBe(true);
+
+    _audioRestoreCard();
+    const back = STATE.audio.filter((a) => a.featured)
+      .sort((a, b) => a.featured_order - b.featured_order).map((a) => a.id);
+    expect(back).toEqual(['a1', 'a2', 'a3']);
+  });
+
+  it('asks before clearing, and does nothing when declined', () => {
+    window.confirm = () => false;
+    STATE.audio = [track({ featured: true, featured_order: 1 })];
+    _audioClearCard();
+    expect(STATE.audio[0].featured, 'a declined confirm changes nothing').toBe(true);
+  });
+
+  it('restores through _audioPromote, so staging counts one gesture per track', () => {
+    STATE.audio = [
+      track({ id: 'a1', slug: 's1', filename: '1.mp3', featured: true, featured_order: 1 }),
+      track({ id: 'a2', slug: 's2', filename: '2.mp3', featured: true, featured_order: 2 }),
+    ];
+    _audioClearCard();
+    const afterClear = STATE.staged.audio;
+    _audioRestoreCard();
+    expect(STATE.staged.audio, 'two tracks back on = two more gestures').toBe(afterClear + 2);
+  });
+
+  it('drops a track that has since been deleted, and keeps the rest', () => {
+    STATE.audio = [
+      track({ id: 'a1', slug: 's1', filename: '1.mp3', featured: true, featured_order: 1 }),
+      track({ id: 'a2', slug: 's2', filename: '2.mp3', featured: true, featured_order: 2 }),
+    ];
+    _audioClearCard();
+    STATE.audio = STATE.audio.filter((a) => a.id !== 'a1');
+
+    expect(_audioCardRestoreTarget().map((t) => t.id)).toEqual(['a2']);
+    _audioRestoreCard();
+    expect(STATE.audio.filter((a) => a.featured).map((a) => a.id)).toEqual(['a2']);
+  });
+
+  it('offers nothing when there is nothing restorable', () => {
+    STATE.audio = [track({ featured: false })];
+    expect(_audioCardRestoreTarget(), 'a chip that does nothing is worse than no chip').toBeNull();
+  });
+
+  it('stops offering once the cleared tracks are featured again by hand', () => {
+    STATE.audio = [track({ id: 'a1', featured: true, featured_order: 1 })];
+    _audioClearCard();
+    _audioPromote('a1');
+    expect(_audioCardRestoreTarget()).toBeNull();
   });
 });

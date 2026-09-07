@@ -156,7 +156,10 @@ export async function getAudioOgData(url, env) {
   if (!a || !/^[a-z0-9-]+$/i.test(a)) return indexOg;
   try {
     const data = await loadDataJson(url.origin, env, 'data/audio.json');
-    const e = Array.isArray(data) && data.find((x) => x.slug === a);
+    // `x.filename` is not decoration: a RETIRED track is a tombstone carrying a
+    // reserved slug and no media (manual §3.9), so matching on slug alone would
+    // unfurl a share link with the title of something that no longer plays.
+    const e = Array.isArray(data) && data.find((x) => x && x.slug === a && x.filename);
     if (!e) return indexOg;
     const mins = e.duration > 0 ? `${Math.max(1, Math.round(e.duration / 60))} min` : '';
     return {

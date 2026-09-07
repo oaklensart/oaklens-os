@@ -45,8 +45,26 @@ describe('GET /api/site/settings', () => {
   it('leaks no unexpected keys — the response is ONLY ok/name/theme/pages + the posture flags', async () => {
     const { body } = await getSettings();
     expect(Object.keys(body).sort()).toEqual(
-      ['demoMode', 'name', 'ok', 'pages', 'repoConnected', 'theme', 'webring']);
+      ['demoMode', 'name', 'ok', 'pages', 'podcast', 'repoConnected', 'theme', 'webring']);
     expect(Object.keys(body.theme).sort()).toEqual(['defaultMode', 'preset', 'toggle']);
+  });
+
+  // ⚠️ The podcast block is READINESS, not settings: which keys a directory
+  // still needs, never what is in them. The owner email is the one that
+  // matters — it is a real person's address, it is not on the rendered site
+  // anywhere, and this endpoint is public and unauthenticated. A `typeof`
+  // sweep is the guard, because the failure mode is someone helpfully
+  // returning the value "so the card can show it".
+  it('carries podcast readiness as booleans and nothing else', async () => {
+    const { body } = await getSettings();
+    expect(Object.keys(body.podcast).sort()).toEqual([
+      'hasArtwork', 'hasCategory', 'hasCopyright', 'hasFunding',
+      'hasLocked', 'hasOwnerEmail', 'listenPage',
+    ]);
+    for (const [k, v] of Object.entries(body.podcast)) {
+      expect(typeof v, `${k} must be a boolean, never a value`).toBe('boolean');
+    }
+    expect(JSON.stringify(body.podcast)).not.toContain('@');
   });
 
   // The webring seat is public by construction — the footer chip renders it and

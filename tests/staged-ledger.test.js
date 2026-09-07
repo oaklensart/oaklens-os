@@ -103,12 +103,31 @@ describe('trash mirroring — the ± logic, now with rows', () => {
 
     trashItem('buffer', 'f1');
     expect(STATE.stagedLog, 'a cancelled add leaves no row behind').toHaveLength(0);
-    expect(STATE.staged.buffer, 'counter drops by the one pending add').toBe(1);
+    // Was `toBe(1)` until 2026-08-31, which asserted the defect: the counter
+    // dropped by a flat 1 no matter how many gestures the item had staged, so
+    // a twice-touched draft left a permanent +1 for something that no longer
+    // exists. Staging counts gestures, so the cancellation counts them too.
+    expect(STATE.staged.buffer, 'trashing cancels every gesture the item staged').toBe(0);
 
     trashRestore(0);
     expect(STATE.stagedLog, 'restore reinstates the stashed rows exactly').toHaveLength(1);
     expect(STATE.stagedLog[0].n).toBe(2);
+    expect(STATE.staged.buffer, 'restore owes back the same count it cancelled').toBe(2);
     expect(stagedIdsFor('buffer').has('f1')).toBe(true);
+  });
+
+  it('trashing a FAILED upload moves the counter by nothing', () => {
+    // stageChange only fires on upload SUCCESS, so a failed row never staged a
+    // +1. The old flat -1 cancelled some OTHER item's pending add instead.
+    STATE.audio = [{ id: 'ok', title: 'Landed', filename: 'ok.mp3', _uploaded: true }];
+    stageChange('audio', { id: 'ok', label: 'Landed — new', kind: 'add' });
+    expect(STATE.staged.audio).toBe(1);
+
+    STATE.audio.unshift({ id: 'bad', title: 'Failed', filename: 'bad.mp3', _uploadError: 'boom' });
+    trashItem('audio', 'bad');
+
+    expect(STATE.staged.audio, "a failed upload's deletion is not a change").toBe(1);
+    expect(stagedIdsFor('audio').has('ok'), "the landed track keeps its pending add").toBe(true);
   });
 
   it('trashing an imported item stages a remove row; restore cancels it', () => {

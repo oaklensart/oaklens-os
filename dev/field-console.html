@@ -46,7 +46,7 @@ try {
      index.html can never disagree with it (tests/guards.test.js). -->
 <script src="/js/recent-index.js?v=17" defer></script>
 
-<link rel="stylesheet" href="/css/field-console.css?v=50">
+<link rel="stylesheet" href="/css/field-console.css?v=55">
 </head>
 <body>
 
@@ -727,11 +727,19 @@ try {
         <div class="dz-hint">mp3 · m4a · aac · ogg · opus · wav · flac — up to 128MB, so a full episode fits</div>
       </div>
 
+      <!-- The podcast feed card. Rendered entirely by renderPodcastCard()
+           (js/console/audio.js): the live address, how many tracks are in the
+           feed, and a checklist of the config keys still blocking a directory
+           submission. Empty here on purpose — an unstyled half-truth in the
+           markup would flash before the real state arrives, and the readiness
+           booleans only exist after GET /api/site/settings answers. -->
+      <div id="audio-feed-card"></div>
+
       <div class="stage-section">
         <div class="stage-header">
           <div class="stage-title">TRACKS · <span class="count" id="audio-count">0</span></div>
         </div>
-        <div class="archive-list" id="audio-display"></div>
+        <div class="aud-list" id="audio-display"></div>
       </div>
     </section>
     <!-- CARDS — the homepage grid, twice: what it holds now and what the next
@@ -1451,23 +1459,23 @@ try {
   "imports": {
     "/js/console-telemetry.js": "/js/console-telemetry.js?v=2",
     "/js/console-api.js":       "/js/console-api.js?v=11",
-    "/js/console-state.js":     "/js/console-state.js?v=10",
+    "/js/console-state.js":     "/js/console-state.js?v=12",
     "/js/console-ui.js":        "/js/console-ui.js?v=62",
     "/js/console/chrome.js":    "/js/console/chrome.js?v=12",
     "/js/console/assets.js":    "/js/console/assets.js?v=4",
     "/js/console/utils.js":     "/js/console/utils.js?v=2",
     "/js/console/sync.js":      "/js/console/sync.js?v=1",
-    "/js/console/upload.js":    "/js/console/upload.js?v=3",
+    "/js/console/upload.js":    "/js/console/upload.js?v=4",
     "/js/console/more-views.js": "/js/console/more-views.js?v=5",
     "/js/console/archive.js":   "/js/console/archive.js?v=3",
     "/js/console/buffer.js":    "/js/console/buffer.js?v=3",
     "/js/console/fn-editor.js": "/js/console/fn-editor.js?v=7",
     "/js/console/focal.js":     "/js/console/focal.js?v=6",
     "/js/console/asset-library.js": "/js/console/asset-library.js?v=2",
-    "/js/console/audio.js":     "/js/console/audio.js?v=7",
-    "/js/console/cards.js":     "/js/console/cards.js?v=2",
-    "/js/console/publish.js":   "/js/console/publish.js?v=14",
-    "/js/console/session.js":   "/js/console/session.js?v=8",
+    "/js/console/audio.js":     "/js/console/audio.js?v=11",
+    "/js/console/cards.js":     "/js/console/cards.js?v=3",
+    "/js/console/publish.js":   "/js/console/publish.js?v=16",
+    "/js/console/session.js":   "/js/console/session.js?v=9",
     "/js/console/bench.js":     "/js/console/bench.js?v=1",
     "/js/pulse-packs.js":       "/js/pulse-packs.js?v=3",
     "/js/console/pulse.js":     "/js/console/pulse.js?v=4",
@@ -1479,7 +1487,7 @@ try {
     "/js/raw-extract.js":       "/js/raw-extract.js?v=4",
     "/js/site-export.js":       "/js/site-export.js?v=4",
     "/js/site-export-core.js":  "/js/site-export-core.js?v=3",
-    "/js/export-manifest.js":   "/js/export-manifest.js?v=13"
+    "/js/export-manifest.js":   "/js/export-manifest.js?v=14"
   }
 }
 </script>

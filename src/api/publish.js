@@ -369,6 +369,10 @@ export async function handleSync(request, env) {
     'data/barrel.json',
     'data/friends.json',
     'data/library.json',
+    // audio was missing here until 2026-08-31. Latent, because the console
+    // always passes an explicit `files` list — but a caller that does not was
+    // silently told this site has no audio.
+    'data/audio.json',
   ];
   const filesToFetch = requestedFiles.length > 0 ? requestedFiles : defaultFiles;
 
