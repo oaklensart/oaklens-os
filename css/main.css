@@ -748,6 +748,13 @@ html {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  /* Fill the card. In the equal-height grid row a card is stretched to match its
+     tallest sibling; without this the body stops at its text and the slack shows
+     the card's own background below it — which on a palette-tinted composed card
+     reads as the footer gradient "not reaching the bottom edge." The title/meta
+     stay at the top (no margin-top:auto here, unlike the console), so the slack is
+     simply tinted footer, not a gap in the copy. */
+  flex: 1 1 auto;
 }
 
 .wk-title {
@@ -758,6 +765,15 @@ html {
   font-size: 0.8rem;
   line-height: 1.15;
   color: var(--fg-strong);
+}
+/* An archive title is curated and short; a COMPOSED card's is typed, so bound it
+   to the caption's two lines — otherwise a long one grows the footer and shoves
+   the picture around the row. Paired with a maxlength in the composer. */
+.wk-composed .wk-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .wk-meta {
@@ -3222,18 +3238,39 @@ html {
    but they are applied as a tint over the theme's surface, never as a
    background of their own. Mid-tone values on purpose: each has to read as
    itself on midnight ink AND on daylight paper. */
-.wk-pulse[data-state="ember"]  { --pulse-rgb: 214, 72, 60; }
-.wk-pulse[data-state="dawn"]   { --pulse-rgb: 198, 138, 46; }
-.wk-pulse[data-state="flow"]   { --pulse-rgb: 62, 158, 104; }
-.wk-pulse[data-state="velvet"] { --pulse-rgb: 138, 104, 214; }
-.wk-pulse[data-state="tide"]   { --pulse-rgb: 58, 134, 176; }
-/* "signal" is the absence of a choice — it inherits --accent-rgb above. */
+.wk-composed[data-state]:not([data-state="default"]) {
+  --pulse-veil: rgba(0, 0, 0, 0.55);
+  background:
+    radial-gradient(circle at 84% 8%, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.20) 0%, transparent 58%),
+    linear-gradient(168deg, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.11) 0%, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.03) 58%, rgba(var(--pulse-rgb, var(--accent-rgb)), 0) 100%),
+    linear-gradient(var(--pulse-veil), var(--pulse-veil)),
+    var(--surface-2);
+  border-color: rgba(var(--pulse-rgb, var(--accent-rgb)), 0.28);
+}
+:root[data-theme="light"] .wk-composed[data-state]:not([data-state="default"]) {
+  --pulse-veil: rgba(255, 255, 255, 0.45);
+  border-color: rgba(var(--pulse-rgb, var(--accent-rgb)), 0.34);
+}
+.wk-pulse[data-state="ember"],  .wk-composed[data-state="ember"]  { --pulse-rgb: 214, 72, 60; }
+.wk-pulse[data-state="dawn"],   .wk-composed[data-state="dawn"]   { --pulse-rgb: 198, 138, 46; }
+.wk-pulse[data-state="flow"],   .wk-composed[data-state="flow"]   { --pulse-rgb: 62, 158, 104; }
+.wk-pulse[data-state="velvet"], .wk-composed[data-state="velvet"] { --pulse-rgb: 138, 104, 214; }
+.wk-pulse[data-state="tide"],   .wk-composed[data-state="tide"]   { --pulse-rgb: 58, 134, 176; }
+.wk-composed[data-state="signal"] { --pulse-rgb: var(--accent-rgb); }
+
+.wk-composed[data-shape="picture"][data-state]:not([data-state="default"]) .wk-body {
+  background: linear-gradient(180deg, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.12) 0%, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.04) 100%);
+}
+.wk-composed[data-shape="picture"][data-state]:not([data-state="default"]) {
+  border-color: rgba(var(--pulse-rgb, var(--accent-rgb)), 0.35);
+}
 
 /* The aura moved INTO the background stack above (it is the top layer there),
    so the old ::before that drew it separately is gone — two radials at the same
    corner just muddied each other. The stacking rule stays: content sits above
    the painted ground. */
-.wk-pulse > * { position: relative; z-index: 1; }
+.wk-pulse > *,
+.wk-composed[data-state] > * { position: relative; z-index: 1; }
 
 /* ---- kicker row: the lamp, the label, the frozen clock ---- */
 .wk-p-kicker {

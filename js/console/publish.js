@@ -35,6 +35,7 @@ import { scheduleLibrarySync, updatePurgeR2Button, _librarySyncFailed } from './
 import { _uploadsPending, _failedUploads, _requeueNetFailedUploads } from './upload.js';
 import { renderWall, renderBarrel, renderNetwork, renderLibrary } from './more-views.js';
 import { renderAudio } from './audio.js';
+import { renderCards } from './cards.js';
 import { renderArchive } from './archive.js';
 import { renderBuffer } from './buffer.js';
 import { renderFN, mergeCloudDrafts, fnScheduleCloudDraft, fnCurrentId } from './fn-editor.js';
@@ -79,6 +80,7 @@ export function renderPublish() {
     // total badge and showed `+n ▲` on no card at all — the publish screen
     // listed every surface except the one being edited.
     audio: (STATE.audio || []).length,
+    cards: (STATE.cards || []).length,
   };
   const stagedMap = {
     buffer: STATE.staged.buffer,
@@ -88,6 +90,7 @@ export function renderPublish() {
     barrel: STATE.staged.barrel,
     network: STATE.staged.friends,
     audio: STATE.staged.audio,
+    cards: STATE.staged.cards,
   };
   Object.entries(map).forEach(([k, v]) => {
     document.getElementById(`sum-count-${k}`).textContent = v;
@@ -122,6 +125,7 @@ export function renderPublish() {
 const SURFACE_BY_TILE = {
   buffer: 'buffer', archive: 'archive', fn: 'posts',
   wall: 'wallpapers', barrel: 'barrel', network: 'friends', audio: 'audio',
+  cards: 'cards',
 };
 const _KIND_GLYPH = { add: '+', edit: 'Δ', remove: '×', feature: '★' };
 
@@ -218,6 +222,12 @@ export function buildBundle() {
       // featured: surfaces this frame as a RAW card on the homepage. Both are
       // omitted when unset so unfeatured frames stay byte-identical to before.
       ...(b.featured ? { featured: true } : {}),
+      // card: { layout } — the homepage card descriptor, the same shape and the
+      // same conditional treatment a post's already gets below. A frame that
+      // never chose a layout emits nothing, so every untouched entry stays
+      // byte-identical. NOT on the dark branch above: a tombstone renders
+      // nowhere, so a layout on one would describe a card that cannot exist.
+      ...(b.card ? { card: b.card } : {}),
       };
     }), null, 2),
     "data/archive.json":   JSON.stringify(STATE.archive.filter(a => !a._uploadError && !a._uploading).map(a => ({
@@ -229,6 +239,8 @@ export function buildBundle() {
       ...(a.focus ? { focus: a.focus } : {}),
       // cardFocus: object-position for the tall 4:5 homepage changelog card.
       ...(a.cardFocus ? { cardFocus: a.cardFocus } : {}),
+      // card: { layout } — see the buffer serializer above.
+      ...(a.card ? { card: a.card } : {}),
     })), null, 2),
     "data/posts.json":     JSON.stringify(STATE.posts.filter(p => !p.status || p.status === "published").map(p => ({
       id: p.id, fn_id: p.fn_id, title: p.title,
@@ -311,8 +323,43 @@ export function buildBundle() {
       ...(a.featured_order ? { featured_order: a.featured_order } : {}),
       ...(a.episode ? { episode: true } : {}),
       ...(a.download ? { download: true } : {}),
+      // card: { layout } — see the buffer serializer above. NOT on the retired
+      // branch, for the same reason it is not on the dark one.
+      ...(a.card ? { card: a.card } : {}),
       };
     }), null, 2),
+    // Composed homepage cards — the owner's own, overlaid on the automatic grid
+    // (js/recent-index.js `composedPick`). Every field is optional except id and
+    // order, because a card may be a picture with no words, words with no
+    // picture, or a reference to something already on the site with neither of
+    // its own. The engine drops one carrying nothing rather than rendering an
+    // empty tile, so an unfinished draft is harmless here.
+    //
+    // `order` is a RANK, not a slot index, and it compacts — see composedPick.
+    "data/cards.json":     JSON.stringify((STATE.cards || []).map(c => ({
+      id: c.id,
+      order: Number(c.order) || 0,
+      added_at: c.added_at || null,
+      ...(c.source ? { source: c.source } : {}),
+      ...(c.media ? { media: c.media } : {}),
+      ...(c.folder ? { folder: c.folder } : {}),
+      ...(c.focus ? { focus: c.focus } : {}),
+      // cardFocus: object-position for the tall 4:5 card, same as everywhere.
+      ...(c.cardFocus ? { cardFocus: c.cardFocus } : {}),
+      ...(c.title ? { title: c.title } : {}),
+      ...(c.tease ? { tease: c.tease } : {}),
+      ...(c.label ? { label: c.label } : {}),
+      ...(c.link ? { link: c.link } : {}),
+      // The atmospheric palette (buildCard reads it as data-state). Whitelisted
+      // like every other field — omitting it silently stripped the colour on the
+      // way to the live grid, so a card tinted in the studio published grey.
+      ...(c.palette ? { palette: c.palette } : {}),
+      ...(c.card ? { card: c.card } : {}),
+      // The measured picture, for the image ladder. Stored rather than measured
+      // at render time: the ladder must be deterministic and the offline export
+      // has no layout to measure.
+      ...(c.img ? { img: c.img } : {}),
+    })), null, 2),
   };
   // Posts as individual markdown files
   STATE.posts.forEach(p => {
@@ -344,6 +391,8 @@ CONTENTS:
   data/barrel.json     ${STATE.barrel.length} entries
   data/friends.json    ${STATE.friends.length} nodes
   data/library.json    ${STATE.library.length} entries
+  data/audio.json      ${(STATE.audio || []).length} tracks
+  data/cards.json      ${(STATE.cards || []).length} composed cards
   posts/*.md           ${STATE.posts.length} markdown files
 
 NOTE: Image files are NOT included in this bundle.
@@ -525,6 +574,7 @@ const SURFACE_MANIFEST = {
   posts: 'data/posts.json', wallpapers: 'data/wallpapers.json',
   barrel: 'data/barrel.json', friends: 'data/friends.json',
   library: 'data/library.json', audio: 'data/audio.json',
+  cards: 'data/cards.json',
 };
 export function _vouchedEmptyManifests() {
   return Object.entries(SURFACE_MANIFEST)
@@ -565,7 +615,7 @@ export function importIntoSurface(surface, data) {
 }
 
 export function clearImported() {
-  ["buffer", "archive", "posts", "wallpapers", "barrel", "friends", "library", "audio"].forEach(surface => {
+  ["buffer", "archive", "posts", "wallpapers", "barrel", "friends", "library", "audio", "cards"].forEach(surface => {
     // Same dirty-entry protection as importIntoSurface: "clear imported data"
     // means "drop what main can give back", and main cannot give back an
     // unpublished local edit.
@@ -582,6 +632,7 @@ export function clearImported() {
   renderNetwork();
   renderLibrary();
   renderAudio();
+  renderCards();
   renderPublish();
   document.getElementById("sync-status").textContent = "";
   toast("✓ imported data cleared", "success");
@@ -707,6 +758,7 @@ export async function syncFromServer() {
     { file: 'data/friends.json',    surface: 'friends' },
     { file: 'data/library.json',    surface: 'library' },
     { file: 'data/audio.json',      surface: 'audio' },
+    { file: 'data/cards.json',      surface: 'cards' },
   ];
 
   try {

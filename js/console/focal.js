@@ -169,6 +169,17 @@ export const FocalModal = (() => {
     window.addEventListener('pointerup', () => { dragging = false; });
     window.addEventListener('resize', () => { if (!$('focal-modal').classList.contains('hidden')) paint(); });
     $('focal-guide-toggle').addEventListener('change', paintGuides);
+    // Escape backs out of the crop, the way clicking the scrim and dragging the
+    // sheet down already do. It also STOPS THERE: this modal opens from the
+    // Cards composer, whose own Escape exits edit mode — so before this, one
+    // press cancelled the crop AND dropped the card out of edit mode behind the
+    // still-open modal.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if ($('focal-modal').classList.contains('hidden')) return;
+      e.stopPropagation();
+      close();
+    });
   }
 
   function open(opts) {
@@ -218,7 +229,6 @@ export const FocalModal = (() => {
   function save() { const f = focusStr(); const cb = onSaveCb; close(); if (cb) cb(f); }
   function reset() { focus = { x: 50, y: 50 }; paint(); }
   function close() { hideOverlay('focal-modal'); onSaveCb = null; card = null; cardImg = null; }
-
   function toBlob() {
     return new Promise((res, rej) => $('ogc-canvas').toBlob(b => (b && b.size) ? res(b) : rej(new Error('canvas export failed')), 'image/webp', 0.9));
   }

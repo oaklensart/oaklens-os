@@ -380,6 +380,11 @@ export function _assetLibraryInsertStrip() {
 // never also fires.
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !document.getElementById('asset-library-modal').classList.contains('hidden')) {
+    // The key stops here. This modal opens from the Cards composer, whose own
+    // Escape exits edit mode — without this, one press closed the picker AND the
+    // composer behind it. (hideOverlay defers `.hidden` by a frame on a phone,
+    // so a "is anything open" check downstream cannot be relied on alone.)
+    e.stopPropagation();
     e.preventDefault();
     e.stopPropagation();
     closeAssetLibrary();

@@ -10,6 +10,11 @@ worker.js
 site.config.js
 site.config.example.js
 .aider*
+# AI-agent scratch space. `.claude/worktrees/` holds whole CHECKOUTS of this repo
+# (a second copy of every page, and of site.config.js with it), and a fork that
+# commits its `.claude/` settings would otherwise serve them: the assets dir is
+# the repo root and serves by default.
+.claude
 audit/
 .DS_Store
 

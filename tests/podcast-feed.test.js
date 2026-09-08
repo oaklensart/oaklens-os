@@ -225,7 +225,12 @@ describe('lastBuildDate', () => {
     // built. The newest episode is ep-004, added 2026-08-12.
     const xml = await body(envWith(TRACKS));
     expect(xml).toContain('<lastBuildDate>Wed, 12 Aug 2026 00:00:00 GMT</lastBuildDate>');
-    expect(xml).not.toContain(new Date().getUTCFullYear() + ' ' + new Date().getUTCHours());
+    // Not "now": today's date must not appear as a build date. Compared as the
+    // RSS day form ("DD Mon YYYY") so it cannot collide with an episode's own
+    // 00:00:00 time — the old year+hour check false-matched "2026 00:00:00"
+    // for the whole UTC-midnight hour, one red hour a day for no real reason.
+    const today = new Date().toUTCString().slice(5, 16);
+    expect(xml).not.toContain(today);
   });
 
   it('is omitted entirely when there are no episodes', async () => {

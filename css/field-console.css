@@ -93,6 +93,12 @@
   --accent-wash: rgba(var(--brand-rgb), 0.08);
   --accent-line: var(--brand-deep);
   --on-accent:   #000;
+  /* Text that sits on a PHOTOGRAPH rather than on the page — a card's chip, a
+     title over a scrim. Deliberately the same in both themes and every preset:
+     it is legible against the scrim, not against the surface behind it, so
+     flipping it with the theme would make it wrong half the time. The public
+     card makes the same call for the same reason (css/main.css, .wk-tag). */
+  --on-media:    #fff;
 
   --line-1: #161616;
   --line-2: #242424;
@@ -138,6 +144,19 @@
 
   --font-mono:    'Syne Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --font-display: 'Syne', var(--font-mono);
+  /* ---- --font-body: the site's READING face, mirrored per preset ----
+     The console's own chrome is mono and display only, so this token existed
+     nowhere until 2026-09-07 — and the card preview asked for it, got an empty
+     value, and silently fell back to the inherited mono. The result was a card
+     whose headline and body were the same face: the single thing that makes
+     type look accidental.
+
+     Mirrored from css/main.css preset for preset, so the preview shows the
+     pairing the homepage actually draws. Sora and Hanken Grotesk are not among
+     the console's self-hosted faces, so those presets fall back to system-ui —
+     still a grotesque, so the display/body RELATIONSHIP the preview exists to
+     show survives either way. */
+  --font-body:    'Syne Mono', monospace;
 
   color-scheme: dark;   /* native form controls + scrollbars match the mode */
 }
@@ -191,6 +210,7 @@
      line up in a mono. IBM Plex Mono is what aperture already uses for meta. */
   --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --font-display: 'Archivo', system-ui, sans-serif;
+  --font-body:    'Sora', system-ui, sans-serif;
 }
 :root[data-preset="aperture"][data-theme="light"] {
   --brand-ink-rgb: 30, 63, 219;
@@ -201,6 +221,7 @@
   --brand-deep: #4A1F18; --brand-rgb: 196, 96, 79;
   --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'Hanken Grotesk', system-ui, sans-serif;
 }
 :root[data-preset="passe-partout"][data-theme="light"] {
   --brand-ink-rgb: 150, 58, 48;
@@ -211,6 +232,7 @@
   --brand-deep: #4A2015; --brand-rgb: 216, 103, 74;
   --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'Hanken Grotesk', system-ui, sans-serif;
 }
 :root[data-preset="selenium"][data-theme="light"] {
   --brand-ink-rgb: 184, 72, 44;
@@ -221,6 +243,7 @@
   --brand-deep: #16344A; --brand-rgb: 92, 159, 206;
   --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --font-display: 'Fraunces', Georgia, serif;
+  --font-body:    'Hanken Grotesk', system-ui, sans-serif;
 }
 :root[data-preset="cyanotype"][data-theme="light"] {
   --brand-ink-rgb: 35, 100, 142;
@@ -4071,14 +4094,13 @@ body.fn-bar-hidden:has(#view-fn.active) .tabbar {
   .asset-lib-sort:active, .uqp-btn:active, .uqp-retry:active, .ledger-ack:active,
   .modal-close:active, .archive-card:active, .buffer-frame:active,
   .bench-card:active, .list-toggle:active, .fb-thumb:active,
-  .slot-act:active, .cards-chip:active {
+  .cards-chip:active {
     transform: scale(0.97);
     opacity: 0.85;
   }
   /* Row icon controls get a workable touch size (rows are roomy enough). */
   .icon-btn { width: 34px; height: 34px; font-size: 0.85rem; }
-  /* Same bargain for the Cards view's in-tile actions: 34px in a roomy row. */
-  .slot-act, .cards-chip { min-height: 34px; }
+  /* Cards view chips already use var(--tap) */
 }
 @media (prefers-reduced-motion: reduce) {
   .btn:active, .buffer-frame:active, .asset-lib-item:active { transform: none; }
@@ -5893,26 +5915,60 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 }
 
 /* ============================================
-   CARDS (view-cards)
+   CARDS (view-cards) — the homepage grid, previewed and COMPOSED
    --------------------------------------------
-   The homepage grid, twice: LIVE (what is on the site now) beside STAGED (what
-   the next publish would make it), with a per-slot diff marker between them.
+   A slot ribbon over two modes: ONE CARD focuses a single slot beside its
+   inspector rail; THE GRID lays all four out. A source toggle swaps which grid
+   is on screen. Focus a card you composed and it goes editable in place; focus
+   any other and you can take it over.
 
-   SCHEMATIC, ON PURPOSE. These are not the homepage's cards and must not
-   pretend to be. The console does not load css/main.css — its tokens are
-   `:root`/preset-scoped and would collide with these — and cloning the card
-   markup here would create a second stylesheet to keep in sync with the public
-   one, which is exactly how a preview starts lying. So a slot is a console
-   row: number, kicker, thumbnail, title, marker. Faithful about WHICH card is
-   in WHICH slot and why; honest that pixel truth is one click away on the
-   homepage. (A shadow-DOM render of the real card markup with a :root → :host
-   token rewrite is the recorded v2 upgrade path — deliberately not attempted.)
+   ONE CARD RENDERER, USED EVERYWHERE (`.card-face`). It draws the real public
+   classes — .wk-card, .wk-img, .wk-tag, .wk-kicker, .wk-t-title, .wk-snip,
+   .wk-meta — and the rules below restate them in console tokens. Exactly the
+   technique `.pulse-card-slot` proved, for exactly the same reason: the console
+   cannot load css/main.css (its tokens are :root-scoped and would collide), so a
+   faithful card means deliberate, scoped duplication.
 
-   Every ground here is a token. Nothing enumerates a colour, so the block
-   follows the instance's preset and both themes for free.
+   ⚠️ If the public card's proportions change in css/main.css, change them here
+   too. That is the price of the preview telling the truth.
+
+   The schematic row tile this replaced was the right call for a READ-ONLY
+   preview and the wrong one the moment this became an editing surface: you
+   cannot judge a card you cannot see, and having to publish to find out what it
+   looks like is the loop this view exists to close.
+
+   ⚠️ USE THE HOUSE BUTTON VOCABULARY — `.btn` + `.btn-primary` / `.btn-stage` /
+   `.btn-danger` / `.btn-ghost`. An earlier cut invented flat local chips for
+   every control and produced a rail of identical grey rectangles with no focal
+   point, which is the generic-admin-panel look this console exists to be the
+   opposite of.
+
+   Every ground here is a token, so the block follows the instance's preset and
+   both themes for free. The one named exception is --on-media (text sitting on
+   a photograph, legible against the scrim rather than against the page).
    ============================================ */
 
-#cards-body { padding-bottom: 8px; }
+/* ---- the bounded shell ----
+   .main is `height: 100%; overflow-y: auto`, so a view that is itself 100% tall
+   with its own overflow hidden fills the pane and cannot scroll it. */
+#view-cards.view--bounded.active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px 20px var(--bounded-pad-b, 16px);
+}
+#view-cards.view--bounded.active #cards-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+#cards-body { padding-bottom: 0; }
 
 .cards-loading,
 .cards-note {
@@ -5922,53 +5978,108 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   color: var(--ink-3);
 }
 .cards-note {
+  flex: 0 0 auto;
   letter-spacing: 0.6px;
-  line-height: 1.6;
-  margin-bottom: 16px;
-  padding: 10px 12px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  color: var(--ink-2);
   border-left: 2px solid var(--accent-line);
   background: var(--surface-1);
 }
 
-/* Two equal columns on a desktop; stacked on anything narrow, because two
-   half-width columns of tiles on a phone are two unreadable columns. */
-.cards-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
-}
-@media (max-width: 900px) {
-  .cards-columns { grid-template-columns: minmax(0, 1fr); }
-}
-
-.cards-col {
-  min-width: 0;
-  border: 1px solid var(--line-2);
-  background: var(--surface-1);
-}
-.cards-col-head {
+/* ---- the head ---- */
+.cards-head {
+  flex: 0 0 auto;
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;           /* never a row that runs off the right edge */
+  gap: 10px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
   border-bottom: 1px solid var(--line-2);
 }
-.cards-col-title {
-  font-family: var(--font-display);
-  font-size: var(--t-label);
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: var(--ink-1);
+.cards-head-left,
+.cards-head-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
-.cards-col-note {
+/* The one thing this surface exists for gets the one filled button. */
+.cards-compose { white-space: nowrap; }
+.cards-compose[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* A segmented control. Every option stays pressable, including the active one:
+   pressing the option already on is how a picker becomes its own undo. */
+.cards-seg {
+  display: inline-flex;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  overflow: hidden;
+}
+.cards-seg-btn {
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  letter-spacing: 1px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  padding: 7px 12px;
+  min-height: var(--tap);
   color: var(--ink-3);
+  background: var(--surface-1);
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 140ms ease, background 140ms ease;
 }
+.cards-seg-btn + .cards-seg-btn { border-left: 1px solid var(--line-2); }
+.cards-seg-btn:hover { color: var(--ink-1); background: var(--surface-2); }
+.cards-seg-btn.is-on {
+  color: var(--accent-text);
+  background: var(--accent-wash);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+/* LIVE means "the published site" — the same green as the slot's LIVE badge, so
+   the signal is one colour wherever it shows. Only when active; idle it is the
+   same quiet grey as STAGED. */
+.cards-seg-btn--live.is-on {
+  color: var(--ok);
+  background: rgba(var(--ok-rgb), 0.10);
+  box-shadow: inset 0 -2px 0 var(--ok);
+}
+/* The mode toggle (EDIT CARD / THE GRID) acts on whichever source is chosen, so
+   it wears that source's colour: green while you are looking at LIVE, the accent
+   red while STAGED. One glance says which grid the whole header is about. */
+.cards-seg--live-ctx .cards-seg-btn.is-on {
+  color: var(--ok);
+  background: rgba(var(--ok-rgb), 0.10);
+  box-shadow: inset 0 -2px 0 var(--ok);
+}
+
+/* The diff signal, surviving the source toggle. Quiet when nothing is waiting —
+   a badge that always shouts stops being read. */
+.cards-pending {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  padding: 6px 10px;
+  border-radius: var(--r-1);
+  color: var(--accent-text);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-wash);
+  white-space: nowrap;
+}
+.cards-pending.is-quiet {
+  font-weight: 400;
+  color: var(--ink-3);
+  border-color: var(--line-2);
+  background: none;
+}
+
 .cards-warn {
-  margin: 10px 12px 0;
+  margin: 0 0 12px;
   padding: 8px 10px;
   font-family: var(--font-mono);
   font-size: var(--t-micro);
@@ -5978,118 +6089,1004 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   background: var(--surface-2);
   border-left: 2px solid var(--warn);
 }
-.cards-col-body {
+
+/* ---- the slot ribbon ----
+   ONE scroll container with every child unshrinkable. A scroller nested between
+   rigid siblings starves the scrolling child to a sliver on a narrow screen and
+   then clips it, with the scrollbar hidden so nothing says what fell off. */
+.cards-ribbon {
+  flex: 0 0 auto;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
-  padding: 12px;
+  margin-top: -6px;
+  margin-bottom: 6px;
+  padding: 6px 4px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cards-ribbon::-webkit-scrollbar { display: none; }
+.cards-ribbon-label,
+.cards-pill { flex: 0 0 auto; }
+.cards-ribbon-label {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.15em;
+  color: var(--ink-x);
+  margin-right: 2px;
+}
+.cards-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 13px;
+  min-height: 34px;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  background: var(--surface-1);
+  border: 1px solid var(--line-1);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 140ms ease, border-color 140ms ease, color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+.cards-pill:hover {
+  color: var(--ink-1);
+  border-color: var(--line-3);
+  background: var(--surface-2);
+  transform: translateY(-1px);
+}
+/* The selected pill has to be unmistakable at a glance — this is the one control
+   that answers "which card am I looking at". A raised ground lifts it off the
+   row, a refined accent ring draws the outline, and the glow gives it
+   presence without shouting. */
+.cards-pill.is-active {
+  color: var(--ink-1);
+  background: var(--surface-2);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-wash);
+}
+.cards-pill-n { color: var(--ink-x); font-weight: 700; }
+.cards-pill.is-active .cards-pill-n { color: var(--accent-text); }
+.cards-pill.is-active .cards-pill-name { color: var(--ink-1); }
+/* Keyboard focus is its own state and must never borrow the selected one —
+   tabbing through the ribbon would otherwise look like changing the selection. */
+.cards-pill:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
+}
+/* A kicker can be long ("AUDIO · 6 TRACKS"); cap it so one full pill cannot
+   push the rest of the ribbon out of reach. */
+.cards-pill-name {
+  max-width: 20ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* ---- THE BADGE VOCABULARY ----
+   One badge, used on a ribbon pill and on a grid cell alike, because the same
+   fact should not read differently depending on where you meet it. Three
+   near-identical classes lived here before and had already drifted in colour
+   and size.
+
+   Tone carries the meaning, and only tone does:
+     live    — already on the site; no publish is involved (green)
+     staged  — this slot moves on the next publish (the instance's accent)
+     editing — this slot is currently open in the composer (lit pulse)
+     going   — this slot loses its card (amber, the warn colour)
+     quiet   — a permanent structural fact, e.g. tablet-only (no colour at all)
+
+   Each is a tinted wash behind its own text colour with a matching hairline, so
+   it reads as a lit chip rather than as outlined text — legible at a glance on
+   a dark ground and, because every value is a token or an rgba() over one, on a
+   light one too. */
+.tone-badge {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.tone-badge[data-tone="live"] {
+  color: var(--ok);
+  background: rgba(var(--ok-rgb), 0.10);
+  border-color: rgba(var(--ok-rgb), 0.28);
+}
+.tone-badge[data-tone="staged"] {
+  color: var(--accent-text);
+  background: var(--accent-wash);
+  border-color: rgba(var(--brand-rgb), 0.25);
+}
+.tone-badge[data-tone="editing"] {
+  color: var(--accent-text);
+  background: var(--accent-wash);
+  border-color: var(--accent);
+  box-shadow: 0 0 8px var(--accent-wash);
+  animation: cardsDotPulse 1.4s ease-in-out infinite alternate;
+}
+.tone-badge[data-tone="going"] {
+  color: var(--warn);
+  background: rgba(var(--warn-rgb), 0.10);
+  border-color: rgba(var(--warn-rgb), 0.30);
+}
+.tone-badge[data-tone="quiet"] {
+  color: var(--ink-3);
+  background: var(--surface-2);
+  border-color: var(--line-1);
 }
 
-/* ---- one slot ----
-   A row, not a card: the tile is a schematic of a card, so it reads as console
-   furniture. The thumbnail keeps the homepage tile's 4:5 shape at small size so
-   a crop tuned for that card previews in the proportion it will actually take. */
-.card-slot {
+/* Micro animations for tactile feel */
+@keyframes cardsDotPulse {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+@keyframes cardsPulseIn {
+  from { transform: scale(0.985); opacity: 0.88; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ---- studio: one slot, and everything that acts on it ---- */
+.cards-studio {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   display: grid;
-  /* number · thumbnail · meta · status. The status column is `auto` and empty
-     tiles collapse it to nothing, so a row with no marker keeps no gutter. */
-  grid-template-columns: 22px 44px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  align-items: stretch;
+}
+/* The stage is a lit well, not a grey box — the card should look placed on
+   something, the way it does on the site. */
+.studio-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 14px;
+  min-width: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  background:
+    radial-gradient(ellipse at 50% 38%, var(--surface-2) 0%, var(--surface-0) 78%);
+  box-shadow: inset 0 0 32px rgba(0, 0, 0, 0.4);
+}
+.studio-stage .card-face .wk-card {
+  max-height: 100%;
+  min-height: 420px;
+}
+
+/* ---- the composer well FITS, it does not scroll ----
+   Editing is one card with no row to align, so here the well sizes the card to
+   the height it has and the picture may flex to fill it. (In the GRID the picture
+   must HOLD its 4:5 for the cells to line up — that rule lives above and this
+   never reaches it.) This is what keeps "edit card" inside the viewport instead
+   of scrolling the stage. */
+.cards-studio.is-composing .studio-stage { overflow: hidden; }
+.cards-studio.is-composing .studio-stage .card-face.is-editing {
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: center;
+}
+.cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card {
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+.cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card[data-shape="picture"] .wk-img {
+  flex: 1 1 auto;
+  aspect-ratio: auto;
+  min-height: 140px;
+}
+
+/* ---- the composer status & action bar ----
+   Full stage width (the well has room to spare on either side of the 300px card)
+   and STRICTLY one line: the label shrinks with an ellipsis before it ever wraps,
+   so "EDITING SLOT 02" never drops the "02" to a second row. */
+.cards-composer-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 6px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.cards-composer-info {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+}
+.cards-composer-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  animation: cardsDotPulse 1.2s ease-in-out infinite alternate;
+}
+.cards-composer-title {
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--ink-1);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cards-composer-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+.cards-cancel-btn,
+.cards-done-btn {
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  padding: 6px 12px;
+  min-height: 32px;
+}
+@media (pointer: coarse) {
+  .cards-cancel-btn,
+  .cards-done-btn {
+    min-height: var(--tap);
+    padding: 8px 14px;
+  }
+}
+
+/* The stage holds one faithful card — the same renderer the grid uses, so a card
+   you are looking at and a card you are editing cannot drift apart. The
+   schematic row tile that used to live here is gone: it was the right call for a
+   read-only preview and the wrong one the moment this became an editing surface.
+   You cannot judge a card you cannot see. */
+
+/* ============================================
+   THE COMPOSER CARD — the public card, restated in console tokens
+   --------------------------------------------
+   Same bargain as .pulse-card-slot: the console does not load css/main.css, so
+   the real .wk-* classes are restated here, scoped, so the card the owner types
+   into is the card the homepage draws. Change these together with css/main.css.
+   ============================================ */
+.card-face {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+/* ⚠️ The CARD is not 4:5 — its PICTURE is, and the body sits beneath it. That is
+   how the real hero card is built (css/main.css: .wk-text[data-layout="hero"]
+   resets the tile's padding and lets .wk-img supply the crop), and getting it
+   wrong is what left a pool of dead space under the text: forcing 4:5 on the
+   whole card and splitting it means the body gets a fixed share whether it has
+   words to fill it or not. */
+.card-face .wk-card {
+  width: 100%;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}
+.card-face.is-editing .wk-card {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 20px 48px rgba(0, 0, 0, 0.6);
+  animation: cardsPulseIn 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* The picture band. `data-shape` decides whether it shows at all — the fields
+   never move in the DOM, so adding or losing a picture cannot cost a caret. */
+/* ⚠️ The picture HOLDS its 4:5 — it does not flex. Letting it shrink to make
+   equal-height cells work is what produced a row of 172px cards with the picture
+   crushed to its minimum: even, and uniformly wrong. Equal heights come from the
+   grid row instead, and the BODY absorbs the slack. */
+.card-face .wk-img {
+  position: relative;
+  flex: 0 0 auto;
+  aspect-ratio: 4 / 5;
+  background-color: var(--media-well);
+  background-size: cover;
+  background-position: center;
+}
+.card-face .wk-card[data-shape="words"] .wk-img { display: none; }
+.card-face .wk-tag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.34);
+  padding: 3px 7px;
+  border-radius: 5px;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+.card-face .wk-card.is-empty {
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  border-style: dashed;
+  border-color: var(--line-3);
+  background: none;
+  box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 1px;
+  color: var(--ink-3);
+}
+.card-face .wk-title {
+  font-family: var(--font-display);
+  font-weight: 640;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  font-size: 0.8rem;
+  line-height: 1.15;
+  color: var(--ink-1);
+}
+/* Composed caption bounded to two lines, mirroring the live grid (main.css). */
+.card-face .wk-composed .wk-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+/* WYSIWYG: once a composed card has a picture, the EDITABLE title renders as the
+   caption it will publish as — the small uppercase .wk-title scale, not the big
+   words-tile headline. In the words shape it stays the headline (rules below). */
+.card-face .wk-card[data-shape="picture"] .wk-t-title {
+  font-family: var(--font-display);
+  font-weight: 640;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  font-size: 0.8rem;
+  line-height: 1.15;
+}
+/* WYSIWYG, second half: on a picture card the tease publishes as the card's
+   .wk-meta caption (recent-index.js composedCard) — the small mono line, not the
+   body-copy tease of the words tile. The composer showed it at 0.82rem in the
+   body face, so a caption looked twice the size it publishes at. Same treatment
+   the headline already gets in the rule above, for the same reason.
+   ⚠️ It deliberately still WRAPS here while the live line ellipsises at one:
+   you cannot type into a clipped field. The size is the truth this can tell. */
+.card-face .wk-card[data-shape="picture"] .wk-snip {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+/* The card's own meta line — location, camera, the year. */
+.card-face .wk-meta {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+}
+.card-face .wk-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px;
+}
+/* The meta line sits on the floor of the card, so four cards of different
+   content still line up along the bottom instead of each ending wherever their
+   words happened to stop. */
+.card-face .wk-meta { margin-top: auto; }
+
+/* ⚠️ A WORDS CARD FILLS ITS PLATE. In a grid of equal-height rows a card with no
+   picture is stretched to match one that has one — and pinning its text to the
+   top leaves a void underneath, which is the "wasted space at the bottom" this
+   layout was sent back for twice. Centring is not a cosmetic choice: it is what
+   the real text card does, and the tier ladder exists precisely so a short line
+   grows to fill the tile rather than rattling around in it. */
+.card-face .wk-card[data-shape="words"] .wk-body { justify-content: center; }
+
+/* ---- the type ----
+   Mirrored from css/main.css's card rules, scaled for a ~300px preview. The
+   numbers that matter are the RELATIONSHIPS, and they are the difference
+   between a card and two paragraphs sharing a box:
+
+     · the headline is display, heavy, with NEGATIVE tracking and tight leading
+     · the reading copy is the body face, lighter, with generous leading
+     · the gap between them is small — they are one unit — and the space ABOVE
+       the headline is larger, which is what makes the pair read as a block
+     · the tease runs the SAME tier ladder the homepage runs, so a short line
+       becomes the pull-quote and the headline stops being the biggest thing
+
+   ⚠️ No drop cap here, and that is a real limit rather than an oversight: the
+   published card opens `feature` and `standard` teases with one
+   (.wk-dropcap, a <span> injected at render), and a <textarea> cannot carry a
+   child element. The rail says so in words instead — see the WORDS block. */
+
+/* The kicker belongs to the words shape; the picture shape has its chip. */
+.card-face .wk-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 11px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.card-face .wk-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.card-face .wk-card[data-shape="picture"] .wk-kicker { display: none; }
+
+/* The two fields ARE the card's text nodes, not inputs sitting on top of it. */
+.card-face .wk-t-title,
+.card-face .wk-snip {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+.card-face .wk-t-title {
+  font-family: var(--font-display);
+  font-weight: 680;
+  font-size: 1.02rem;
+  line-height: 1.16;
+  letter-spacing: -0.012em;
+  color: var(--ink-1);
+  margin-bottom: 8px;
+  min-height: 1.2em;    /* an empty field is still a target */
+}
+.card-face .wk-snip {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  letter-spacing: 0;
+  color: var(--ink-2);
+  min-height: 1.4em;
+}
+.card-face .wk-t-title::placeholder,
+.card-face .wk-snip::placeholder { color: var(--ink-x); }
+/* The field being edited says so with a hairline, not a box — a form outline
+   inside the card would break the illusion the whole surface depends on. */
+.card-face .wk-t-title:focus,
+.card-face .wk-snip:focus { box-shadow: inset 0 -1px 0 var(--accent); }
+
+/* ---- the words shape: the tease becomes the design ----
+   With no picture the type has the whole plate, so the headline steps up and
+   the tease runs the ladder. At `statement` the tease is the biggest thing on
+   the card and switches to the display face — a one-line tease is a pull-quote,
+   which is the single most editorial move the real card makes. */
+.card-face .wk-card[data-shape="words"] .wk-t-title {
+  font-size: 1.16rem;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  margin-bottom: 10px;
+}
+.card-face .wk-card[data-shape="words"] .wk-snip {
+  font-size: 1.02rem;
+  line-height: 1.42;
+  letter-spacing: -0.005em;
+  color: var(--ink-1);
+}
+.card-face .wk-card[data-shape="words"][data-tier="feature"] .wk-snip {
+  font-size: 1.28rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.card-face .wk-card[data-shape="words"][data-tier="statement"] .wk-snip {
+  font-family: var(--font-display);
+  font-weight: 560;
+  font-size: 1.7rem;
+  line-height: 1.14;
+  letter-spacing: -0.02em;
+  color: var(--ink-1);
+}
+/* A statement tease outweighs its own headline, so the headline steps back to
+   a label rather than competing with it. */
+.card-face .wk-card[data-shape="words"][data-tier="statement"] .wk-t-title {
+  font-size: 0.92rem;
+  color: var(--ink-2);
+  /* More air under a headline that has become a label: the quote below it is
+     now the largest thing on the card and needs room to read as the subject
+     rather than as the next line of the same paragraph. */
+  margin-bottom: 16px;
+}
+
+/* ---- pulse and composed palette grounds in .card-face ---- */
+.card-face .wk-pulse {
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  --pulse-rgb: var(--brand-rgb);
+  --pulse-veil: rgba(0, 0, 0, 0.55);
+  --led-bezel: rgba(0, 0, 0, 0.9);
+  --led-spec: rgba(255, 255, 255, 0.4);
+  background:
+    radial-gradient(circle at 84% 8%, rgba(var(--pulse-rgb), 0.20) 0%, transparent 58%),
+    linear-gradient(168deg, rgba(var(--pulse-rgb), 0.11) 0%, rgba(var(--pulse-rgb), 0.03) 58%, rgba(var(--pulse-rgb), 0) 100%),
+    linear-gradient(var(--pulse-veil), var(--pulse-veil)),
+    var(--surface-2);
+  border-color: rgba(var(--pulse-rgb), 0.28);
+}
+:root[data-theme="light"] .card-face .wk-pulse {
+  --pulse-veil: rgba(255, 255, 255, 0.45);
+  --led-bezel: rgba(0, 0, 0, 0.28);
+  --led-spec: rgba(255, 255, 255, 0.75);
+  border-color: rgba(var(--pulse-rgb), 0.34);
+}
+.card-face .wk-card[data-state]:not([data-state="default"]) {
+  --pulse-veil: rgba(0, 0, 0, 0.55);
+  background:
+    radial-gradient(circle at 84% 8%, rgba(var(--pulse-rgb, var(--brand-rgb)), 0.20) 0%, transparent 58%),
+    linear-gradient(168deg, rgba(var(--pulse-rgb, var(--brand-rgb)), 0.11) 0%, rgba(var(--pulse-rgb, var(--brand-rgb)), 0.03) 58%, rgba(var(--pulse-rgb, var(--brand-rgb)), 0) 100%),
+    linear-gradient(var(--pulse-veil), var(--pulse-veil)),
+    var(--surface-2);
+  border-color: rgba(var(--pulse-rgb, var(--brand-rgb)), 0.28);
+}
+:root[data-theme="light"] .card-face .wk-card[data-state]:not([data-state="default"]) {
+  --pulse-veil: rgba(255, 255, 255, 0.45);
+  border-color: rgba(var(--pulse-rgb, var(--brand-rgb)), 0.34);
+}
+.card-face .wk-card[data-state="ember"]  { --pulse-rgb: 214, 72, 60; }
+.card-face .wk-card[data-state="dawn"]   { --pulse-rgb: 198, 138, 46; }
+.card-face .wk-card[data-state="flow"]   { --pulse-rgb: 62, 158, 104; }
+.card-face .wk-card[data-state="velvet"] { --pulse-rgb: 138, 104, 214; }
+.card-face .wk-card[data-state="tide"]   { --pulse-rgb: 58, 134, 176; }
+.card-face .wk-card[data-state="signal"] { --pulse-rgb: var(--brand-rgb); }
+
+.card-face .wk-card[data-shape="picture"][data-state]:not([data-state="default"]) .wk-body {
+  background: linear-gradient(180deg, rgba(var(--pulse-rgb, var(--brand-rgb)), 0.12) 0%, rgba(var(--pulse-rgb, var(--brand-rgb)), 0.04) 100%);
+}
+.card-face .wk-card[data-shape="picture"][data-state]:not([data-state="default"]) {
+  border-color: rgba(var(--pulse-rgb, var(--brand-rgb)), 0.35);
+}
+.card-face .wk-pulse > *,
+.card-face .wk-card[data-state] > * { position: relative; z-index: 1; }
+
+.card-face .wk-p-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgb(var(--pulse-rgb));
+  flex: 0 0 auto;
+}
+.card-face .wk-p-label { display: inline-flex; align-items: center; gap: 6px; overflow: hidden; }
+.card-face .wk-p-led {
+  width: 6px; height: 6px; flex: 0 0 auto;
+  border-radius: 1px;
+  background: rgb(var(--pulse-rgb));
+  border: 1px solid var(--line-3);
+  box-shadow: 0 0 8px rgba(var(--pulse-rgb), 0.55);
+}
+.card-face .wk-p-time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.card-face .wk-p-center {
+  display: flex; flex-direction: column; justify-content: center;
+  flex: 1 1 auto; gap: 10px; min-height: 0;
+}
+.card-face .wk-p-glyph {
+  line-height: 1; font-size: 2.2rem;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+}
+.card-face .wk-p-text {
+  font-family: var(--font-body);
+  font-size: 1.15rem;
+  line-height: 1.28;
+  letter-spacing: -0.005em;
+  color: var(--ink-1);
+}
+.card-face .wk-pulse[data-tier="statement"] .wk-p-text {
+  font-family: var(--font-display);
+  font-weight: 560;
+  font-size: 1.5rem;
+  line-height: 1.14;
+  letter-spacing: -0.02em;
+  color: var(--ink-1);
+}
+.card-face .wk-pulse[data-tier="statement"] .wk-p-glyph { font-size: 2.8rem; }
+.card-face .wk-pulse[data-tier="feature"] .wk-p-text { font-size: 1.25rem; line-height: 1.24; }
+.card-face .wk-pulse[data-tier="feature"] .wk-p-glyph { font-size: 2rem; }
+.card-face .wk-pulse[data-tier="standard"] .wk-p-glyph { font-size: 1.6rem; }
+.card-face .wk-p-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding-top: 8px; border-top: 1px solid rgba(var(--pulse-rgb), 0.15);
+  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-3); flex: 0 0 auto;
+}
+
+/* A visible label would compete with the card's own kicker; the field's purpose
+   is obvious on screen and the name is here for anyone not looking at it. */
+.composer-sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.composer-input {
+  width: 100%;
+  padding: 10px 12px;
+  min-height: var(--tap);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  color: var(--ink-1);
+  background: var(--surface-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.composer-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-wash), 0 0 10px var(--accent-wash);
+}
+.composer-input::placeholder { color: var(--ink-x); }
+
+/* ---- the inspector rail ---- */
+.studio-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.control-block {
+  padding: 14px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-2);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%), var(--surface-1);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.control-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin-bottom: 12px;
+}
+.control-block-aside {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line-1);
+  color: var(--ink-3);
+}
+.control-block-note {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.3px;
+  line-height: 1.65;
+  color: var(--ink-3);
+  margin: 12px 0 0;
+}
+
+/* Palette Swatches */
+.cards-palette-row {
+  display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  min-height: var(--tap);
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+.cards-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: rgb(var(--chip-rgb, 120, 120, 120));
+  cursor: pointer;
+  position: relative;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+.cards-swatch::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+}
+.cards-swatch:hover { transform: scale(1.15); }
+.cards-swatch:active { transform: scale(0.95); }
+.cards-swatch.is-active {
+  border-color: var(--ink-1);
+  box-shadow: 0 0 10px rgba(var(--chip-rgb, 255, 255, 255), 0.7);
+}
+.cards-swatch--default {
+  background: var(--surface-3);
+  border: 1px solid var(--line-3);
+}
+.cards-swatch--default.is-active {
+  border-color: var(--ink-1);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+}
+.cards-swatch--signal { --chip-rgb: var(--brand-rgb); }
+.cards-swatch--ember  { --chip-rgb: 214, 72, 60; }
+.cards-swatch--dawn   { --chip-rgb: 198, 138, 46; }
+.cards-swatch--flow   { --chip-rgb: 62, 158, 104; }
+.cards-swatch--velvet { --chip-rgb: 138, 104, 214; }
+.cards-swatch--tide   { --chip-rgb: 58, 134, 176; }
+
+/* The inset readout — a panel of facts should read as an instrument, not as
+   body copy. */
+.readout {
+  margin: 0;
+  padding: 10px 12px;
   background: var(--surface-2);
   border: 1px solid var(--line-1);
   border-radius: var(--r-1);
 }
-.card-slot.is-empty { opacity: 0.55; }
-.card-slot.is-empty .slot-meta { grid-column: 2 / 4; }
-
-.slot-n {
+.readout-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+}
+.readout-row + .readout-row { border-top: 1px solid var(--line-1); }
+.readout dt,
+.readout dd {
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  color: var(--ink-x);
-  text-align: right;
+  letter-spacing: 0.06em;
+  margin: 0;
 }
-.slot-thumb {
-  width: 44px;
-  height: 55px;            /* 4:5, the recent-work card's crop */
-  overflow: hidden;
-  background: var(--media-well);
-  border-radius: var(--r-1);
-}
-.slot-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-/* A kind with no picture (pulse, audio, a plain field note) keeps the column so
-   the rows stay aligned — a collapsed cell would make every text slot indent
-   differently from its neighbours. */
-.slot-thumb.is-blank { background: var(--surface-3); }
-
-.slot-meta { min-width: 0; }
-.slot-kick {
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  letter-spacing: 1.4px;
-  color: var(--accent-text);
-}
-.slot-title {
-  font-family: var(--font-display);
-  font-size: var(--t-label);
+.readout dt { color: var(--ink-3); }
+.readout dd {
   color: var(--ink-1);
+  font-weight: 600;
+  text-align: right;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.slot-sub,
-.slot-live {
+.readout dd.is-hot { color: var(--accent-text); }
+.readout dd.is-ok { color: var(--ok); }
+.readout dd.is-calm { color: var(--ink-3); font-weight: 400; }
+
+/* ---- the layout picker ----
+   The standard option is always present and always pressable, because pressing
+   it IS the undo for every other option. That is why this control needs no chip
+   (docs/cards-console-vision.md §2.4 — reversibility layer 1, structural). */
+.layout-chips { display: flex; flex-direction: column; gap: 7px; }
+.layout-chip {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 38px;
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  letter-spacing: 0.8px;
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  letter-spacing: 0.08em;
+  text-align: left;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-1);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease, transform 120ms ease;
 }
-/* The pulse is already on the site and no publish will change it — the tile
-   says so rather than leaving it to be inferred from an UNCHANGED marker. */
-.slot-live { color: var(--ok); }
+.layout-chip:hover {
+  color: var(--ink-1);
+  border-color: var(--line-3);
+  background: var(--surface-3);
+}
+.layout-chip:active:not(.is-blocked) {
+  transform: scale(0.98);
+}
+.layout-chip.is-on {
+  color: var(--ink-1);
+  font-weight: 700;
+  background: var(--surface-2);
+  border-color: var(--accent);
+  box-shadow: 0 0 10px var(--accent-wash), inset 2px 0 0 var(--accent);
+}
+/* Shown, not hidden: the option exists, and saying why it is unavailable beats
+   leaving the owner to wonder where it went. */
+.layout-chip.is-blocked { opacity: 0.45; cursor: not-allowed; }
+.layout-chip-label { color: inherit; }
+.layout-chip-name { color: var(--ink-x); letter-spacing: 0.04em; }
+.layout-chip.is-on .layout-chip-name { color: var(--accent-text); }
 
-/* ---- markers ----
-   Only the two that mean "this is about to change" carry the accent; UNCHANGED
-   is deliberately quiet, because a column where everything shouts says nothing. */
-.slot-status {
+/* The dock: tactile buttons with refined geometry. */
+.action-dock { display: flex; flex-direction: column; gap: 8px; }
+.action-dock .btn {
+  justify-content: center;
+  border-radius: var(--r-1);
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+.action-dock .btn:active:not([disabled]) {
+  transform: scale(0.98);
+}
+.action-dock .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+/* ---- THE GRID: all four cards at once, as they will publish ----
+   All four the SAME height on desktop, but that height is the tallest card's
+   NATURAL height, not the whole panorama. The original forced `grid-auto-rows:
+   1fr` in a flex:1 container, which stretched every cell to the full view height
+   and — with the meta pinned to the floor — opened a canyon between each title and
+   subtitle. The recipe here instead: `auto` rows so the track is the tallest
+   card's content (a picture card, image 4:5 + compact footer); `align-content:
+   start` so that track is NOT then stretched to fill the container (which would
+   bring the canyon back); and `align-items: stretch` so every cell rises to that
+   track. The tallest card sits at natural height (footer compact), the pulse and
+   any shorter card stretch up to match and centre their content. */
+.cards-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: auto;
+  gap: 12px;
+  align-items: stretch;
+  align-content: start;
+}
+/* Four across for as long as a card stays a sensible size. Dropping to two
+   early makes each card enormous — a 4:5 picture in a 568px column is 710px
+   tall — which is its own kind of wrong even though the heights match. */
+@media (max-width: 900px) { .cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .cards-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.grid-cell {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  background: var(--surface-1);
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 180ms ease,
+              box-shadow 180ms ease;
 }
-.slot-mark,
-.slot-badge {
+.grid-cell:hover {
+  border-color: var(--line-3);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+.grid-cell.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-wash), 0 0 16px var(--accent-wash);
+}
+.grid-cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+.grid-cell-n {
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  letter-spacing: 1.2px;
-  padding: 1px 5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-x);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.grid-cell-n:hover { color: var(--accent-text); }
+.grid-cell.is-active .grid-cell-n { color: var(--accent-text); }
+.grid-cell-flags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+/* The card fills whatever the row gives it, so four cells line up. */
+/* Fill the (equal-height) cell so every card rises to the row. `align-items:
+   stretch` (the flex default, pinned here) sizes the card to the card-face's
+   height — NOT `height: 100%`, which fought the stretch and let a shorter card
+   (the pulse, whose centre flexes) overflow instead of filling. Verified: with
+   this, all four cards render one height and the picture footers stay compact. */
+.grid-cell .card-face { flex: 1 1 auto; min-height: 0; align-items: stretch; }
+.grid-cell .card-face .wk-card { max-width: none; height: auto; }
+.grid-edit { width: 100%; justify-content: center; }
+.grid-cell.is-editing {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-wash), 0 0 20px rgba(var(--brand-rgb), 0.25);
+}
+.cards-grid-editing-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  /* A grid cell is narrow — the label + two buttons do not fit on one row, so
+     the row is allowed to WRAP (actions drop below the label) rather than push
+     the DONE button past the cell edge, which is what it did before. */
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border: 1px solid rgba(var(--brand-rgb), 0.3);
   border-radius: var(--r-1);
-  border: 1px solid var(--line-3);
-  color: var(--ink-3);
-  background: var(--surface-1);
-  white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
 }
-.slot-mark[data-mark="NEW"],
-.slot-mark[data-mark="REPLACED"] {
+.cards-grid-editing-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;                 /* shrink first, before the buttons do */
+  flex: 1 1 auto;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 700;
+  letter-spacing: 0.12em;
   color: var(--accent-text);
-  border-color: var(--accent-line);
-  background: var(--accent-wash);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.slot-mark[data-mark="GONE"] {
-  color: var(--warn);
-  border-color: var(--warn);
-  background: transparent;
+.cards-grid-editing-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  gap: 6px;
 }
+
+/* The per-slot status flags on a grid cell use the shared .tone-badge above —
+   see THE BADGE VOCABULARY. Nothing kind-specific lives here any more. */
 
 /* ---- the honest degraded state ----
    recent-index.js is a separate <script> tag; a blocked request or a stale
@@ -6119,43 +7116,16 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   color: var(--ink-1);
 }
 
-/* ---- actions on a staged tile ----
-   Only the STAGED column carries these: the LIVE column is a record of what is
-   already published, so there is nothing there to act on. Compact chips by
-   default; PHASE 4c gives them a real touch size and a press acknowledgment on
-   a coarse pointer, the same bargain .icon-btn already makes in a list row. */
-.slot-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-.slot-act {
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  letter-spacing: 1px;
-  padding: 4px 8px;
-  color: var(--ink-2);
-  background: var(--surface-3);
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-1);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.slot-act:hover { color: var(--ink-1); border-color: var(--line-3); }
-/* "Open the surface this came from" is navigation, not a change to the site —
-   it should not read with the same weight as taking a card down. */
-.slot-act--quiet { color: var(--ink-3); background: none; }
-
-/* ---- the two undo affordances ----
+/* ---- the undo chips ----
    No stack, by design (docs/cards-console-vision.md §2.4): the chip is the live
-   memory of the last displacing star, the shelf is stateless and read straight
-   off the data, so it survives a reload where the chip does not. */
+   memory of the last displacing action, resolved against state as it is now.
+   They sit under the card they undo — never in the reuse shelf, where a live
+   control filed among past work would read as an entry in a history. */
 .cards-undo {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 12px 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 .cards-chip {
   display: inline-flex;
@@ -6163,45 +7133,251 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   gap: 6px;
   font-family: var(--font-mono);
   font-size: var(--t-micro);
+  font-weight: 700;
   letter-spacing: 1px;
-  padding: 4px 8px;
-  color: var(--ink-2);
-  background: var(--surface-2);
-  border: 1px solid var(--line-2);
+  padding: 8px 12px;
+  min-height: var(--tap);
+  color: var(--accent-text);
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-line);
   border-radius: var(--r-1);
   cursor: pointer;
   white-space: nowrap;
+  transition: border-color 140ms ease, background 140ms ease;
 }
-.cards-chip:hover { color: var(--ink-1); border-color: var(--line-3); }
-.cards-chip img {
-  width: 20px;
-  height: 25px;          /* 4:5, same crop the card takes */
-  object-fit: cover;
-  border-radius: 1px;
-  background: var(--media-well);
-}
-/* The one action in this view that reverses another — worth the accent. */
-.cards-chip--undo {
-  align-self: flex-start;
-  color: var(--accent-text);
-  border-color: var(--accent-line);
-  background: var(--accent-wash);
-}
+.cards-chip:hover { border-color: var(--accent); background: var(--surface-3); }
+.cards-chip--undo { align-self: flex-start; }
 
-.cards-shelf-head {
+/* ---- the reuse shelf ----
+   Things to use AGAIN, never states to restore (owner, 2026-09-07).
+
+   ⚠️ ONE scroll container, every child flex: 0 0 auto, INCLUDING the label. A
+   version that put the label and a filter group outside the scroller as
+   unshrinkable siblings and let the reel take `flex: 1` computed to about 44px
+   at 393px — scrollbar hidden, spill clipped, chips unreachable. */
+.cards-reuse {
+  flex: 0 0 auto;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-2);
+}
+.cards-reuse-track {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+}
+.cards-reuse-track::-webkit-scrollbar { display: none; }
+.cards-reuse-label,
+.reuse-chip { flex: 0 0 auto; }
+.cards-reuse-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   font-family: var(--font-mono);
   font-size: var(--t-micro);
-  letter-spacing: 1.4px;
-  color: var(--ink-3);
-  margin-bottom: 6px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-2);
+  padding-right: 6px;
 }
-.cards-shelf-head span {
-  letter-spacing: 0.6px;
+.cards-reuse-label span {
+  font-weight: 400;
+  letter-spacing: 0.04em;
   color: var(--ink-x);
-  margin-left: 6px;
 }
-.cards-shelf-body {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.reuse-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 12px 6px 6px;
+  min-height: var(--tap);
+  color: var(--ink-2);
+  background: var(--surface-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
+.reuse-chip:hover {
+  color: var(--ink-1);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.reuse-chip img {
+  width: 26px;
+  height: 33px;          /* 4:5, same crop the card takes */
+  object-fit: cover;
+  border-radius: 2px;
+  background: var(--media-well);
+}
+.reuse-chip-meta { display: flex; flex-direction: column; text-align: left; }
+.reuse-chip-title,
+.reuse-chip-sub {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.reuse-chip-title { font-weight: 700; }
+.reuse-chip-sub { font-weight: 400; letter-spacing: 0.04em; color: var(--ink-x); }
+
+/* ============================================
+   CARDS — TABLET AND PHONE
+   --------------------------------------------
+   The rail is the thing that has to move. On a tablet it drops under the stage
+   as a two-up grid of blocks; on a phone it becomes one column beneath the card.
+   Both keep the ribbon and the reuse strip horizontal, because those are already
+   scroll containers and stacking them would cost more height than they save.
+   ============================================ */
+/* ---- THE MOMENT THE RAIL DROPS UNDER THE STAGE, THE VIEW HAS TO SCROLL ----
+   ⚠️ These two things are ONE change and must stay in one media query.
+   Single-column means stage and rail are stacked rows inside a box that is still
+   `height: 100%; overflow: hidden` — so the rail sits in the hidden overflow with
+   no scroller anywhere above it, and on a tablet (the console's field device)
+   the picture picker, the crop button, the swatches and the layout chips are all
+   simply unreachable. The unbounding shipped for phones only; the rail starts
+   dropping at 1180. So the scroll rules live HERE, at the same breakpoint as the
+   stack that needs them, and the phone block below keeps only what is about
+   being narrow. */
+@media (max-width: 1180px) {
+  .cards-studio { grid-template-columns: minmax(0, 1fr); }
+  .studio-rail {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    align-items: start;
+  }
+
+  /* The view takes its natural height and the page moves under the tab bar (the
+     `.view` padding-bottom already reserves the tail). */
+  #view-cards.view--bounded.active {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+  #view-cards.view--bounded.active #cards-body {
+    flex: 1 0 auto;
+    height: auto;
+    overflow: visible;
+  }
+
+  /* Stage over rail, each at its own height — never clipped against a fixed box. */
+  .cards-studio,
+  .cards-studio.is-composing {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .studio-stage,
+  .cards-studio.is-composing .studio-stage {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  /* The card sizes to its own content and the stage grows to hold it — the
+     desktop "fit the well" sizing is off, because there is no fixed well any
+     more. ⚠️ NOT `max-width` here: the base rule's 300px cap is what keeps the
+     card a CARD. Letting it take the column turned a tablet's 834px into a
+     764 × 1024 slab. The phone widens it deliberately, one breakpoint down. */
+  .studio-stage .card-face .wk-card,
+  .cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+  /* Editing card's picture keeps its 4:5 when the keyboard is DOWN; the kb-open
+     block still shrinks it while typing (its `body.kb-open` selector wins).
+     Without this the flexed picture collapses to its 140px floor the moment the
+     card stops being height-bounded. */
+  body:not(.kb-open) .cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card[data-shape="picture"] .wk-img {
+    aspect-ratio: 4 / 5;
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  /* THE GRID scrolls with the page rather than inside its own box. */
+  .cards-grid {
+    height: auto;
+    overflow: visible;
+  }
+}
+/* ---- PHONE: what is left is about being NARROW ----
+   Head, ribbon, a full card, its whole control rail AND the reuse strip cannot
+   share one bounded viewport without crushing each other — the zero-scroll canvas
+   is a desktop luxury this surface is too rich for. The scrolling that makes that
+   survivable is in the block above (it starts one breakpoint earlier); these are
+   the one-column stacks and the tighter padding. */
+@media (max-width: 640px) {
+  .cards-studio,
+  .cards-studio.is-composing {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .studio-stage,
+  .cards-studio.is-composing .studio-stage {
+    padding: 16px 12px;
+  }
+
+  /* Only here does the card take the column: a phone has no width to spare, and
+     300px in a 393px viewport reads as a card floating in a gutter. */
+  .studio-stage .card-face .wk-card,
+  .cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card {
+    max-width: 100%;
+  }
+
+  /* One card per row. */
+  .cards-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+  }
+
+  /* Head: each control on its own full-width row, nothing squeezed to a sliver. */
+  .cards-head { flex-direction: column; align-items: stretch; }
+  .cards-head-left,
+  .cards-head-right { width: 100%; justify-content: space-between; }
+  .cards-head-left .cards-seg { flex: 1 1 auto; }
+  .cards-seg-btn { flex: 1 1 auto; text-align: center; }
+  .cards-compose { flex: 1 1 100%; }
+
+  /* The rail: one column of full-width control blocks. */
+  .studio-rail { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- WRITE MODE ----
+   With the soft keyboard up, the surface is bounded and something has to yield.
+   The last composer to skip this shipped an EIGHT-PIXEL writing surface on every
+   phone, because the card was the only elastic row and absorbed the whole
+   keyboard inset (docs/maintenance/2026-08-24-pulse-mobile-keyboard-and-glyph-menu.md).
+   So: collapse everything that is not the card, and let the PICTURE yield before
+   the words do. Structural, and it reverses the instant the keys drop. */
+@media (max-width: 900px) {
+  /* Scoped on the classes themselves, not on an #id ancestor: these names
+     belong to this view alone, and depending on the host element would make the
+     rule silently inert anywhere the markup is mounted somewhere else. */
+  body.kb-open .cards-head,
+  body.kb-open .cards-ribbon,
+  body.kb-open .cards-note,
+  body.kb-open .cards-reuse,
+  body.kb-open .cards-studio.is-composing .studio-rail { display: none; }
+
+  body.kb-open .cards-studio.is-composing .studio-stage {
+    padding: 8px;
+    border: 0;
+    background: none;
+  }
+  /* The picture gives up its height first; the fields keep theirs. THIS is where
+     a floor under the text belongs — with the keys up and the surface bounded,
+     something has to yield, and it must never be the line being written. */
+  body.kb-open .card-face .wk-card { max-width: 340px; }
+  body.kb-open .card-face .wk-img { aspect-ratio: auto; height: 96px; }
+  body.kb-open .card-face .wk-t-title { min-height: 2.2em; }
+  body.kb-open .card-face .wk-snip { min-height: 3em; }
+}
+
+@media (pointer: coarse) {
+  .cards-pill { min-height: var(--tap); padding: 8px 14px; }
+  .layout-chip { min-height: var(--tap); }
+}
+

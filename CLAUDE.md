@@ -146,13 +146,13 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   (D1), `CDN` (R2) — the resource *names* behind them are instance config and
   live in `wrangler.jsonc`, never here. Daily cron `0 11 * * *`.
 - **Identity is edge-injected**, never hardcoded (see engine vs. instance).
-- **The console is eighteen layered modules.** `js/console-ui.js` is a 68-line
+- **The console is eighteen layered modules.** `js/console-ui.js` is a thin
   barrel — `export *` from `js/console/*` in layer order — and holds no logic.
   A module may import only ones *below* it in that order; when lower code needs
   something above, the thing above **registers** with it (four seams, all wired
   in `js/console/init.js`). `tests/console-modules.test.js` enforces the
   layering against the real imports — read it for the layer order.
-- **~850 tests** (`vitest`, Node env). CI runs `npm test` + a `wrangler deploy
+- **~2,000 tests** (`vitest`, Node env). CI runs `npm test` + a `wrangler deploy
   --dry-run` bundle check. (Approximate on purpose — an exact count in a doc is
   drift waiting to happen; `npm test` prints the real one.) The leak scan is a
   **manual** gate here and a **CI** gate in the extracted public repo — this
@@ -271,9 +271,9 @@ Keep commits focused on one change; write a message that explains *why*, not jus
 
 | Area | Modules |
 |------|---------|
-| `src/shared/` | `http` (CORS/JSON + `notConfigured` 501), `csp` (per-surface CSP + pre-paint hash), `pages` (public-page list + config gating), `text` (escapeHtml/baseName/localDay), `auth` (JWT HS256 + scopes + cookies), `site` (config-derived meta/cdnBase/entity JSON-LD), `webring` (ANALOGS seat guard + token/href builders), `shortlinks` (branded `/<code>` → 302 table + collision guards) |
+| `src/shared/` | `config` (site.config.js over engine defaults — every server module reads config through it), `http` (CORS/JSON + `notConfigured` 501), `csp` (per-surface CSP + pre-paint hash), `pages` (public-page list + config gating), `text` (escapeHtml/baseName/localDay), `auth` (JWT HS256 + scopes + cookies), `site` (config-derived meta/cdnBase/entity JSON-LD), `pulse` (pure pulse rules: states, limits, TTL), `podcast` (frozen iTunes taxonomy + feed-readiness validators), `webring` (ANALOGS seat guard + token/href builders), `shortlinks` (branded `/<code>` → 302 table + collision guards) |
 | `src/edge/` | `chrome` (HTMLRewriter: OG + nav + heroes + `injectSiteChrome`), `data` (edge-cached data-JSON loader), `weather` (Open-Meteo SWR) |
-| `src/api/` | `publish` (GitHub publish/sync + guards), `bench` (D1 queue + Backblaze RAW proxy), `drafts` (FN cloud drafts), `console-auth` (`/api/auth`·`/api/logout` + rate limit), `subscribers` (subscribe/export), `assets` (R2 upload/delete + `/api/cdn` proxy + `/api/og-cards`), `site-meta` (manifest/sitemap/feed/buffer-summary/site-settings) |
+| `src/api/` | `publish` (GitHub publish/sync + guards), `bench` (D1 queue + Backblaze RAW proxy), `drafts` (FN cloud drafts), `console-auth` (`/api/auth`·`/api/logout` + rate limit), `pulse` (D1 current-pulse + log, one-live invariant), `subscribers` (subscribe/export), `assets` (R2 upload/delete + `/api/cdn` proxy + `/api/og-cards`), `site-meta` (manifest/sitemap/feed/buffer-summary/site-settings) |
 | `src/cron/` | `archive` (daily Wayback Save-Page-Now) |
 
 `worker.js` re-exports a few symbols (`pageDisabled`, `publicPages`,

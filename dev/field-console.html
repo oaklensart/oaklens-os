@@ -44,9 +44,9 @@ try {
      else. It is a <script src>, not a module, so its version lives on this tag;
      the import-map entry beside the console modules exists so dev/sw.js and
      index.html can never disagree with it (tests/guards.test.js). -->
-<script src="/js/recent-index.js?v=17" defer></script>
+<script src="/js/recent-index.js?v=23" defer></script>
 
-<link rel="stylesheet" href="/css/field-console.css?v=55">
+<link rel="stylesheet" href="/css/field-console.css?v=71">
 </head>
 <body>
 
@@ -128,6 +128,7 @@ try {
       </button>
       <button class="nav-btn" data-view="cards" onclick="showView('cards')">
         <span class="nav-icon">▥</span> Cards
+        <span class="nav-count" id="nav-count-cards">0</span>
       </button>
       <!-- Config-gated (site.config.js -> console.bench). The edge removes this
            button, the More-sheet item and #view-bench when the flag is off. -->
@@ -750,8 +751,8 @@ try {
          actionable and the LIVE one deliberately is not: there is nothing to
          change about what is already published, and every edit shows up beside
          it as a marker flipping. -->
-    <section class="view" id="view-cards">
-      <div class="view-header">
+    <section class="view view--bounded" id="view-cards">
+      <div class="view-header view-header--tight">
         <div>
           <div class="view-title">CARDS <em>HOMEPAGE</em></div>
           <div class="view-sub">// WHAT THE GRID HOLDS NOW · WHAT THE NEXT PUBLISH MAKES IT</div>
@@ -870,6 +871,11 @@ try {
           <div class="label">Audio</div>
           <div class="count" id="sum-count-audio">0</div>
           <div class="delta" id="sum-delta-audio"></div>
+        </div>
+        <div class="summary-card" id="sum-cards" onclick="publishToggleChanges('cards')">
+          <div class="label">Cards</div>
+          <div class="count" id="sum-count-cards">0</div>
+          <div class="delta" id="sum-delta-cards"></div>
         </div>
         <div class="summary-card" id="sum-library">
           <div class="label">Library</div>
@@ -1132,6 +1138,7 @@ try {
     </button>
     <button class="sheet-item" data-view="cards" onclick="sheetGo('cards')">
       <span class="sheet-icon">▥</span> Cards
+      <span class="sheet-count" id="sheet-count-cards">0</span>
     </button>
     <button class="sheet-item" data-view="pulse" onclick="sheetGo('pulse')">
       <span class="sheet-icon">☺</span> Pulse
@@ -1459,9 +1466,9 @@ try {
   "imports": {
     "/js/console-telemetry.js": "/js/console-telemetry.js?v=2",
     "/js/console-api.js":       "/js/console-api.js?v=11",
-    "/js/console-state.js":     "/js/console-state.js?v=12",
+    "/js/console-state.js":     "/js/console-state.js?v=15",
     "/js/console-ui.js":        "/js/console-ui.js?v=62",
-    "/js/console/chrome.js":    "/js/console/chrome.js?v=12",
+    "/js/console/chrome.js":    "/js/console/chrome.js?v=13",
     "/js/console/assets.js":    "/js/console/assets.js?v=4",
     "/js/console/utils.js":     "/js/console/utils.js?v=2",
     "/js/console/sync.js":      "/js/console/sync.js?v=1",
@@ -1470,24 +1477,24 @@ try {
     "/js/console/archive.js":   "/js/console/archive.js?v=3",
     "/js/console/buffer.js":    "/js/console/buffer.js?v=3",
     "/js/console/fn-editor.js": "/js/console/fn-editor.js?v=7",
-    "/js/console/focal.js":     "/js/console/focal.js?v=6",
-    "/js/console/asset-library.js": "/js/console/asset-library.js?v=2",
+    "/js/console/focal.js":     "/js/console/focal.js?v=7",
+    "/js/console/asset-library.js": "/js/console/asset-library.js?v=3",
     "/js/console/audio.js":     "/js/console/audio.js?v=11",
-    "/js/console/cards.js":     "/js/console/cards.js?v=3",
-    "/js/console/publish.js":   "/js/console/publish.js?v=16",
+    "/js/console/cards.js":     "/js/console/cards.js?v=17",
+    "/js/console/publish.js":   "/js/console/publish.js?v=19",
     "/js/console/session.js":   "/js/console/session.js?v=9",
     "/js/console/bench.js":     "/js/console/bench.js?v=1",
     "/js/pulse-packs.js":       "/js/pulse-packs.js?v=3",
     "/js/console/pulse.js":     "/js/console/pulse.js?v=4",
     "/js/console/init.js":      "/js/console/init.js?v=10",
     "/js/markdown-engine.js":   "/js/markdown-engine.js?v=4",
-    "/js/recent-index.js":      "/js/recent-index.js?v=17",
+    "/js/recent-index.js":      "/js/recent-index.js?v=23",
     "/js/jpeg-privacy.js":      "/js/jpeg-privacy.js?v=1",
     "/js/raw-lens.js":          "/js/raw-lens.js?v=5",
     "/js/raw-extract.js":       "/js/raw-extract.js?v=4",
     "/js/site-export.js":       "/js/site-export.js?v=4",
     "/js/site-export-core.js":  "/js/site-export-core.js?v=3",
-    "/js/export-manifest.js":   "/js/export-manifest.js?v=14"
+    "/js/export-manifest.js":   "/js/export-manifest.js?v=15"
   }
 }
 </script>

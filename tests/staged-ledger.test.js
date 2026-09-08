@@ -26,7 +26,7 @@ const {
   trashItem, trashRestore, save, load,
 } = await import('../js/console-state.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="toast-host"></div>';

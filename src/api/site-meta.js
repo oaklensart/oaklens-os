@@ -563,6 +563,12 @@ export function _featuredRawFrames(arr, limit = 4) {
       focus: e.focus || '',
       cardFocus: e.cardFocus || '',
       captured_at: e.captured_at || e.published_at || '',
+      // The homepage card descriptor, so a featured frame's chosen layout
+      // survives the trip the way its crop already does. Conditional, so a frame
+      // that never chose one adds nothing to the payload — and mirrored exactly
+      // by _stagedFeaturedRaw() in js/console/cards.js, which the parity test in
+      // tests/cards-view.test.js runs against this function on one fixture.
+      ...(e.card ? { card: e.card } : {}),
     }));
 }
 

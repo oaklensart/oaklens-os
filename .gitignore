@@ -14,6 +14,13 @@ node_modules
 .env*
 !.env.example
 .aider*
+
+# AI-agent worktrees: whole checkouts of this repo, parked inside it. Committing
+# one would nest the repo in itself. The per-machine settings file goes with it —
+# it records one person's local tool permissions, not the project's.
+.claude/worktrees/
+.claude/settings.local.json
+
 audit/
 
 # bench -> D1 migration scratch files (never commit / never deploy)

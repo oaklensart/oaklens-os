@@ -177,3 +177,41 @@ describe('what a wipe means', () => {
     expect(store.has('oaklens_pending_r2_deletes')).toBe(false);
   });
 });
+
+// A composed card's `order` is a RANK, not a slot index — every mutator in
+// js/console/cards.js recompacts so the row can have no holes and no ties.
+// Restoring one puts its old rank back into a row that may have moved on, and
+// two cards sharing `order: 1` leaves the grid sorting them by whatever the
+// array happens to hold.
+describe('a restored composed card comes back at a unique rank', () => {
+  beforeEach(() => {
+    STATE.cards = [];
+    STATE.staged.cards = 0;
+  });
+
+  it('recompacts the row rather than colliding with a card composed since', () => {
+    STATE.cards = [
+      { id: 'c-1', order: 1, title: 'First' },
+      { id: 'c-2', order: 2, title: 'Second' },
+    ];
+    trashItem('cards', 'c-1');
+    // The survivor is promoted by the console's own recompaction; a new card
+    // then takes the rank that freed up.
+    STATE.cards[0].order = 1;
+    STATE.cards.push({ id: 'c-3', order: 2, title: 'Third' });
+
+    trashRestore(0);
+
+    const ranks = STATE.cards.map((c) => c.order).sort((a, b) => a - b);
+    expect(ranks, 'no two cards may share a rank').toEqual([1, 2, 3]);
+    // The restored card keeps the place it was deleted from.
+    expect(STATE.cards.find((c) => c.id === 'c-1').order).toBe(1);
+  });
+
+  it('leaves every other surface\u2019s ordering alone', () => {
+    STATE.audio = [{ id: 'a1', filename: 'a.mp3', order: 7 }];
+    trashItem('audio', 'a1');
+    trashRestore(0);
+    expect(STATE.audio[0].order, 'only composed cards carry a compacting rank').toBe(7);
+  });
+});

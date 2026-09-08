@@ -373,6 +373,7 @@ export async function handleSync(request, env) {
     // always passes an explicit `files` list — but a caller that does not was
     // silently told this site has no audio.
     'data/audio.json',
+    'data/cards.json',
   ];
   const filesToFetch = requestedFiles.length > 0 ? requestedFiles : defaultFiles;
 

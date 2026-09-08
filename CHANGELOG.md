@@ -25,6 +25,76 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-07 (build your own homepage cards)
+
+**You can now make a card.** Open Cards and press **＋ COMPOSE A CARD**. You get
+a real card you can build:
+
+- **Pick its picture from anywhere on your site** — the archive, the buffer, your
+  wallpapers, a field note's hero, or anything you have uploaded and not used yet.
+  Or give it no picture at all.
+- **Write on the card itself.** The headline and the line underneath are typed
+  straight onto the card, at the size they will actually publish at.
+- **Crop it** to the tall 4:5 shape the homepage card uses.
+- **Choose how it is dressed** — Automatic, Always the picture, or Always the
+  words. Automatic is the right answer nearly always: it leads with the picture
+  when there is one and with your words when there is not.
+
+**The words belong to the card.** If you build a card from a field note and then
+rewrite its headline, your post is untouched — the card carries its own text.
+Clear it and the card falls back to the post's own title.
+
+**Your grid still fills itself.** Composed cards are an override, not a
+replacement: up to two of them, and `↩ RESET TO AUTOMATIC` hands the slot back.
+A site with no composed cards behaves exactly as it did before — byte for byte.
+
+**A live Pulse still leads.** Posting one never silently does nothing; your
+composed cards move down a slot while it is up and come back when it expires.
+
+**Nothing to do on merge.** A new `data/cards.json` ships empty. If you never
+compose a card, your published files are unchanged.
+
+---
+
+## 2026-09-07 (the Cards view becomes a place you compose, not just look)
+
+**Cards is now a studio.** Open it and you get a row of your four homepage
+slots along the top — tap one to focus it. **STUDIO** shows that card on its own
+with everything that acts on it beside it; **PANORAMA** shows the whole row at
+once. A **STAGED / LIVE** toggle switches between what your next publish will
+make and what is on your site right now, replacing the two side-by-side columns.
+
+Nothing about the preview got less honest in the move. Each slot still carries
+its `NEW` / `REPLACED` / `UNCHANGED` / `GONE` marker, and the header always tells
+you how many slots change on the next publish — including while you are looking
+at the live side, so a pending change can never hide behind the toggle.
+
+**New: you can choose a card's layout.** Focus a field note and the rail offers
+**Standard tile** or **Hero forward**. Until now that choice lived only in the
+Field Notes editor. Two things worth knowing:
+
+- **Pressing the standard option is the undo.** There is no separate undo
+  button, because the way back is the control you are already looking at.
+- **A layout your entry cannot wear is greyed, not hidden** — a note with no
+  picture cannot lead with one, and the rail says so instead of quietly dropping
+  the option.
+
+Right now field notes are the only kind with a second layout, so the picker
+appears there and nowhere else. It will show new layouts automatically as they
+are added — nothing for you to configure.
+
+**Under the hood**, a card's chosen layout now travels with buffer frames,
+archive photos and audio tracks on publish, the way it already did for posts. If
+you never choose a layout, your published files are byte-for-byte what they were
+before. Nothing to do on merge.
+
+**Also moved:** the "ready to re-feature" frames — the ones you already cropped
+for this card — are now a strip along the bottom that scrolls sideways instead of
+a wrapped block. It is a shelf of things to use again, so the two `↩` undo
+buttons stayed up beside the card they undo rather than being filed among them.
+
+---
+
 ## 2026-09-07 (the podcast feed is in beta, and we'd like to hear from you)
 
 **No code changed here — this is a label.** `/podcast.xml` and the readiness

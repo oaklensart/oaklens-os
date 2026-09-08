@@ -91,6 +91,17 @@ function seedState() {
     { id: 'aud-err', filename: 'bad.mp3', _uploadError: true },       // filtered
     { id: 'aud-up', filename: 'busy.mp3', _uploading: true },         // filtered
   ];
+  STATE.cards = [
+    {
+      id: 'card-1', order: 1, added_at: '2026-09-01',
+      source: { type: 'archive', id: 'arc-1' }, media: 'c1.webp', folder: 'archive',
+      focus: '10% 20%', cardFocus: '30% 40%', title: 'C1 Title', tease: 'C1 tease.',
+      label: 'Archive', link: '/archive/?f=arc-1', palette: 'flow', card: { layout: 'hero' },
+      img: { w: 2048, h: 1536, lum: 0.2 },
+    },
+    // minimal: a free-form card with nothing but words
+    { id: 'card-2', order: 2, title: 'C2 Title', added_at: '2026-09-02' },
+  ];
   STATE.staged = { buffer: 1, archive: 1, posts: 1, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 1 };
 }
 
@@ -112,6 +123,7 @@ describe('buildBundle()', () => {
       'data/audio.json',
       'data/barrel.json',
       'data/buffer.json',
+      'data/cards.json',
       'data/friends.json',
       'data/library.json',
       'data/posts.json',
@@ -192,6 +204,21 @@ describe('buildBundle()', () => {
       'added_at', 'download', 'duration', 'episode', 'featured', 'featured_order',
       'filename', 'id', 'mime', 'peaks', 'size', 'slug', 'sub', 'title',
     ]);
+  });
+
+  it('composed cards keep every whitelisted field', () => {
+    expect(keysOf('data/cards.json')).toEqual([
+      'added_at', 'card', 'cardFocus', 'focus', 'folder', 'id', 'img', 'label',
+      'link', 'media', 'order', 'palette', 'source', 'tease', 'title',
+    ]);
+  });
+
+  // A card may be a picture with no words, words with no picture, or a plain
+  // reference. Everything but id/order/added_at is conditional, so a minimal
+  // card must not carry a single null.
+  it('a minimal composed card emits nothing it was not given', () => {
+    const [, minimal] = parse('data/cards.json');
+    expect(Object.keys(minimal).sort()).toEqual(['added_at', 'id', 'order', 'title']);
   });
 
   it('barrel passes entries through, minus the _imported marker', () => {

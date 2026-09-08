@@ -55,7 +55,7 @@ const { STATE, sessionTrash } = await import('../js/console-state.js');
 const { syncFromServer, _setLastImportedSha, _getLastImportedSha } =
   await import('../js/console-ui.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
 const FILES = SURFACES.map((s) => `data/${s}.json`);
 
 // isLoggedIn() only parses the JWT payload for exp — no signature check client-side.
@@ -88,7 +88,7 @@ function stubFetch(syncBody) {
 
 // renderPublish() runs on the import path and getElementById's these unguarded.
 function seedDom() {
-  const sumCards = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'network', 'audio']
+  const sumCards = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'network', 'audio', 'cards']
     .map((k) => `<div id="sum-${k}"><span id="sum-count-${k}"></span><span id="sum-delta-${k}"></span></div>`)
     .join('');
   document.body.innerHTML = `

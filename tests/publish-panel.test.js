@@ -23,7 +23,7 @@ const { STATE, sessionTrash, stageChange, clearStage } = await import('../js/con
 const { renderPublish, publishToggleChanges } = await import('../js/console-ui.js');
 
 const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio'];
-const TILES = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'network', 'audio'];
+const TILES = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'network', 'audio', 'cards'];
 
 function seedDom() {
   const sumCards = TILES

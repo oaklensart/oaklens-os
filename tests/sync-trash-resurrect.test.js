@@ -31,7 +31,7 @@ globalThis.fetch = async () => new Response('[]', { status: 200 });
 const { STATE, sessionTrash, trashItem } = await import('../js/console-state.js');
 const { importIntoSurface, _vouchedEmptyManifests } = await import('../js/console-ui.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="toast-host"></div>';

@@ -255,7 +255,14 @@
   // recent-work grid to surface both the photography and the writing. So when
   // both datasets are non-empty but the top-N came out single-type, trade the
   // oldest pick for the newest item of the missing type, then re-sort by date.
-  function pickRecent(archive, posts, rawFeatured, audioFeatured, pulse) {
+  //
+  // ⚠️ THIS IS THE AUTOMATIC ROW, AND ITS BODY MUST NOT CHANGE. Composed cards
+  // are overlaid by pickRecent() below rather than woven in here, so a site with
+  // no composed cards gets an array that is identical to the one this function
+  // has always returned — the fork guarantee holds by construction rather than
+  // by a test remembering to check it (docs/ideas/homepage-card-system.md, "the
+  // default layer is load-bearing and comes first").
+  function pickAutomatic(archive, posts, rawFeatured, audioFeatured, pulse) {
     var items = []
       .concat((archive || [])
         .filter(function (e) { return e && e.filename && e.slug; })
@@ -323,6 +330,61 @@
     return picks;
   }
 
+  // ---- COMPOSED CARDS — the owner's own cards, overlaid on the automatic row ----
+  //
+  // A composed card is one the owner built in the console: a picture chosen from
+  // anywhere on the site (or uploaded), words typed onto the card itself, or
+  // both. It is an OVERRIDE on the grid, never a replacement for it — the row
+  // still fills itself and a composed card simply takes a place near the front.
+  //
+  // ORDER, NOT A SLOT INDEX. Composed cards carry `order` (1, 2, …) and compact:
+  // delete the first and the second moves up. Absolute slot indexes are the
+  // mistake this project has already paid for once — three of them let a live
+  // pulse push a starred frame into the tablet-only fourth card, which nobody
+  // saw for weeks (docs/maintenance/2026-08-27-starred-frame-hidden-fourth-slot.md).
+  // pinTop learned it; so does this.
+  var COMPOSED_MAX = 2;
+
+  // A card needs SOMETHING to show. One with neither a picture nor a line is a
+  // draft the owner never finished, and rendering an empty tile would be worse
+  // than leaving the slot to the automatic pick.
+  function composedPick(cards) {
+    return (cards || [])
+      .filter(function (c) {
+        return c && (heroFilename({ hero: c.media }) || String(c.title || c.tease || '').trim());
+      })
+      .sort(function (a, b) { return (Number(a.order) || 0) - (Number(b.order) || 0); })
+      .slice(0, COMPOSED_MAX)
+      .map(function (c) { return { kind: 'composed', data: c, d: c.added_at || '' }; });
+  }
+
+  // The automatic row, with the owner's cards inserted after the pulse.
+  //
+  // A LIVE PULSE STILL LEADS (owner, 2026-09-07). The pulse is live, costs no
+  // deploy and expires on its own in 18h; a composed card that suppressed it
+  // would make posting one silently do nothing. So composed cards fill in behind
+  // it and everything automatic shifts down, falling off the end at GRID_SIZE.
+  //
+  // Note what is NOT touched: pinTop, VISIBLE_PINS and yieldOlderPin all behave
+  // exactly as before. Composed cards are not pins — the pin budget still
+  // governs only the automatic audio/RAW pair, and "card 3 is never an automatic
+  // pin" stays true.
+  function pickRecent(archive, posts, rawFeatured, audioFeatured, pulse, composed) {
+    var row = pickAutomatic(archive, posts, rawFeatured, audioFeatured, pulse);
+    var made = composedPick(composed);
+    if (!made.length) return row;
+    var usedMedia = made.map(function (m) { return composedMedia(m.data); }).filter(Boolean);
+    if (usedMedia.length) {
+      row = row.filter(function (item) {
+        if (!item || !item.data) return true;
+        var fn = item.data.filename || item.data.hero_filename || item.data.slug;
+        return !fn || usedMedia.indexOf(fn) === -1;
+      });
+    }
+    var lead = (row[0] && row[0].kind === 'pulse') ? 1 : 0;
+    return row.slice(0, lead).concat(made).concat(row.slice(lead)).slice(0, GRID_SIZE);
+  }
+
   // ---- THE CARD ENGINE (core seam) ----
   // A card is a KIND wearing a LAYOUT. Kind is identity and is fixed — photo,
   // text, audio, pulse — and each kind owns a small named set of layouts.
@@ -343,6 +405,12 @@
     text: ['default', 'hero'],
     audio: ['default'],
     pulse: ['default'],
+    // A composed card is the owner's own: its 'default' is SMART — picture-led
+    // when it has a usable picture, the typographic tile when it does not — so
+    // the common case needs no choice at all. 'hero' and 'plain' are the escape
+    // hatch: force the picture, or force the words, when the automatic call is
+    // not the one you wanted.
+    composed: ['default', 'hero', 'plain'],
   };
 
   // An unknown or unregistered layout resolves to 'default', never to a broken
@@ -378,6 +446,34 @@
     return h;
   }
 
+  // A composed card names its picture in `media`, under exactly the same rules —
+  // one gate, two field names, so a card and a note cannot disagree about what
+  // counts as a usable picture.
+  function composedMedia(card) {
+    return heroFilename({ hero: card && card.media });
+  }
+
+  // Which R2 folder a composed card's picture lives in. Wallpapers are the one
+  // source whose derivatives sit outside `archive/`, so the card records the
+  // folder when it is picked rather than making the renderer guess from the
+  // filename.
+  function composedFolder(card) {
+    return (card && card.folder === 'wallpaper') ? 'wallpaper' : 'archive';
+  }
+
+  // The small chip on the card — what KIND of thing this is, in the owner's own
+  // words ("Featured", "Archive", "New work").
+  //
+  // ⚠️ Deliberately NOT sharing the pulse card's old field name. A pre-rename
+  // pulse row carries a discipline name in that field, and a renderer that read
+  // one put a category title back on the homepage — tests/pulse-card.test.js
+  // greps this whole file to forbid it, and that guard should keep its teeth.
+  // One bad field name is not worth resurrecting for a different feature.
+  function composedLabel(card) {
+    var s = card && typeof card.label === 'string' ? card.label.trim() : '';
+    return s || 'Featured';
+  }
+
   // A registered layout answers "does the engine know this name". A GATE
   // answers "can THIS entry actually wear it" — the first is the engine's
   // vocabulary, the second is the content's, and they fail differently. Gates
@@ -387,6 +483,12 @@
   var CARD_GATES = {
     text: {
       hero: function (entry) { return !!heroFilename(entry); },
+    },
+    composed: {
+      // Forcing the picture forward needs a picture. Without one this falls back
+      // to 'default', which for a composed card is already the text tile — so a
+      // card that lost its image degrades quietly instead of rendering a hole.
+      hero: function (entry) { return !!composedMedia(entry); },
     },
   };
 
@@ -452,6 +554,13 @@
     pulsePick: pulsePick,
     pinTop: pinTop,
     yieldOlderPin: yieldOlderPin,
+    pickAutomatic: pickAutomatic,
+    composedPick: composedPick,
+    composedMedia: composedMedia,
+    composedFolder: composedFolder,
+    composedLabel: composedLabel,
+    composedLink: composedLink,
+    COMPOSED_MAX: COMPOSED_MAX,
     pulseTier: pulseTier,
     playlistTier: playlistTier,
     cardFocus: cardFocus,
@@ -478,9 +587,13 @@
     var meta = document.querySelector('meta[name="cdn-base"]');
     return ((meta && meta.content) || (location.origin + '/api/cdn')).replace(/\/+$/, '');
   }
-  function frameSrc(filename, size) {
+  // `folder` defaults to 'archive' — where every frame, hero and buffer picture
+  // lives. A composed card may point at a wallpaper, whose derivatives sit under
+  // `wallpaper/` instead, so the folder is a parameter rather than a constant.
+  // Every existing caller passes nothing and behaves exactly as before.
+  function frameSrc(filename, size, folder) {
     var base = encodeURIComponent(String(filename).replace(/\.[^.]+$/, ''));
-    return cdnRoot() + '/archive/' + base + '-' + size + 'w.webp';
+    return cdnRoot() + '/' + (folder || 'archive') + '/' + base + '-' + size + 'w.webp';
   }
 
   // ---- DOM helpers ----
@@ -493,13 +606,28 @@
   // ---- frame number → f#NNN (zero-padded to 3, matching the console/light-table) ----
   function frameTag(num) { return 'f#' + String(num || 0).padStart(3, '0'); }
 
+  // The canonical same-origin link to an entry, by the VISITOR kind it wears on
+  // the grid — the ONE place a card's destination is spelled. The kind cards
+  // (photo/RAW/text/audio) each call it, and a COMPOSED card spawned from one of
+  // them copies its result into `card.link` so "edit this card" keeps the click
+  // it inherited (the console seeds it; composedLink honours it). One source of
+  // truth means the console can never point somewhere the grid would not.
+  // 'audio' delegates to listenHref (defined below; declarations hoist) so the
+  // audio permalink stays authored in exactly one place too.
+  function entryHref(kind, entry) {
+    var e = entry || {};
+    if (kind === 'raw') return '/archive/buffer/?f=' + encodeURIComponent(e.id || '');
+    if (kind === 'archive') return '/archive/?f=' + encodeURIComponent(e.slug || '');
+    if (kind === 'text') return '/field-notes/post?slug=' + encodeURIComponent(e.fn_id || '');
+    if (kind === 'audio') return listenHref(e);
+    return '';
+  }
+
   function photoCard(entry, isRaw) {
     var a = el('a', 'wk-card');
     // RAW cards deep-link to the buffer frame (by id — always exact); archive
-    // cards to the curated frame (by slug).
-    a.href = isRaw
-      ? '/archive/buffer/?f=' + encodeURIComponent(entry.id || '')
-      : '/archive/?f=' + encodeURIComponent(entry.slug || '');
+    // cards to the curated frame (by slug). One builder, entryHref.
+    a.href = entryHref(isRaw ? 'raw' : 'archive', entry);
     var img = el('div', 'wk-img');
     img.style.backgroundImage = "url('" + frameSrc(entry.filename, 1024) + "')";
     var cardPos = cardFocus(entry);
@@ -530,7 +658,7 @@
     var initial = recentInitial(excerpt);
 
     var a = el('a', 'wk-card wk-text');
-    a.href = '/field-notes/post?slug=' + encodeURIComponent(post.fn_id || '');
+    a.href = entryHref('text', post);
     a.setAttribute('data-tier', tier);
 
     var kicker = el('span', 'wk-kicker');
@@ -590,7 +718,7 @@
   // a usable hero filename.
   function textHeroCard(post) {
     var a = el('a', 'wk-card wk-text');
-    a.href = '/field-notes/post?slug=' + encodeURIComponent(post.fn_id || '');
+    a.href = entryHref('text', post);
 
     var img = el('div', 'wk-img');
     img.style.backgroundImage = "url('" + frameSrc(heroFilename(post), 1024) + "')";
@@ -613,6 +741,95 @@
     return a;
   }
 
+  // ---- the composed card ----
+  //
+  // The owner's own card: a picture chosen from anywhere on the site (or none),
+  // words typed onto the card itself (or none), and a link back to whatever it
+  // came from (or none — a free-form card points nowhere, the way a pulse does).
+  //
+  // Deliberately NOT a new visual language. Picture-led is photoCard's shape;
+  // text-led is textCard's, tier ladder included. A composed card should look
+  // like it belongs on the grid, because it does.
+  //
+  // Only a same-origin path is honoured as a link. This is authored content that
+  // rides publish, so a bad value is an editing mistake rather than an attack —
+  // but a card that silently sent visitors off-site would be a bad surprise
+  // either way, and a plain <div> is the honest degradation (pulseCard already
+  // proves a card need not be an anchor).
+  function composedLink(card) {
+    var h = card && card.link;
+    if (typeof h !== 'string') return '';
+    h = h.trim();
+    return (h.charAt(0) === '/' && h.charAt(1) !== '/') ? h : '';
+  }
+
+  function composedCard(card, layout) {
+    var media = composedMedia(card);
+    var picture = !!media && layout !== 'plain';
+    var href = composedLink(card);
+    var root = href ? el('a', '') : el('div', '');
+    if (href) root.href = href;
+    root.className = 'wk-card wk-composed' + (picture ? '' : ' wk-text');
+    // data-shape is what the palette's picture-card tint binds to: without it the
+    // atmospheric ground paints the root, which the full-bleed image and body
+    // cover, so a palette on a picture card showed NOTHING on the live grid (and
+    // in the console grid, which renders through here). The words shape reads the
+    // ground on the root directly, but stamping both keeps one rule for the CSS.
+    root.setAttribute('data-shape', picture ? 'picture' : 'words');
+    if (card.palette && card.palette !== 'default') {
+      root.setAttribute('data-state', card.palette);
+    }
+
+    if (picture) {
+      var img = el('div', 'wk-img');
+      img.style.backgroundImage = "url('"
+        + frameSrc(media, 1024, composedFolder(card)) + "')";
+      var pos = cardFocus(card);
+      if (pos) img.style.backgroundPosition = pos;
+      var tag = el('span', 'wk-tag');
+      tag.textContent = composedLabel(card);
+      img.appendChild(tag);
+
+      var body = el('div', 'wk-body');
+      // The picture card's caption, NOT the words-tile headline: a composed card
+      // with a photo has to read like the archive card beside it (same .wk-title
+      // scale and weight), or its title looms over the row and competes with the
+      // picture. The big .wk-t-title is for the words shape, where the type IS the
+      // card. (owner, 2026-09-07)
+      var title = el('div', 'wk-title');
+      title.textContent = card.title || '';
+      body.appendChild(title);
+      if (card.tease) {
+        var meta = el('div', 'wk-meta');
+        meta.textContent = card.tease;
+        body.appendChild(meta);
+      }
+      root.appendChild(img);
+      root.appendChild(body);
+      return root;
+    }
+
+    // No picture (or 'plain'): the typographic tile, measured by the same ladder
+    // the field-note card uses, so one grid never carries two type systems.
+    var kicker = el('div', 'wk-kicker');
+    kicker.appendChild(el('span', 'wk-dot'));
+    kicker.appendChild(document.createTextNode(composedLabel(card)));
+
+    var tTitle = el('div', 'wk-t-title');
+    tTitle.textContent = card.title || '';
+
+    var tease = recentTruncate(recentStrip(card.tease || ''), TEASE_MAX);
+    root.setAttribute('data-tier', recentTier(tierLen(tease)));
+
+    var snip = el('div', 'wk-snip');
+    if (tease) snip.appendChild(document.createTextNode(tease));
+
+    root.appendChild(kicker);
+    root.appendChild(tTitle);
+    root.appendChild(snip);
+    return root;
+  }
+
   // ---- audio card ----
   // Built from a registry entry, so every value on it was typed by the author
   // rather than guessed from a post's contents.
@@ -622,8 +839,13 @@
   // a <button> nested inside an <a> is invalid HTML and unreadable to a screen
   // reader, which is the trap this pattern exists to avoid. CSS raises the
   // player and the share button above the overlay so they stay pressable.
+  // A track's slug is its permanent address. WITHOUT one — a playlist card, or
+  // a caller holding no entry at all — the honest destination is the listen page
+  // itself: `/listen/?a=` with nothing after it is a dangling query that reads
+  // as a broken link and tells the page to open a track that does not exist.
   function listenHref(entry) {
-    return '/listen/?a=' + encodeURIComponent(entry.slug || '');
+    var slug = (entry && entry.slug) || '';
+    return slug ? '/listen/?a=' + encodeURIComponent(slug) : '/listen/';
   }
 
   var SHARE_SVG =
@@ -990,6 +1212,7 @@
     text: function (item, layout) {
       return layout === 'hero' ? textHeroCard(item.data) : textCard(item.data);
     },
+    composed: function (item, layout) { return composedCard(item.data, layout); },
   };
 
   function buildCard(item) {
@@ -1002,6 +1225,9 @@
     return node;
   }
   g.RecentIndex.buildCard = buildCard;
+  // Exposed for the console: it seeds a spawned composed card's `link` from the
+  // SAME builder the grid renders with, so the two can never disagree.
+  g.RecentIndex.entryHref = entryHref;
 
   // null = the data file is MISSING (an un-seeded fork), [] = it loaded empty
   // (cleared on purpose). The caller maps null to the sample fallback — the
@@ -1032,6 +1258,11 @@
       // nothing posted, everything expired — answers { pulse: null }, so this
       // resolves to "no pulse card" and never to a broken grid.
       getJson('/api/pulse'),
+      // The owner's composed cards. No sample fallback, for the audio reason:
+      // an un-seeded fork has composed nothing, and missing and empty both mean
+      // "the grid fills itself" — which is the default this whole feature is an
+      // override on top of.
+      getJson('/data/cards.json'),
     ])
       .then(function (res) {
         var archive = withSampleFallback(res[0], sampleFrames());
@@ -1040,7 +1271,8 @@
         var rawFeatured = Array.isArray(summary.featured) ? summary.featured : [];
         var audio = Array.isArray(res[3]) ? res[3] : [];
         var pulse = (res[4] && !Array.isArray(res[4])) ? res[4] : null;
-        var picks = pickRecent(archive, posts, rawFeatured, audio, pulse);
+        var composed = Array.isArray(res[5]) ? res[5] : [];
+        var picks = pickRecent(archive, posts, rawFeatured, audio, pulse, composed);
         var section = host.closest ? host.closest('.cl-work') : null;
         if (!picks.length) {
           if (section) section.hidden = true;

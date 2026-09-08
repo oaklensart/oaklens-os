@@ -125,8 +125,12 @@ describe('byte identity — the default layout adds nothing', () => {
 });
 
 describe('resolveLayout — unknown resolves to default, never breaks', () => {
-  it('registers exactly the four kinds, each with default', () => {
-    expect(Object.keys(RI.cardLayouts).sort()).toEqual(['audio', 'photo', 'pulse', 'text']);
+  it('registers exactly the five kinds, each with default', () => {
+    // `composed` joined on 2026-09-07 — the owner's own cards, overlaid on the
+    // automatic row (tests/card-composer.test.js). Every kind must still offer
+    // 'default', because that is what an unknown layout falls back to.
+    expect(Object.keys(RI.cardLayouts).sort())
+      .toEqual(['audio', 'composed', 'photo', 'pulse', 'text']);
     for (const kind of Object.keys(RI.cardLayouts)) {
       expect(RI.cardLayouts[kind]).toContain('default');
     }

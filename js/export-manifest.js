@@ -126,6 +126,7 @@ export const EXPORT_MANIFEST = {
     'data/friends.json',
     'data/library.json',
     'data/audio.json',
+    'data/cards.json',
   ],
 
   // Field-note markdown: one file per published entry in `data`, at
@@ -174,5 +175,13 @@ export const EXPORT_MANIFEST = {
     // is what makes an exported tree PLAY offline rather than just draw the
     // waveform (the peaks are already in data/audio.json).
     { source: 'data/audio.json', expand: (e) => (e.filename ? [`audio/${e.filename}`] : []) },
+    // Composed cards name their picture as a bare filename, which the CDN-URL
+    // harvester cannot see — without this rule an exported tree ships a card
+    // with a broken picture. The folder is on the record because a wallpaper's
+    // derivatives live outside archive/.
+    {
+      source: 'data/cards.json',
+      expand: (e) => sizeVariants(e.folder === 'wallpaper' ? 'wallpaper' : 'archive', e.media),
+    },
   ],
 };

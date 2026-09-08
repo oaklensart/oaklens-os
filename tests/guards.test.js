@@ -28,7 +28,12 @@ const ROOT = join(import.meta.dirname, '..');
 // carry their own frozen `css/main.css?v=N` links, so the next legitimate CSS
 // bump would have failed the `?v=` consistency check on a file nobody serves.
 // Same exclusion list `tests/no-payment-links.test.js` already uses.
-const SKIP_DIRS = new Set(['node_modules', '.git', '.wrangler', 'docs', 'tests', 'dist']);
+// `.claude` is agent scratch space, and `.claude/worktrees/` holds whole
+// CHECKOUTS of this repo — so an agent working in a second worktree put a full
+// copy of every page inside the tree this walker sweeps, and its (correctly
+// different) `?v=` numbers failed the consistency check below. A false red that
+// depends on who else is working, which is the worst kind.
+const SKIP_DIRS = new Set(['node_modules', '.git', '.claude', '.wrangler', 'docs', 'tests', 'dist']);
 
 function walk(dir, ext, out = []) {
   for (const name of readdirSync(dir)) {

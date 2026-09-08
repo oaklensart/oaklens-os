@@ -47,9 +47,29 @@ const {
   _stagedFeaturedRaw, _stagedInputs, _slotOf, _cardSlots, _diffSlots, renderCards,
   _refeatureReady, _repinTarget, cardsToggleRaw, cardsRepinSwap, cardsRefeature,
   cardsDemoteAudio, cardsClearAudioCard, cardsRestoreAudioCard, cardsOpen,
+  cardsSetMode, cardsSetSource, cardsSelectSlot, cardsSetLayout,
 } = cards;
 const { getLastFeaturedSwap } = await import('../js/console/focal.js');
 const { _audioCardRestoreTarget } = await import('../js/console/audio.js');
+
+// The shell's mode/source/focus are module state that outlives a render, so a
+// test that switches any of them puts it back. Cheaper and more honest than
+// exporting a reset hook that only tests would ever call.
+// Actions live in the studio rail for the FOCUSED slot — they are no longer
+// repeated on every tile — so a test that wants a kind's controls has to focus
+// that kind first.
+async function focusKind(kind) {
+  await renderCards();
+  const at = _cardSlots(_stagedInputs()).findIndex((s) => s && s.kind === kind);
+  if (at > -1) cardsSelectSlot(at);
+  return at;
+}
+
+function backToDefaults() {
+  cardsSetSource('staged');
+  cardsSetMode('studio');
+  cardsSelectSlot(0);
+}
 
 let buildBundle;
 beforeAll(async () => {
@@ -296,7 +316,7 @@ describe('renderCards paints both columns', () => {
     });
   });
 
-  it('renders a LIVE column, a STAGED column and a marker per slot', async () => {
+  it('renders the shell, and a marker for each slot that changes', async () => {
     STATE.archive = [photo('live-one'), photo('live-two')];
     STATE.posts = [post('fn-live')];
     STATE.buffer = [frame('a1', '14', { featured: true })];
@@ -305,27 +325,55 @@ describe('renderCards paints both columns', () => {
     const html = document.getElementById('cards-body').innerHTML;
     expect(html).toContain('LIVE');
     expect(html).toContain('STAGED');
-    // The staged column gained the starred RAW frame the live one has not seen.
+    // The staged grid gained the starred RAW frame the live one has not seen.
     expect(html).toContain('f#001');
-    expect(document.querySelectorAll('.cards-col')).toHaveLength(2);
-    expect(document.querySelectorAll('.slot-mark').length).toBeGreaterThan(0);
+    expect(document.querySelector('.cards-head')).not.toBeNull();
+    expect(document.querySelector('.cards-ribbon')).not.toBeNull();
+    // The signal, not a particular class: a slot that changes says so on its
+    // ribbon pill, and the rail spells it out in words for the focused one.
+    expect(document.querySelectorAll('.cards-ribbon .tone-badge[data-tone="staged"]').length)
+      .toBeGreaterThan(0);
   });
 
-  it('badges the fourth slot as tablet-only in both columns', async () => {
+  // The diff markers are the reason this view caught the hidden-fourth-slot pin
+  // bug (K18). The source toggle replaced the side-by-side columns they used to
+  // live between, so this pins that they survived the move — on the tiles, and
+  // as a count in the head that is legible from the LIVE side too.
+  it('keeps the diff visible from both sides of the source toggle', async () => {
+    STATE.buffer = [frame('a1', '14', { featured: true })];
+    STATE.archive = [photo('one')];
+    await renderCards();
+    expect(document.querySelectorAll('.cards-ribbon .tone-badge[data-tone="staged"]').length)
+      .toBeGreaterThan(0);
+    expect(document.querySelector('.cards-pending').textContent).toMatch(/SLOTS? CHANGE/);
+
+    cardsSetSource('live');
+    // Looking at what is published, the pending count is the only thing that can
+    // still say "something is waiting" — so it must not vanish with the marks.
+    expect(document.querySelector('.cards-pending').textContent).toMatch(/SLOTS? CHANGE/);
+    backToDefaults();
+  });
+
+  it('badges the fourth slot as tablet-only, in the ribbon and on the grid', async () => {
     STATE.archive = [photo('a'), photo('b'), photo('c'), photo('d')];
     await renderCards();
-    expect(document.querySelectorAll('.slot-badge')).toHaveLength(2);
+    expect(document.querySelectorAll('.cards-ribbon .tone-badge[data-tone="quiet"]'))
+      .toHaveLength(1);
+    cardsSetMode('panorama');
+    expect(document.querySelectorAll('.cards-grid .tone-badge[data-tone="quiet"]'))
+      .toHaveLength(1);
+    backToDefaults();
   });
 
   it('a missing data file is the fresh-fork state, not a failure', async () => {
     // 404 on /data/*.json is how an un-seeded fork looks; recent-index.js falls
-    // back to its bundled samples there, so the column must render normally and
+    // back to its bundled samples there, so the view must render normally and
     // say nothing alarming.
     globalThis.fetch = async () => new Response('not found', { status: 404 });
     await renderCards();
     const html = document.getElementById('cards-body').innerHTML;
     expect(document.querySelectorAll('.cards-warn')).toHaveLength(0);
-    expect(html).toContain('cards-col');
+    expect(html).toContain('cards-ribbon');
   });
 
   it('says so plainly when a source genuinely cannot be reached', async () => {
@@ -491,21 +539,27 @@ describe('the rendered controls', () => {
     );
   });
 
-  it('puts the controls on the STAGED column only — LIVE is a record', async () => {
+  it('puts the controls on STAGED only — LIVE is a record', async () => {
     STATE.buffer = [frame('a1', '14', { featured: true })];
     STATE.archive = [photo('one')];
-    await renderCards();
-    const cols = [...document.querySelectorAll('.cards-col')];
-    expect(cols[0].querySelectorAll('.slot-act')).toHaveLength(0);
-    expect(cols[1].querySelectorAll('.slot-act').length).toBeGreaterThan(0);
+    await focusKind('raw');
+    expect(document.querySelectorAll('.action-dock .btn').length).toBeGreaterThan(0);
+    expect(document.querySelector('.grid-edit, .studio-stage .btn-stage'),
+      'a staged card can be taken over').not.toBeNull();
+
+    cardsSetSource('live');
+    expect(document.querySelectorAll('.action-dock .btn')).toHaveLength(0);
+    expect(document.querySelectorAll('.layout-chip')).toHaveLength(0);
+    backToDefaults();
   });
 
   it('a RAW tile offers the star and the crop', async () => {
     STATE.buffer = [frame('a1', '14', { featured: true })];
-    await renderCards();
-    const html = document.querySelectorAll('.cards-col')[1].innerHTML;
+    await focusKind('raw');
+    const html = document.getElementById('cards-body').innerHTML;
     expect(html).toContain('cardsToggleRaw');
     expect(html).toContain('cardsCropRaw');
+    backToDefaults();
   });
 
   it('a single featured track offers OFF CARD; a playlist offers CLEAR CARD', async () => {
@@ -589,5 +643,141 @@ describe('the degraded state when the engine is not there', () => {
   it('is a no-op with no view in the document', async () => {
     document.body.innerHTML = '';
     await expect(renderCards()).resolves.toBeUndefined();
+  });
+});
+
+// ------------------------------------------------------------- the layout picker
+
+describe('the layout picker', () => {
+  beforeEach(() => {
+    globalThis.fetch = async (path) => new Response(
+      JSON.stringify(path === '/api/buffer-summary' ? { featured: [] }
+        : (path === '/api/pulse' ? { pulse: null } : [])),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  });
+
+  const heroable = (over) => post('fn-hero', { hero_filename: 'h.webp', ...over });
+
+  it('writes the descriptor the engine reads, and stages exactly one change', () => {
+    STATE.posts = [heroable()];
+    cardsSetLayout('text', 'n-fn-hero', 'hero');
+
+    expect(STATE.posts[0].card).toEqual({ layout: 'hero' });
+    expect(STATE.staged.posts).toBe(1);
+    expect(window.RecentIndex.layoutFor('text', STATE.posts[0])).toBe('hero');
+  });
+
+  // Reversibility layer 1, structural: `default` is always on screen, pressing
+  // it runs this same mutator, and it stages +1 the way every other gesture in
+  // the console does. That is why this control needs no undo chip.
+  it('reverses through the standard option, and stages +1 in both directions', () => {
+    STATE.posts = [heroable()];
+    cardsSetLayout('text', 'n-fn-hero', 'hero');
+    cardsSetLayout('text', 'n-fn-hero', 'default');
+
+    expect(STATE.posts[0].card).toBeUndefined();
+    expect(window.RecentIndex.layoutFor('text', STATE.posts[0])).toBe('default');
+    // +1 both ways — never a tally that decrements back toward zero and leaves
+    // publish refusing to run (the audio-shelf lesson, js/console/audio.js).
+    expect(STATE.staged.posts).toBe(2);
+  });
+
+  it('keeps other descriptor keys when only the layout goes back to default', () => {
+    // The descriptor is an object so future per-card decisions join it as keys.
+    // Going back to the standard tile must drop the layout, not the object.
+    STATE.posts = [heroable({ card: { layout: 'hero', note: 'keep me' } })];
+    cardsSetLayout('text', 'n-fn-hero', 'default');
+    expect(STATE.posts[0].card).toEqual({ note: 'keep me' });
+  });
+
+  it('refuses a layout the entry cannot wear, and stages nothing', () => {
+    // No hero image, so CARD_GATES.text.hero vetoes it. A control that could be
+    // switched on to no effect would be lying about what publish produces.
+    STATE.posts = [post('fn-plain')];
+    cardsSetLayout('text', 'n-fn-plain', 'hero');
+
+    expect(STATE.posts[0].card).toBeUndefined();
+    expect(STATE.staged.posts).toBe(0);
+  });
+
+  it('refuses a name the engine does not register', () => {
+    STATE.posts = [heroable()];
+    cardsSetLayout('text', 'n-fn-hero', 'no-such-layout');
+    expect(STATE.posts[0].card).toBeUndefined();
+    expect(STATE.staged.posts).toBe(0);
+  });
+
+  it('stages nothing when the layout is already the one asked for', () => {
+    STATE.posts = [heroable()];
+    cardsSetLayout('text', 'n-fn-hero', 'hero');
+    cardsSetLayout('text', 'n-fn-hero', 'hero');
+    expect(STATE.staged.posts).toBe(1);
+  });
+
+  it('offers every registered layout for the kind, and no others', async () => {
+    STATE.posts = [heroable()];
+    expect(await focusKind('text')).toBeGreaterThan(-1);
+
+    const chips = [...document.querySelectorAll('.layout-chip')];
+    expect(chips.map((c) => c.querySelector('.layout-chip-name').textContent.trim()))
+      .toEqual(window.RecentIndex.cardLayouts.text);
+    backToDefaults();
+  });
+
+  // A picker that cannot pick is furniture. Today only `text` has a second
+  // layout, so every other kind must render no picker at all.
+  it('renders no picker for a kind with a single registered layout', async () => {
+    STATE.buffer = [frame('a1', '14', { featured: true })];
+    await renderCards();
+    const slots = _cardSlots(_stagedInputs());
+    const at = slots.findIndex((s) => s && s.kind === 'raw');
+    expect(at).toBeGreaterThan(-1);
+    cardsSelectSlot(at);
+
+    expect(window.RecentIndex.cardLayouts.photo).toHaveLength(1);
+    expect(document.querySelectorAll('.layout-chip')).toHaveLength(0);
+    backToDefaults();
+  });
+});
+
+// ------------------------------------------------- the descriptor rides publish
+
+describe('card descriptors survive the publish serializer', () => {
+  it('carries card:{layout} for every kind that can hold one', () => {
+    STATE.buffer = [frame('a1', '14', { featured: true, card: { layout: 'hero' } })];
+    STATE.archive = [photo('one', { card: { layout: 'hero' } })];
+    STATE.audio = [track('t-one', { card: { layout: 'hero' } })];
+    STATE.posts = [post('fn-001', { card: { layout: 'hero' } })];
+
+    const bundle = buildBundle();
+    expect(JSON.parse(bundle['data/buffer.json'])[0].card).toEqual({ layout: 'hero' });
+    expect(JSON.parse(bundle['data/archive.json'])[0].card).toEqual({ layout: 'hero' });
+    expect(JSON.parse(bundle['data/audio.json'])[0].card).toEqual({ layout: 'hero' });
+    expect(JSON.parse(bundle['data/posts.json'])[0].card).toEqual({ layout: 'hero' });
+  });
+
+  // The guarantee an untouched fork depends on: adding the pass-through must not
+  // add a key to a single entry that never chose a layout.
+  it('emits nothing at all for an entry that never chose one', () => {
+    STATE.buffer = [frame('a1', '14', { featured: true })];
+    STATE.archive = [photo('one')];
+    STATE.audio = [track('t-one')];
+
+    const bundle = buildBundle();
+    for (const file of ['data/buffer.json', 'data/archive.json', 'data/audio.json']) {
+      expect(Object.keys(JSON.parse(bundle[file])[0])).not.toContain('card');
+    }
+  });
+
+  // A tombstone renders nowhere, so a layout on one would describe a card that
+  // cannot exist — and the retire/dark branches must stay whitelists.
+  it('never emits a descriptor on a dark frame or a retired track', () => {
+    STATE.buffer = [frame('a1', '14', { dark: true, darked_at: '2026-08-20', card: { layout: 'hero' } })];
+    STATE.audio = [track('t-gone', { retired: true, retired_at: '2026-08-20', card: { layout: 'hero' } })];
+
+    const bundle = buildBundle();
+    expect(JSON.parse(bundle['data/buffer.json'])[0].card).toBeUndefined();
+    expect(JSON.parse(bundle['data/audio.json'])[0].card).toBeUndefined();
   });
 });

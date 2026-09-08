@@ -22,7 +22,7 @@ globalThis.fetch = async () => new Response('[]', { status: 200 });
 const { STATE } = await import('../js/console-state.js');
 const { refreshStageIndicators } = await import('../js/console-ui.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
 
 // Everything refreshStageIndicators writes, unguarded ids included.
 function seedDom() {

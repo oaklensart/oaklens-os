@@ -34,8 +34,11 @@ export const STATE = {
   friends:    [],   // {id, name, tag, location, url, added_at} — About §004 NETWORK / FRIENDS OF
   library:    [],   // {id, filename, hash, added_at, _uploaded, _uploading, _uploadError} — pre-staged, never published
   audio:      [],   // {id, slug, filename, title, sub, duration, peaks, featured, episode, download, added_at}
+  // Composed homepage cards — the owner's own, overlaid on the automatic grid.
+  // {id, order, source, media, folder, focus, cardFocus, title, tease, label, link, card, img, added_at}
+  cards:      [],
   staged:     {     // tracks unpublished changes per surface
-    buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0
+    buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0, cards: 0
   },
   stagedLog:  []    // per-ITEM ledger of those changes — see STAGE TRACKING below
 };
@@ -116,6 +119,7 @@ export function save() {
     lean.posts = lean.posts.filter(keep('posts'));
     lean.library = lean.library.filter(keep('library'));
     lean.audio = (lean.audio || []).filter(keep('audio'));
+    lean.cards = (lean.cards || []).filter(keep('cards'));
 
     const json = JSON.stringify(lean);
     const sizeKB = Math.round(json.length / 1024);
@@ -307,6 +311,36 @@ export function unstageChange(surface, id, rowSnapshot = null) {
   bumpStage(surface, -1);   // bumpStage runs the indicator refresh + save
 }
 
+/**
+ * Restore a surface's ledger row to a prior SNAPSHOT — the reverse of a whole
+ * EDIT SESSION rather than of a single stageChange (that is unstageChange). An
+ * edit can fold several counted gestures onto one row (typing, then a layout
+ * pick), so the counter reversal is the EXACT delta — (snapshot gestures −
+ * current gestures), read off each row's `n` — never a flat −1. `rowSnapshot`
+ * null means there was no row before: the row and every gesture it counted go.
+ *
+ * Like unstageChange, this belongs to the ledger and NOT to a surface — a
+ * surface's every gesture is +1, and the one place allowed to hand a change back
+ * is here (tests/guards.test.js pins that boundary). bumpStage runs the indicator
+ * refresh and the save, so the on-screen "PENDING" badge cannot go stale.
+ *
+ * @param {string} surface
+ * @param {string} id primary entry id — the ledger's dedupe key
+ * @param {object|null} rowSnapshot deep copy of the row before the edit began
+ */
+export function restoreStagedRow(surface, id, rowSnapshot = null) {
+  const i = STATE.stagedLog.findIndex(r => r.surface === surface && r.ids[0] === id);
+  const curN = i >= 0 ? (STATE.stagedLog[i].n || 1) : 0;
+  const preN = rowSnapshot ? (rowSnapshot.n || 1) : 0;
+  if (rowSnapshot) {
+    const copy = JSON.parse(JSON.stringify(rowSnapshot));
+    if (i >= 0) STATE.stagedLog[i] = copy; else STATE.stagedLog.push(copy);
+  } else if (i >= 0) {
+    STATE.stagedLog.splice(i, 1);
+  }
+  bumpStage(surface, preN - curN);   // exact reversal; bumpStage refreshes + saves
+}
+
 /** The ledger row a gesture is about to fold into, deep-copied for the reverse. */
 export function ledgerRowFor(surface, id) {
   const row = STATE.stagedLog.find(r => r.surface === surface && r.ids[0] === id);
@@ -422,8 +456,16 @@ export function trashItem(surface, id) {
     bumpStage(surface, -cancelled);
   }
 
+  // ⚠️ A COMPOSED CARD NEVER QUEUES AN R2 DELETE. Its picture is always either
+  // shared with the entry it was picked from (an archive frame, a wallpaper) or
+  // a library asset that defers its own delete — so deleting the card must not
+  // take the object with it. Deleting a card removes a PRESENTATION, never a
+  // picture. (It would not match the guard below anyway, since a card names its
+  // image in `media` rather than `filename`; saying so here is cheaper than
+  // rediscovering why it matters.)
+  //
   // Queue R2 cleanup for uploaded items
-  if ((removed._uploaded || removed._imported) && removed.filename) {
+  if (surface !== 'cards' && (removed._uploaded || removed._imported) && removed.filename) {
     const base = removed.filename.replace(/\.[^.]+$/, '');
     let keys;
     if (surface === 'audio') {
@@ -453,15 +495,24 @@ export function trashItem(surface, id) {
   save();
   renderTrash();
   // Re-render affected surface
+  // ⚠️ Read off the global, every one of them. This module's header says the
+  // render* family "resolve through the global scope at call time", and until
+  // 2026-09-07 this map did not honour it: eight bare identifiers, all evaluated
+  // while BUILDING the object, so a renderer that happened not to be defined
+  // threw a ReferenceError that took down the whole delete gesture — not just
+  // the repaint it was reaching for. The `?.()` below was already written to
+  // tolerate a missing renderer; this makes that tolerance real.
+  const R = globalThis;
   const renderers = {
-    buffer: renderBuffer,
-    archive: renderArchive,
-    posts: () => { renderFN(); fnNewPost(); },
-    wallpapers: renderWall,
-    barrel: renderBarrel,
-    friends: renderNetwork,
-    library: renderLibrary,
-    audio: renderAudio,
+    buffer: R.renderBuffer,
+    archive: R.renderArchive,
+    posts: () => { R.renderFN?.(); R.fnNewPost?.(); },
+    wallpapers: R.renderWall,
+    barrel: R.renderBarrel,
+    friends: R.renderNetwork,
+    library: R.renderLibrary,
+    audio: R.renderAudio,
+    cards: R.renderCards,
   };
   renderers[surface]?.();
   showToast("Moved to trash: " + sessionTrash[0].label, { kind: 'warning' });
@@ -494,12 +545,26 @@ export function trashRestore(trashIndex) {
   // shipped, so fall back to the old behaviour for them.
   const owed = trashed.cancelled == null ? 1 : trashed.cancelled;
   bumpStage(trashed.surface, trashed.item._imported ? -1 : owed);
+  // ⚠️ RANKS STAY UNIQUE. A composed card carries `order` — a rank, never a slot
+  // index — and every card mutator recompacts so the row can have no holes and
+  // no ties. Restoring one puts its OLD rank back into a row that may have moved
+  // on (a card composed since took the rank it vacated), and two cards sharing
+  // `order: 1` leaves the grid sorting them by whatever the array happens to
+  // hold. Recompact on the way back in: the restored card keeps its place, and
+  // everything after it shifts down by one the way a fresh insert would.
+  if (trashed.surface === 'cards') {
+    STATE.cards
+      .slice()
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      .forEach((c, i) => { c.order = i + 1; });
+  }
   // Cancel any queued R2 deletion for this item
   setPendingR2Deletes(_pendingR2Deletes.filter(d => d.entryId !== trashed.item.id));
   save();
   if (trashed.surface === 'library') scheduleLibrarySync();
   renderBuffer(); renderArchive(); renderFN();
   renderWall(); renderBarrel(); renderNetwork(); renderLibrary(); renderAudio(); renderTrash();
+  globalThis.renderCards?.();
   showToast("Restored: " + trashed.label, { kind: 'success' });
 }
 
@@ -645,7 +710,8 @@ export function resetConsole() {
   setPendingR2Deletes([]);
   Object.assign(STATE, {
     buffer: [], archive: [], posts: [], wallpapers: [], barrel: [], friends: [], library: [], audio: [],
-    staged: { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0 },
+    cards: [],
+    staged: { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0, cards: 0 },
     stagedLog: []
   });
   refreshStageIndicators();

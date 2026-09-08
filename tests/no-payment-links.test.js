@@ -53,7 +53,9 @@ const CONFIG_FILES = ['site.config.js', 'site.config.example.js'];
 /** Everything that ships to a browser: markup, styles, client scripts. */
 function servedFiles(dir = ROOT, out = []) {
   for (const name of readdirSync(dir)) {
-    if (['node_modules', '.git', '.wrangler', 'docs', 'tests', 'dist'].includes(name)) continue;
+    // `.claude` — agent scratch, and `.claude/worktrees/` holds whole checkouts
+    // of this repo. Same list tests/guards.test.js keeps, same reason.
+    if (['node_modules', '.git', '.claude', '.wrangler', 'docs', 'tests', 'dist'].includes(name)) continue;
     const abs = join(dir, name);
     if (statSync(abs).isDirectory()) servedFiles(abs, out);
     else {

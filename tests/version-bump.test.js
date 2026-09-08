@@ -154,5 +154,12 @@ describe('?v= bumped-on-change', () => {
     }
 
     expect(failures, `\n${failures.join('\n')}\n`).toEqual([]);
-  });
+  // This check reads every versioned asset at the base ref through its own
+  // `git show`, so it spends its time in dozens of subprocesses rather than in
+  // JS. Vitest's 5s default was never a budget chosen for that: it holds when
+  // the file runs alone (~2.5s) and blows when the full suite runs it alongside
+  // a hundred others competing for the same CPU, which reads as a flaky guard
+  // and trains people to re-run instead of look. The number is deliberate — if
+  // this ever genuinely takes 30s, the batching is the thing to fix.
+  }, 30000);
 });
