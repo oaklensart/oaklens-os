@@ -44,6 +44,19 @@ export const BACKFILL = Object.freeze({
   location: { name: '', region: '', coords: [0, 0] },
   // Filtered against pages{} before render, so an empty nav is a valid site.
   nav: [],
+  // The IANA zone this project keeps its calendar in — the one `localDay()`
+  // formats server-rendered dates in (src/shared/text.js). It matters because
+  // the Worker runs in UTC while the console stamps a frame's date with the
+  // photographer's LOCAL getDate(): a frame shot at 22:12 Pacific is already
+  // tomorrow in UTC, so without this the manifest and the buffer summary would
+  // disagree with the date baked into the picture.
+  //
+  // UTC is the engine default deliberately. This was hardcoded to one
+  // instance's zone until 2026-09-08, which silently gave every fork Pacific
+  // dates — identity in engine code, exactly what CLAUDE.md forbids. A neutral
+  // default is wrong for everyone equally and right for nobody by accident, so
+  // an instance that cares names its own zone (see site.config.example.js).
+  timezone: 'UTC',
   // The backfill stays 'aperture' on purpose, even though the example config
   // now ships 'selenium': this value only applies when a config OMITS theme{}
   // entirely, and every such site has been rendering aperture since the

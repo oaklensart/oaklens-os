@@ -17,8 +17,11 @@
 import { describe, it, expect } from 'vitest';
 import { _featuredRawFrames } from '../src/api/site-meta.js';
 
-// Midday-UTC stamps stay on their calendar date in America/Los_Angeles, so the
-// day buckets below are unambiguous regardless of where the test runs.
+// Midday-UTC stamps stay on their calendar date in every zone within 12 hours
+// of UTC, so the day buckets below are unambiguous regardless of where the test
+// runs AND of what `timezone` the config names — which matters now that it is
+// configurable (engine default UTC, this instance Pacific). Move these to
+// midnight and the test starts asserting one instance's calendar.
 const D1 = '2025-01-01T12:00:00.000Z';
 const D2 = '2025-01-02T12:00:00.000Z';
 const D3 = '2025-01-03T12:00:00.000Z';

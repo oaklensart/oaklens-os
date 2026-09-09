@@ -20,6 +20,15 @@ export default Object.freeze({
     region: '',     // optional; joined as "YOUR CITY, ST" in the footer
     coords: [0, 0], // weather API (Open-Meteo) — your city's lat/lon
   },
+  // Your calendar, as an IANA zone name ('Europe/Berlin', 'Asia/Tokyo',
+  // 'America/New_York' — the full list is the tz database).
+  //
+  // What it changes: the Worker runs in UTC, but the console stamps each frame
+  // with YOUR local date. Set this and the dates the site renders — the archive
+  // manifest, the buffer summary's "days" count — agree with the date printed
+  // on the picture. Leave it out and both fall back to UTC, which is off by a
+  // day for anything you publish in the evening (or the morning, going east).
+  // timezone: 'America/New_York',
   // Nav bar (desktop + mobile), injected at the edge. Items pointing at a
   // page disabled in pages{} below are filtered automatically.
   nav: [

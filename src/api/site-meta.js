@@ -194,7 +194,7 @@ export async function handleManifest(request, env) {
        width="480" alt="${escapeHtml(entry.title)}" loading="lazy">
   <h2>${escapeHtml(entry.title)}</h2>
   <p class="sub">${escapeHtml(entry.sub)}</p>
-  <p class="meta">${escapeHtml(entry.location)} · ${localDay(entry.added_at)}</p>${hashHtml}
+  <p class="meta">${escapeHtml(entry.location)} · ${localDay(entry.added_at, siteConfig.timezone)}</p>${hashHtml}
 </article>`;
   }).join('\n');
 
@@ -545,8 +545,8 @@ ${[channelLines, items].filter(Boolean).join('\n')}
 export function _featuredRawFrames(arr, limit = 4) {
   const entries = Array.isArray(arr) ? arr : [];
   const numbered = [...entries].sort((a, b) => {
-    const d = localDay(a.captured_at || a.published_at)
-      .localeCompare(localDay(b.captured_at || b.published_at));
+    const d = localDay(a.captured_at || a.published_at, siteConfig.timezone)
+      .localeCompare(localDay(b.captured_at || b.published_at, siteConfig.timezone));
     return d !== 0 ? d : (a.filename || '').localeCompare(b.filename || '');
   });
   const numById = new Map();
@@ -610,8 +610,8 @@ export async function handleBufferSummary(request, env) {
     // Newest by captured_at — unshift() order can't be trusted when backlogged
     // photos with old EXIF dates are uploaded later (mirrors the client logic).
     const latest = arr.reduce((a, b) => ((a.captured_at || '') > (b.captured_at || '') ? a : b));
-    const days = new Set(arr.map((b) => localDay(b.captured_at || b.published_at))).size;
-    const lastDate = localDay(latest.captured_at || latest.published_at).slice(5).replace('-', '.');
+    const days = new Set(arr.map((b) => localDay(b.captured_at || b.published_at, siteConfig.timezone))).size;
+    const lastDate = localDay(latest.captured_at || latest.published_at, siteConfig.timezone).slice(5).replace('-', '.');
 
     return new Response(JSON.stringify({
       frames: arr.length,

@@ -473,6 +473,102 @@ describe('exiting edit mode and canceling', () => {
     expect(STATE.staged.cards, 'reverts staged counter so it does not leave a phantom staged change').toBe(0);
   });
 
+  // ---- the Cancel confirm, and the list it kept drifting away from ----
+  //
+  // Cancelling a TAKEN-OVER slot always ends the same way — the slot goes back
+  // to automatic — so the thing under test is not the discard, it is the
+  // CONFIRM. That prompt is the only thing standing between "I changed my mind
+  // about taking this slot" and "I just lost the work I did on it", and it is
+  // gated on an is-this-untouched check.
+  //
+  // That check used to be a hand-written list of five fields sitting beside a
+  // snapshot that captured more, and it drifted twice: the link and its
+  // provenance first (2026-09-07), then `cardFocus` (2026-09-08) — crop a
+  // taken-over card, hit Cancel, and it was thrown away without a word, because
+  // a comparison that never looked at the crop concluded nothing had changed.
+  // Both now read one table (EDIT_FIELDS), so these tests are really asking:
+  // does every field an edit can touch still reach the confirm?
+  const withConfirm = (answer, fn) => {
+    const before = globalThis.confirm;
+    let asked = 0;
+    globalThis.confirm = () => { asked += 1; return answer; };
+    try { fn(); } finally { globalThis.confirm = before; }
+    return asked;
+  };
+
+  const takeOverArchiveSlot = async () => {
+    STATE.archive = [{
+      id: 'p-3', slug: 'ridge', filename: 'R.webp', title: 'RIDGE LINE',
+      location: 'Sierra, 2026', added_at: '2026-08-02', cardFocus: '50% 50%',
+    }];
+    await cards.renderCards();
+    const at = (cards._cardSlots(cards._stagedInputs()) || [])
+      .findIndex((s) => s && s.kind === 'archive');
+    expect(at).toBeGreaterThan(-1);
+    cards.cardsSelectSlot(at);
+    cards.cardsEditSlot(at);
+    expect(STATE.cards).toHaveLength(1);
+    return STATE.cards[0];
+  };
+
+  it('asks before discarding a taken-over card whose CROP was changed', async () => {
+    const card = await takeOverArchiveSlot();
+    expect(card.cardFocus, 'takeover seeds the crop from the entry').toBe('50% 50%');
+
+    // What cardsCropCard() leaves behind once the focal picker commits.
+    card.cardFocus = '30% 80%';
+
+    const asked = withConfirm(true, () => cardsCancelEdit());
+    expect(asked, 'a changed crop is a change — Cancel must ask').toBe(1);
+    expect(STATE.cards).toHaveLength(0);
+  });
+
+  it('keeps the card when the crop confirm is declined', async () => {
+    const card = await takeOverArchiveSlot();
+    card.cardFocus = '30% 80%';
+
+    const asked = withConfirm(false, () => cardsCancelEdit());
+    expect(asked).toBe(1);
+    expect(STATE.cards, 'declining the confirm keeps the card AND the crop').toHaveLength(1);
+    expect(STATE.cards[0].cardFocus).toBe('30% 80%');
+  });
+
+  it('asks before discarding a taken-over card that was made free-form', async () => {
+    const card = await takeOverArchiveSlot();
+    expect(card.link, 'takeover seeds the way home').toBeTruthy();
+
+    // ✕ MAKE FREE-FORM cuts the pair.
+    delete card.link;
+    delete card.source;
+
+    const asked = withConfirm(true, () => cardsCancelEdit());
+    expect(asked, 'losing the link is a change — Cancel must ask').toBe(1);
+  });
+
+  it('still discards an untouched taken-over card without asking', async () => {
+    await takeOverArchiveSlot();
+    const asked = withConfirm(true, () => cardsCancelEdit());
+    expect(asked, 'nothing changed — no prompt to answer').toBe(0);
+    expect(STATE.cards).toHaveLength(0);
+  });
+
+  it('compares every field it captures — the snapshot and the check share one table', () => {
+    // The structural half: if a future field is added to the capture but not to
+    // EDIT_FIELDS, or vice versa, the two can disagree again. They cannot,
+    // because there is only one list and both read it — pinned here so a
+    // refactor that reintroduces a longhand copy fails loudly.
+    const table = SOURCE.match(/const EDIT_FIELDS = Object\.freeze\(\[([\s\S]*?)\]\);/);
+    expect(table, 'EDIT_FIELDS must exist').not.toBeNull();
+    for (const field of
+      ['title', 'tease', 'label', 'media', 'folder', 'cardFocus', 'palette', 'link', 'source', 'card']) {
+      expect(table[1], `EDIT_FIELDS must cover ${field}`).toContain(`'${field}'`);
+    }
+    expect(
+      SOURCE,
+      'the untouched check must derive from the snapshot, not re-list fields longhand',
+    ).toContain('_editIsUntouched(card, _editSnapshot)');
+  });
+
   it('cardsCancelEdit on a brand-new card discards it', async () => {
     await cards.renderCards();
     cardsCompose();

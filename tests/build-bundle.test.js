@@ -206,9 +206,16 @@ describe('buildBundle()', () => {
     ]);
   });
 
+  // No 'img'. It was whitelisted from the day composed cards landed, for an
+  // image ladder that was handed off and never shipped — nothing in the repo
+  // ever wrote or read it, so the entry described a mechanism that did not
+  // exist. Removed 2026-09-08. This list pinned the field as PRESENT, which is
+  // why it never caught it: a whitelist test proves what publish will emit, not
+  // that anything fills it. The ladder is still tracked in docs/ideas/index.md,
+  // and lands its field back here alongside the code that writes it.
   it('composed cards keep every whitelisted field', () => {
     expect(keysOf('data/cards.json')).toEqual([
-      'added_at', 'card', 'cardFocus', 'focus', 'folder', 'id', 'img', 'label',
+      'added_at', 'card', 'cardFocus', 'focus', 'folder', 'id', 'label',
       'link', 'media', 'order', 'palette', 'source', 'tease', 'title',
     ]);
   });

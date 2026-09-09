@@ -756,6 +756,69 @@ function _sweepGhostCards() {
   }
 }
 
+// Every field an edit session can touch, as snapshot key → card field.
+//
+// ONE list, because keeping two by hand is exactly how this drifted twice. The
+// snapshot captured a field, the Cancel check compared a shorter list written
+// out longhand beside it, and the gap was silent both times: first the link and
+// its provenance (2026-09-07 — restored in the revert branch below), then
+// `cardFocus` (2026-09-08 — a crop on a taken-over slot was discarded with no
+// confirm, because a check that never looked at it concluded nothing had
+// changed). Capture and comparison now read this table, so a new field is
+// covered by both the moment it lands here, or by neither.
+//
+// `initialLayout` → `card` is why this is a table and not a naming convention:
+// the rail's layout picker writes `card.card = { layout }`, so the key and the
+// field genuinely differ.
+const EDIT_FIELDS = Object.freeze([
+  ['initialTitle', 'title'],
+  ['initialTease', 'tease'],
+  ['initialLabel', 'label'],
+  ['initialMedia', 'media'],
+  // The source folder travels with the filename: a wallpaper's derivatives live
+  // outside archive/, so a media revert that forgot the folder rebuilds a 404.
+  ['initialFolder', 'folder'],
+  ['initialCardFocus', 'cardFocus'],
+  ['initialPalette', 'palette'],
+  // The link and the provenance behind it. ✕ MAKE FREE-FORM deletes both, and
+  // a Cancel that could not put them back turned "changed my mind" into a
+  // permanent loss: the card kept its words and its picture but the way home
+  // to the archive photo / field note / track was gone, with no gesture left
+  // that could rebuild it. They travel together — a link with no source cannot
+  // name where it points, and a source with no link is a card that remembers
+  // the archive photo but no longer opens it.
+  ['initialLink', 'link'],
+  ['initialSource', 'source'],
+  ['initialLayout', 'card'],
+]);
+
+// The `initial*` half of a snapshot, read off the card as it stands now.
+// Objects are copied, not referenced — a snapshot that aliased `card.card` would
+// mutate along with the edit it exists to undo.
+function _captureEditFields(card) {
+  const snap = {};
+  for (const [key, field] of EDIT_FIELDS) {
+    const v = card[field];
+    snap[key] = (v && typeof v === 'object') ? { ...v } : (v || '');
+  }
+  return snap;
+}
+
+// Has anything this session could touch actually changed? Only fields the
+// snapshot really captured are compared, so a thinner snapshot stays honest
+// rather than reporting phantom edits against keys it never held.
+function _editIsUntouched(card, snap) {
+  return EDIT_FIELDS.every(([key, field]) => {
+    if (!(key in snap)) return true;
+    const was = snap[key];
+    const now = card[field];
+    if ((was && typeof was === 'object') || (now && typeof now === 'object')) {
+      return JSON.stringify(was || null) === JSON.stringify(now || null);
+    }
+    return (now || '') === (was || '');
+  });
+}
+
 // The snapshot Cancel reverts to, for an EXISTING composed card becoming the one
 // edited — whether reached through ✎ EDIT THIS CARD (cardsEditSlot) or by
 // selecting the card's slot (cardsSelectSlot). Without it, Cancel has nothing to
@@ -776,21 +839,7 @@ function _snapshotExisting(card) {
     id: card.id,
     isNewFromAuto: false,
     preEditRow: ledgerRowFor('cards', card.id),
-    initialTitle: card.title || '',
-    initialTease: card.tease || '',
-    initialLabel: card.label || '',
-    initialMedia: card.media || '',
-    initialFolder: card.folder || '',
-    initialCardFocus: card.cardFocus || '',
-    initialPalette: card.palette || '',
-    initialLayout: card.card ? { ...card.card } : null,
-    // The link and the provenance behind it. ✕ MAKE FREE-FORM deletes both, and
-    // a Cancel that could not put them back turned "changed my mind" into a
-    // permanent loss: the card kept its words and its picture but the way home
-    // to the archive photo / field note / track was gone, with no gesture left
-    // that could rebuild it.
-    initialLink: card.link || '',
-    initialSource: card.source ? { ...card.source } : null,
+    ..._captureEditFields(card),
   };
 }
 
@@ -804,11 +853,7 @@ export function cardsCancelEdit() {
         _discardComposedCard(card.id);
         toast('New card cancelled', 'info');
       } else if (_editSnapshot.isNewFromAuto) {
-        const untouched = (card.title || '') === _editSnapshot.initialTitle
-          && (card.tease || '') === _editSnapshot.initialTease
-          && (card.label || '') === _editSnapshot.initialLabel
-          && (card.media || '') === _editSnapshot.initialMedia
-          && (card.palette || '') === (_editSnapshot.initialPalette || '');
+        const untouched = _editIsUntouched(card, _editSnapshot);
         if (untouched) {
           _discardComposedCard(card.id);
           toast('Edit cancelled — slot returned to automatic', 'info');
@@ -956,14 +1001,15 @@ export function cardsCompose() {
   toast('✓ New card — give it a picture or a line', 'success');
   _mode = 'studio';
   _focusComposed(card.id);
+  // Built the same way as the other two, though Cancel on a brand-new card
+  // discards unconditionally and compares nothing today. Five hand-written empty
+  // strings implied a comparison that never happened; one helper keeps all three
+  // snapshots the same shape, so the day this branch does need to ask "did they
+  // write anything?", the answer is already captured.
   _editSnapshot = {
     id: card.id,
     isBrandNew: true,
-    initialTitle: '',
-    initialTease: '',
-    initialLabel: '',
-    initialMedia: '',
-    initialPalette: '',
+    ..._captureEditFields(card),
   };
   _repaint();
   return card;
@@ -1209,15 +1255,13 @@ export function cardsEditSlot(index) {
   _stageCard(card, 'add');
   _slotIndex = Number(index);
   _focusComposed(card.id);
+  // The full capture, not a hand-picked subset: a takeover writes `link` and
+  // `source` onto the card before this runs, so a snapshot that omitted them let
+  // ✕ MAKE FREE-FORM count as "nothing changed" and discard without asking.
   _editSnapshot = {
     id: card.id,
     isNewFromAuto: true,
-    initialTitle: card.title || '',
-    initialTease: card.tease || '',
-    initialLabel: card.label || '',
-    initialMedia: card.media || '',
-    initialCardFocus: card.cardFocus || '',
-    initialPalette: '',
+    ..._captureEditFields(card),
   };
   toast('✓ This card is yours now — write on it', 'success');
   _repaint();

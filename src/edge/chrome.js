@@ -120,7 +120,7 @@ export async function getFrameOgData(url, env, page) {
       const data = await loadDataJson(url.origin, env, 'data/buffer.json');
       const e = Array.isArray(data) && data.find(x => x.id === f);
       if (!e) return null;
-      const day = localDay(e.captured_at || e.published_at);
+      const day = localDay(e.captured_at || e.published_at, siteConfig.timezone);
       return {
         // Quiet title: the domain row already shows the site's own host, and
         // the card image carries the FRAME // date branding — so the title

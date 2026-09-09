@@ -25,6 +25,38 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-08 (your site knows what day it is)
+
+**Your dates were being rendered in California.** The engine had one timezone
+written into its code — the author's — so no matter where you are, the dates the
+site printed came from Pacific time. If you publish in the evening (or the
+morning, if you are east of UTC), the archive's dates and your buffer's "days"
+count could be a day off from the date stamped on the picture itself.
+
+**Set yours:**
+
+```js
+// site.config.js
+timezone: 'Europe/Berlin',   // your IANA zone name
+```
+
+Any name from the tz database works — `Asia/Tokyo`, `America/New_York`,
+`Australia/Sydney`. Leave it out and you get **UTC**, which is neutral and
+predictable rather than someone else's hometown. A typo falls back to UTC too,
+rather than breaking the page.
+
+Not action-required — nothing breaks if you skip it — but it is a one-line edit
+that makes your dates yours.
+
+**Also in this release, nothing you need to do:**
+
+- **Cards: Cancel asks before it throws work away.** Taking over an automatic
+  card slot and then cropping the picture, or cutting its link with ✕ MAKE
+  FREE-FORM, counted as "nothing changed" — so Cancel discarded it silently. It
+  now asks first, and keeps the card if you say no.
+- **A field that did nothing stopped being published.** Composed cards carried
+  an `img` entry in the published data that nothing ever wrote or read. Removed.
+
 ## 2026-09-07 (build your own homepage cards)
 
 **You can now make a card.** Open Cards and press **＋ COMPOSE A CARD**. You get

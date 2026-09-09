@@ -355,10 +355,13 @@ export function buildBundle() {
       // way to the live grid, so a card tinted in the studio published grey.
       ...(c.palette ? { palette: c.palette } : {}),
       ...(c.card ? { card: c.card } : {}),
-      // The measured picture, for the image ladder. Stored rather than measured
-      // at render time: the ladder must be deterministic and the offline export
-      // has no layout to measure.
-      ...(c.img ? { img: c.img } : {}),
+      // No `img` here. A measured-picture field for the image ladder was
+      // serialized from the day composed cards landed, but the ladder itself was
+      // handed off and nothing ever wrote or read it — a whitelist entry for a
+      // field with no producer, describing a mechanism that does not exist.
+      // Removed 2026-09-08. The ladder is still tracked (docs/ideas/index.md,
+      // "The homepage card engine"); when it lands it adds its field back here
+      // in the same breath as the code that fills it.
     })), null, 2),
   };
   // Posts as individual markdown files
