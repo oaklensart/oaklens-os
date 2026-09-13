@@ -44,9 +44,14 @@ try {
      else. It is a <script src>, not a module, so its version lives on this tag;
      the import-map entry beside the console modules exists so dev/sw.js and
      index.html can never disagree with it (tests/guards.test.js). -->
-<script src="/js/recent-index.js?v=23" defer></script>
+<script src="/js/recent-index.js?v=31" defer></script>
+<!-- The shared audio module, loaded for the same reason and on the same terms:
+     the SETS shelf resolves "what does this set play" through
+     AudioPlayer.resolveSetTracks rather than carrying a second copy of it. Its
+     DOM half bails here too — no player is mounted in this document. -->
+<script src="/js/audio-player.js?v=9" defer></script>
 
-<link rel="stylesheet" href="/css/field-console.css?v=71">
+<link rel="stylesheet" href="/css/field-console.css?v=82">
 </head>
 <body>
 
@@ -536,6 +541,9 @@ try {
           <span class="fn-bar-toggle-label">Hide the bottom nav</span>
           <kbd>more rows</kbd>
         </button>
+        <button class="fn-menu-item" role="menuitem" onclick="fnMenuRun('share')">
+          <span class="fn-menu-mark">⤴</span> Share this note <kbd>link + images</kbd>
+        </button>
         <span class="fn-menu-rule" aria-hidden="true"></span>
         <button class="fn-menu-item fn-menu-item--danger" id="fn-delete-btn" role="menuitem" style="display:none;" onclick="fnMenuRun('delete')">
           <span class="fn-menu-mark">⌫</span> Delete this note
@@ -735,6 +743,18 @@ try {
            markup would flash before the real state arrives, and the readiness
            booleans only exist after GET /api/site/settings answers. -->
       <div id="audio-feed-card"></div>
+
+      <!-- SETS — a named, ordered list of tracks with its own address at
+           /listen/?set=<slug>. Above the registry because a set is made of it.
+           Rendered entirely by renderAudioSets() (js/console/audio.js). -->
+      <div class="stage-section">
+        <div class="stage-header">
+          <div class="stage-title">SETS · <span class="count" id="audio-sets-count">0</span></div>
+          <button class="btn btn-sm btn-ghost" onclick="_setCreate()"
+            title="A named list of tracks, with its own address">+ NEW SET</button>
+        </div>
+        <div class="aud-sets" id="audio-sets-display"></div>
+      </div>
 
       <div class="stage-section">
         <div class="stage-header">
@@ -1173,6 +1193,20 @@ try {
 
      Rows are rendered by renderPulseLog() into #pulse-log-mobile, the same
      markup the desktop rail gets. -->
+<!-- ---- OVERLAY: the share sheet (chunk 8). The SAME four gestures the studio
+     rail shows inline — one renderer, js/console/share.js shareBlockBody() —
+     for the two surfaces that have no inspector to hang a block on: the Audio
+     shelf's rows and the field-note editor's ⋯ menu. Body is filled at open
+     time; the markup here is only the frame. -->
+<div class="sheet-overlay hidden" id="share-sheet" onclick="if(event.target===this)shareCloseSheet()">
+  <div class="sheet" role="dialog" aria-label="Share this card">
+    <div class="sheet-grabber"></div>
+    <div class="sheet-title" id="share-sheet-title">Share</div>
+    <div class="share-sheet-body" id="share-sheet-body"></div>
+    <p class="control-block-note" id="share-sheet-note"></p>
+  </div>
+</div>
+
 <div class="sheet-overlay hidden" id="pulse-log-sheet" onclick="if(event.target===this)_pulseCloseLog()">
   <div class="sheet" role="menu" aria-label="Recent pulses">
     <div class="sheet-grabber"></div>
@@ -1466,8 +1500,8 @@ try {
   "imports": {
     "/js/console-telemetry.js": "/js/console-telemetry.js?v=2",
     "/js/console-api.js":       "/js/console-api.js?v=11",
-    "/js/console-state.js":     "/js/console-state.js?v=15",
-    "/js/console-ui.js":        "/js/console-ui.js?v=62",
+    "/js/console-state.js":     "/js/console-state.js?v=16",
+    "/js/console-ui.js":        "/js/console-ui.js?v=64",
     "/js/console/chrome.js":    "/js/console/chrome.js?v=13",
     "/js/console/assets.js":    "/js/console/assets.js?v=4",
     "/js/console/utils.js":     "/js/console/utils.js?v=2",
@@ -1475,26 +1509,29 @@ try {
     "/js/console/upload.js":    "/js/console/upload.js?v=4",
     "/js/console/more-views.js": "/js/console/more-views.js?v=5",
     "/js/console/archive.js":   "/js/console/archive.js?v=3",
-    "/js/console/buffer.js":    "/js/console/buffer.js?v=3",
-    "/js/console/fn-editor.js": "/js/console/fn-editor.js?v=7",
-    "/js/console/focal.js":     "/js/console/focal.js?v=7",
+    "/js/console/buffer.js":    "/js/console/buffer.js?v=4",
+    "/js/console/fn-editor.js": "/js/console/fn-editor.js?v=8",
+    "/js/console/card-paint.js": "/js/console/card-paint.js?v=5",
+    "/js/console/focal.js":     "/js/console/focal.js?v=12",
+    "/js/console/share.js":     "/js/console/share.js?v=3",
     "/js/console/asset-library.js": "/js/console/asset-library.js?v=3",
-    "/js/console/audio.js":     "/js/console/audio.js?v=11",
-    "/js/console/cards.js":     "/js/console/cards.js?v=18",
-    "/js/console/publish.js":   "/js/console/publish.js?v=20",
+    "/js/console/audio.js":     "/js/console/audio.js?v=16",
+    "/js/console/cards.js":     "/js/console/cards.js?v=30",
+    "/js/console/publish.js":   "/js/console/publish.js?v=26",
     "/js/console/session.js":   "/js/console/session.js?v=9",
     "/js/console/bench.js":     "/js/console/bench.js?v=1",
     "/js/pulse-packs.js":       "/js/pulse-packs.js?v=3",
     "/js/console/pulse.js":     "/js/console/pulse.js?v=4",
-    "/js/console/init.js":      "/js/console/init.js?v=10",
+    "/js/console/init.js":      "/js/console/init.js?v=11",
     "/js/markdown-engine.js":   "/js/markdown-engine.js?v=4",
-    "/js/recent-index.js":      "/js/recent-index.js?v=23",
+    "/js/recent-index.js":      "/js/recent-index.js?v=31",
+    "/js/audio-player.js":      "/js/audio-player.js?v=9",
     "/js/jpeg-privacy.js":      "/js/jpeg-privacy.js?v=1",
     "/js/raw-lens.js":          "/js/raw-lens.js?v=5",
     "/js/raw-extract.js":       "/js/raw-extract.js?v=4",
     "/js/site-export.js":       "/js/site-export.js?v=4",
     "/js/site-export-core.js":  "/js/site-export-core.js?v=3",
-    "/js/export-manifest.js":   "/js/export-manifest.js?v=15"
+    "/js/export-manifest.js":   "/js/export-manifest.js?v=17"
   }
 }
 </script>

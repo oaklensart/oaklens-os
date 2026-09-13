@@ -34,11 +34,20 @@ export const STATE = {
   friends:    [],   // {id, name, tag, location, url, added_at} — About §004 NETWORK / FRIENDS OF
   library:    [],   // {id, filename, hash, added_at, _uploaded, _uploading, _uploadError} — pre-staged, never published
   audio:      [],   // {id, slug, filename, title, sub, duration, peaks, featured, episode, download, added_at}
+  // Saved audio sets — a named, ordered list of tracks referenced BY SLUG, with
+  // its own permanent address (/listen/?set=<slug>). Its own surface rather
+  // than a second record shape inside `audio`, because a set is not a track:
+  // every public consumer of the registry already discriminates on `filename`
+  // to skip retired tombstones, and a second filename-less record kind would
+  // ride through that guard by accident.
+  // {id, slug, name, tracks: [slug], added_at, retired, retired_at}
+  audioSets:  [],
   // Composed homepage cards — the owner's own, overlaid on the automatic grid.
   // {id, order, source, media, folder, focus, cardFocus, title, tease, label, link, card, img, added_at}
   cards:      [],
   staged:     {     // tracks unpublished changes per surface
-    buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0, cards: 0
+    buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0,
+    audioSets: 0, cards: 0
   },
   stagedLog:  []    // per-ITEM ledger of those changes — see STAGE TRACKING below
 };
@@ -119,6 +128,7 @@ export function save() {
     lean.posts = lean.posts.filter(keep('posts'));
     lean.library = lean.library.filter(keep('library'));
     lean.audio = (lean.audio || []).filter(keep('audio'));
+    lean.audioSets = (lean.audioSets || []).filter(keep('audioSets'));
     lean.cards = (lean.cards || []).filter(keep('cards'));
 
     const json = JSON.stringify(lean);
@@ -175,6 +185,10 @@ export function load() {
   // States saved before the ledger existed have no stagedLog key (or a
   // corrupted one) — normalize so every reader can assume an array.
   if (!Array.isArray(STATE.stagedLog)) STATE.stagedLog = [];
+  // Same for the sets shelf: a state saved before sets existed simply has no
+  // audioSets key (Object.assign leaves the default standing), but a corrupted
+  // or hand-edited one could put a non-array where every reader assumes one.
+  if (!Array.isArray(STATE.audioSets)) STATE.audioSets = [];
 
   // Restore the session trash BEFORE anything reads it — importIntoSurface's
   // resurrection guard and _vouchedEmptyManifests both consult it, and a login
@@ -512,6 +526,7 @@ export function trashItem(surface, id) {
     friends: R.renderNetwork,
     library: R.renderLibrary,
     audio: R.renderAudio,
+    audioSets: R.renderAudioSets,
     cards: R.renderCards,
   };
   renderers[surface]?.();
@@ -710,8 +725,9 @@ export function resetConsole() {
   setPendingR2Deletes([]);
   Object.assign(STATE, {
     buffer: [], archive: [], posts: [], wallpapers: [], barrel: [], friends: [], library: [], audio: [],
-    cards: [],
-    staged: { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0, cards: 0 },
+    audioSets: [], cards: [],
+    staged: { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0,
+      audioSets: 0, cards: 0 },
     stagedLog: []
   });
   refreshStageIndicators();

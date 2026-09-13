@@ -29,6 +29,8 @@ import { toast, escapeHTML, escapeAttrJS, hideOverlay } from './chrome.js';
 import { todayISO, uid, cleanFilename } from './utils.js';
 import { _enqueueUpload } from './upload.js';
 import { fnInsertAtCursor } from './fn-editor.js';
+import { shareStem } from './card-paint.js';
+import { shareTarget, shareOpen } from './share.js';
 
 // Must match js/audio-player.js PEAK_COUNT — one stored resolution serves every
 // display variant, so this number only changes if BOTH sides change together.
@@ -44,6 +46,14 @@ const MAX_AUDIO_BYTES = 128 * 1024 * 1024;
 // and about a quarter of what an uncompressed WAV costs (≈172KB/s for CD
 // stereo). Everything under it plays as fast as the connection allows.
 const HEAVY_BYTES_PER_SEC = 48 * 1024;
+
+// Must match js/recent-index.js AUDIO_MAX_PLAYLIST — the homepage card draws at
+// most this many tracks, so the console refuses to pin a seventh, and a saved
+// set is bounded by the same number for the same reason: a set exists to be
+// borrowed by that card (chunk 5), and a set that could not fit would be a
+// promise the homepage cannot keep. Owner-decided and test-pinned
+// (tests/audio-playlist-card.test.js compares the two files).
+const AUDIO_MAX_PLAYLIST = 6;
 
 // ---- pure helpers ----
 
@@ -279,8 +289,8 @@ export function _audioPromote(id) {
     toast('Removed from homepage card', 'info');
   } else {
     const currentFeatured = STATE.audio.filter((a) => a.featured);
-    if (currentFeatured.length >= 6) {
-      toast('⚠ Maximum 6 tracks on the homepage card', 'warning');
+    if (currentFeatured.length >= AUDIO_MAX_PLAYLIST) {
+      toast(`⚠ Maximum ${AUDIO_MAX_PLAYLIST} tracks on the homepage card`, 'warning');
       return;
     }
     t.featured = true;
@@ -305,6 +315,42 @@ let _lastCardClear = null;
 // Resolve the chip against the shelf AS IT IS NOW. A track that has since been
 // deleted, trashed or re-featured is dropped, and when nothing restorable is
 // left the chip disappears rather than becoming a button that does nothing.
+// ---- the ORDER of the homepage card's tracks ----
+//
+// _audioPromote owns MEMBERSHIP and only ever appends, so until now nothing
+// owned ORDER: the studio's picker hands back the tracks in the order they were
+// ticked, and re-ticking two already-featured tracks the other way round
+// changed nothing at all — neither was added, neither was removed, and the
+// author's reordering was dropped without a word. Found by a code review.
+//
+// It lives HERE, beside the mutator whose invariant it maintains (featured_order
+// is 1..n contiguous over the featured set), rather than in the studio: the
+// studio is a second front door on the audio shelf's mutators, never a second
+// write path (chunk 5). Writing featured_order from cards.js would also have
+// skipped stageChange, so the reorder would not have published.
+//
+// Stages exactly once, and only when something actually moved — pressing
+// confirm on an unchanged list is not a change.
+export function _audioReorderFeatured(slugs) {
+  const want = (Array.isArray(slugs) ? slugs : []).filter(Boolean);
+  const featured = (STATE.audio || []).filter((t) => t && t.featured);
+  if (!featured.length) return false;
+  const rows = want
+    .map((slug) => featured.find((t) => t.slug === slug))
+    .filter(Boolean);
+  // Anything featured that the caller did not name keeps its relative place at
+  // the end, so a partial list can never silently drop a track off the card.
+  for (const t of featured) if (!rows.includes(t)) rows.push(t);
+
+  const moved = rows.some((t, i) => (Number(t.featured_order) || 0) !== i + 1);
+  if (!moved) return false;
+  rows.forEach((t, i) => { t.featured_order = i + 1; });
+  stageChange('audio', { id: rows[0].id, label: 'homepage card — track order', kind: 'feature' });
+  save();
+  if (typeof renderAudio === 'function') renderAudio();
+  return true;
+}
+
 export function _audioCardRestoreTarget() {
   if (!_lastCardClear || !_lastCardClear.length) return null;
   const live = _lastCardClear
@@ -478,6 +524,49 @@ export function _audioInsert(id) {
   audioInsertShortcode(entry.slug);
 }
 
+// ---- ⤴ SHARE (chunk 8) ----
+//
+// The shelf builds its own targets and hands them to js/console/share.js — the
+// same shape focal.js's per-surface entry points have, and the reason it is
+// this way round: resolving what a SET plays needs AudioPlayer and this shelf's
+// own resolver, neither of which the share module can reach from below.
+//
+// The card each one paints is the card the homepage would draw for it: a single
+// track is the audio card, a set is the playlist card wearing the set's name.
+// One builder, so the stamped image is the card and not a third design of it.
+export function _audioShare(id) {
+  const entry = STATE.audio.find((a) => a.id === id);
+  if (!entry || entry.retired) return;
+  const ok = shareOpen(shareTarget({
+    item: { kind: 'audio', data: entry },
+    stem: shareStem({ kind: 'audio', id: entry.slug }),
+    url: `${location.origin}/listen/?a=${encodeURIComponent(entry.slug)}`,
+    name: entry.title || entry.slug,
+    staged: !entry._imported,
+  }));
+  if (!ok) toast('this track has no address yet', 'error');
+}
+
+export function _setShare(id) {
+  const set = _setById(id);
+  if (!set || set.retired) return;
+  const resolve = _setResolver();
+  const tracks = resolve ? resolve(set, STATE.audio) : [];
+  if (!tracks.length) return toast('put a track in this set first', 'error');
+  const ok = shareOpen(shareTarget({
+    // More than one track is the playlist card, exactly one is the single card
+    // — composedItem's own rule, so a set shares as the card it publishes as.
+    item: tracks.length > 1
+      ? { kind: 'audio', data: { isPlaylist: true, tracks }, set }
+      : { kind: 'audio', data: tracks[0], set },
+    stem: shareStem({ kind: 'set', id: set.slug }),
+    staged: !set._imported,
+    url: `${location.origin}/listen/?set=${encodeURIComponent(set.slug)}`,
+    name: _setLabel(set),
+  }));
+  if (!ok) toast('this set has no address yet', 'error');
+}
+
 // ---- retiring a PUBLISHED track ----
 //
 // A slug is a track's permanent address. Once published, three things point at
@@ -575,6 +664,265 @@ export function _audioDelete(id) {
   if (entry._imported) return _audioRetire(id);
   if (!confirm(`Move "${entry.title || entry.filename}" to trash?\n\nIts audio file is removed from the CDN on the next publish.`)) return;
   trashItem('audio', id);
+}
+
+
+// ============================================================
+// SETS — a named, ordered list of tracks with its own address
+// ============================================================
+//
+// A set is audio content, not a card feature: it lives on this shelf, it has a
+// permanent address (/listen/?set=<slug>), and the homepage audio card BORROWS
+// one rather than owning it (chunk 5). That ordering is the whole point — a
+// playlist you can only make inside the card is a playlist you cannot link to.
+//
+// Tracks are referenced BY SLUG, never copied. A slug is already a track's
+// permanent address, so a set built on slugs survives a re-titled track, and a
+// retired track simply drops out of the set at render time instead of leaving a
+// dead row behind. Nothing here writes to STATE.audio: a set is a view onto the
+// registry, and the registry stays the one home for a track.
+
+// "What does this set play" gets ONE answer, and it does not live here. The
+// resolver is AudioPlayer.resolveSetTracks in js/audio-player.js — the shared
+// audio module the /listen page and the homepage card already run — and the
+// console loads that classic script for exactly this reason, the same move the
+// Cards view makes with recent-index.js. A copy of those eight lines in here
+// would be the second implementation §1.2 of the plan exists to refuse: the
+// shelf would say four tracks while the page played three, and nothing would
+// error.
+//
+// Read off the global at CALL time, never captured at module load: the script
+// is deferred, and this module is evaluated before it.
+function _setResolver() {
+  return globalThis.AudioPlayer && globalThis.AudioPlayer.resolveSetTracks;
+}
+
+// Same collision rule as a track's, over the sets' own namespace: /listen/?a=
+// and /listen/?set= are different parameters, so a set and a track may share a
+// name without either address becoming ambiguous.
+export function setUniqueSlug(base, existing, skipId) {
+  return audioUniqueSlug(base, existing, skipId);
+}
+
+function _setById(id) {
+  return (STATE.audioSets || []).find((s) => s && s.id === id) || null;
+}
+
+function _setLabel(set) {
+  return (set && (set.name || set.slug)) || 'Untitled set';
+}
+
+export function _setCreate() {
+  const name = prompt('Name this set\n\nIt becomes the set’s permanent address, so pick something you will still recognise later.');
+  if (name === null) return;
+  const clean = String(name).trim();
+  if (!clean) { toast('A set needs a name', 'warning'); return; }
+
+  const set = {
+    id: uid(),
+    slug: setUniqueSlug(clean, STATE.audioSets),
+    name: clean,
+    tracks: [],
+    added_at: todayISO(),
+  };
+  STATE.audioSets.unshift(set);
+  stageChange('audioSets', { id: set.id, label: `${clean} — new set`, kind: 'add' });
+  save();
+  renderAudio();
+  toast(`✓ Set created — /listen/?set=${set.slug}`, 'success');
+}
+
+// Renaming never re-slugs. The address is the promise; the name is the label.
+// (A never-published set could safely re-slug, but "sometimes your link
+// changes" is a worse rule to carry in your head than "it never does".)
+export function _setRename(id) {
+  const set = _setById(id);
+  if (!set || set.retired) return;
+  const name = prompt('Rename this set\n\nThe address /listen/?set=' + set.slug + ' does not change.', set.name || '');
+  if (name === null) return;
+  const clean = String(name).trim();
+  if (!clean) { toast('A set needs a name', 'warning'); return; }
+  if (clean === set.name) return;
+  set.name = clean;
+  stageChange('audioSets', { id: set.id, label: `${clean} — renamed`, kind: 'edit' });
+  save();
+  renderAudio();
+}
+
+// Opens the audio library in pick mode — the same modal, the same Escape
+// ownership, the same probe-play — rather than a second track list that would
+// drift from it.
+export function _setAddTrack(id) {
+  const set = _setById(id);
+  if (!set || set.retired) return;
+  if (set.tracks.length >= AUDIO_MAX_PLAYLIST) {
+    toast(`⚠ A set holds at most ${AUDIO_MAX_PLAYLIST} tracks`, 'warning');
+    return;
+  }
+  openAudioLibrary((slug) => {
+    closeAudioLibrary();
+    _setPushTrack(set.id, slug);
+  });
+}
+
+// The write half of the gesture above, exported so the test suite can drive it
+// without a modal.
+export function _setPushTrack(id, slug) {
+  const set = _setById(id);
+  if (!set || set.retired || !slug) return;
+  if (set.tracks.length >= AUDIO_MAX_PLAYLIST) {
+    toast(`⚠ A set holds at most ${AUDIO_MAX_PLAYLIST} tracks`, 'warning');
+    return;
+  }
+  if (set.tracks.includes(slug)) {
+    toast('That track is already in this set', 'info');
+    return;
+  }
+  const track = STATE.audio.find((a) => a && a.slug === slug && a.filename && !a.retired);
+  if (!track) { toast('That track is no longer on the shelf', 'warning'); return; }
+  set.tracks.push(slug);
+  stageChange('audioSets', {
+    id: set.id,
+    label: `${_setLabel(set)} — ${track.title || track.filename} added`,
+    kind: 'edit',
+  });
+  save();
+  renderAudio();
+  toast(`✓ Added to "${_setLabel(set)}" (#${set.tracks.length})`, 'success');
+}
+
+// Reorder is structural reversal, layer 1: the move that undoes a ▲ is the
+// ▼ still on screen beside it, and both run this one mutator.
+export function _setMoveTrack(id, slug, dir) {
+  const set = _setById(id);
+  if (!set || set.retired) return;
+  const from = set.tracks.indexOf(slug);
+  if (from < 0) return;
+  const to = from + (dir < 0 ? -1 : 1);
+  if (to < 0 || to >= set.tracks.length) return;
+  set.tracks.splice(to, 0, set.tracks.splice(from, 1)[0]);
+  stageChange('audioSets', { id: set.id, label: `${_setLabel(set)} — reordered`, kind: 'edit' });
+  save();
+  renderAudio();
+}
+
+// Layer 2: one chip naming what the last removal took out, resolved against
+// state AS IT IS NOW so it can never be a dead button. Module memory, not a
+// flag left on the record — see _audioCardRestoreTarget for why.
+let _lastSetRemoval = null;
+
+export function _setRemoveUndoTarget() {
+  if (!_lastSetRemoval) return null;
+  const set = _setById(_lastSetRemoval.setId);
+  // Valid only while the set is still here, still live, still without the slug,
+  // and still has room to take it back.
+  if (!set || set.retired) return null;
+  if (set.tracks.includes(_lastSetRemoval.slug)) return null;
+  if (set.tracks.length >= AUDIO_MAX_PLAYLIST) return null;
+  return _lastSetRemoval;
+}
+
+export function _setUndoRemove() {
+  const target = _setRemoveUndoTarget();
+  if (!target) return;
+  const set = _setById(target.setId);
+  set.tracks.splice(Math.min(target.index, set.tracks.length), 0, target.slug);
+  stageChange('audioSets', { id: set.id, label: `${_setLabel(set)} — removal undone`, kind: 'edit' });
+  _lastSetRemoval = null;
+  save();
+  renderAudio();
+  toast('✓ Track back in the set', 'success');
+}
+
+export function _setRemoveTrack(id, slug) {
+  const set = _setById(id);
+  if (!set || set.retired) return;
+  const index = set.tracks.indexOf(slug);
+  if (index < 0) return;
+  const track = STATE.audio.find((a) => a && a.slug === slug);
+  set.tracks.splice(index, 1);
+  _lastSetRemoval = { setId: set.id, slug, index };
+  stageChange('audioSets', {
+    id: set.id,
+    label: `${_setLabel(set)} — ${(track && (track.title || track.filename)) || slug} removed`,
+    kind: 'edit',
+  });
+  save();
+  renderAudio();
+  toast('Removed from the set — ↩ UNDO puts it back', 'info');
+}
+
+// ---- retiring a PUBLISHED set ----
+//
+// The track rule, applied. A set's slug is its permanent address the moment it
+// is published: a share link points at it, and (chunk 7) a stamped share image
+// is keyed by it. Deleting the record outright would free the slug, and the
+// next set named the same thing would quietly answer someone else's old link
+// with a different playlist. So a published set RETIRES to a tombstone that
+// keeps the id and the slug and nothing else, and setUniqueSlug keeps counting
+// that slug as taken because the tombstone is still in STATE.audioSets.
+//
+// No R2 queue here, deliberately: a set owns no media. Retiring one takes down
+// a PRESENTATION, never a track.
+export function _setRetire(id) {
+  const set = _setById(id);
+  if (!set || set.retired) return;
+  if (!confirm(
+    `RETIRE "${_setLabel(set)}"?\n\n`
+    + `This set is published, so its address /listen/?set=${set.slug} stays reserved forever — `
+    + `a link pointing at it will never quietly play a different set.\n\n`
+    + `The tracks stay on the shelf. ↩ UNDO RETIRE puts it back until you leave this tab.`
+  )) return;
+
+  const ledgerRow = ledgerRowFor('audioSets', set.id);
+  const tombstone = {
+    id: set.id,
+    slug: set.slug,
+    retired: true,
+    retired_at: new Date().toISOString(),
+  };
+  if (set._imported) tombstone._imported = true;
+  const index = STATE.audioSets.indexOf(set);
+  STATE.audioSets[index] = tombstone;
+
+  _lastSetRetire = { id: set.id, set, index, ledgerRow };
+  stageChange('audioSets', { id: set.id, label: `${_setLabel(set)} — retired`, kind: 'remove' });
+  save();
+  renderAudio();
+  toast('◼ retired — the address stays reserved', 'success');
+}
+
+let _lastSetRetire = null;
+
+export function _setRetireUndoTarget() {
+  if (!_lastSetRetire) return null;
+  const current = _setById(_lastSetRetire.id);
+  return (current && current.retired) ? _lastSetRetire : null;
+}
+
+export function _setUndoRetire() {
+  const target = _setRetireUndoTarget();
+  if (!target) return;
+  const i = STATE.audioSets.findIndex((s) => s && s.id === target.id);
+  if (i < 0) return;
+  STATE.audioSets[i] = target.set;
+  unstageChange('audioSets', target.id, target.ledgerRow);
+  _lastSetRetire = null;
+  save();
+  renderAudio();
+  toast('✓ Retire undone — the set is back', 'success');
+}
+
+// A published set keeps its address; a never-published one has nothing pointing
+// at it yet, so it goes to the session trash and ↩ RESTORE brings it back
+// whole — layer 3, the same route _audioDelete takes.
+export function _setDelete(id) {
+  const set = _setById(id);
+  if (!set) return;
+  if (set.retired) return;
+  if (set._imported) return _setRetire(id);
+  if (!confirm(`Move the set "${_setLabel(set)}" to trash?\n\nThe tracks stay on the shelf — a set is a list, not a copy.`)) return;
+  trashItem('audioSets', id);
 }
 
 // ---- render ----
@@ -765,10 +1113,111 @@ export function renderPodcastCard() {
   </div>`;
 }
 
+
+// The SETS shelf. Rendered above the track rows because a set is made OF them:
+// reading down the page you meet the collections first, then the registry they
+// draw on.
+export function renderAudioSets() {
+  const host = document.getElementById('audio-sets-display');
+  if (!host) return;
+
+  const sets = STATE.audioSets || [];
+  const live = sets.filter((s) => s && !s.retired);
+  const count = document.getElementById('audio-sets-count');
+  if (count) count.textContent = live.length;
+
+  if (!sets.length) {
+    host.innerHTML = '<div class="empty-state">// NO SETS YET — A SET IS A NAMED LIST OF TRACKS WITH ITS OWN ADDRESS</div>';
+    return;
+  }
+
+  const removeUndo = _setRemoveUndoTarget();
+  const retireUndo = _setRetireUndoTarget();
+
+  host.innerHTML = sets.map((s) => {
+    // The tombstone cell — inert and deliberately visible, exactly like a
+    // retired track's: an address that is spoken for should be something you
+    // can see, not a rule that surprises you when a name is refused.
+    if (s.retired) {
+      return `<div class="aud-set aud-set-retired">
+      <div class="aud-set-head">
+        <div class="aud-set-main">
+          <div class="aud-title">// RETIRED<span class="aud-badge retired">ADDRESS RESERVED</span></div>
+          <div class="aud-meta">${escapeHTML(`/listen/?set=${s.slug}`)}${s.retired_at ? ` · ${escapeHTML(s.retired_at.slice(0, 10))}` : ''}</div>
+        </div>
+        <div class="aud-actions">${retireUndo && retireUndo.id === s.id ? `
+          <button class="btn btn-sm btn-ghost aud-undo" onclick="_setUndoRetire()"
+            title="Put this set back and release the reservation">↩ UNDO RETIRE</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+    }
+
+    const resolve = _setResolver();
+    // Without the shared module there is no honest answer to "what does this
+    // set play", so the row says so instead of guessing from the raw slugs.
+    const tracks = resolve ? resolve(s, STATE.audio) : [];
+    const total = tracks.reduce((n, t) => n + (t.duration || 0), 0);
+    // "3 of 4" only when the difference is real: a slug that no longer resolves
+    // has dropped out of what this set PLAYS, and saying so here is the only
+    // place the author can notice it.
+    const missing = (s.tracks || []).length - tracks.length;
+    // On the META line, not in a badge beside the name: .aud-title ellipses,
+    // and a tally long enough to matter is exactly the one that gets cut off
+    // there ("2 tracks · 3 li"). Found by opening the page, not by a test.
+    const tally = `${tracks.length} track${tracks.length === 1 ? '' : 's'}`
+      + (total ? ` · ${_fmtDuration(total)}` : '')
+      + (missing > 0 ? ` · ${missing} no longer on the shelf` : '');
+
+    const rows = tracks.map((t, i) => `<div class="aud-set-row">
+        <div class="aud-set-num">${String(i + 1).padStart(2, '0')}</div>
+        <div class="aud-set-title">${escapeHTML(t.title || t.filename || 'Untitled')}</div>
+        <div class="aud-set-dur">${escapeHTML(_fmtDuration(t.duration))}</div>
+        <div class="aud-actions">
+          <button class="btn btn-sm btn-ghost" onclick="_setMoveTrack('${escapeAttrJS(s.id)}','${escapeAttrJS(t.slug)}',-1)"
+            title="Move up" ${i === 0 ? 'disabled' : ''}>▲</button>
+          <button class="btn btn-sm btn-ghost" onclick="_setMoveTrack('${escapeAttrJS(s.id)}','${escapeAttrJS(t.slug)}',1)"
+            title="Move down" ${i === tracks.length - 1 ? 'disabled' : ''}>▼</button>
+          <button class="btn btn-sm btn-danger" onclick="_setRemoveTrack('${escapeAttrJS(s.id)}','${escapeAttrJS(t.slug)}')"
+            title="Take this track out of the set">✕</button>
+        </div>
+      </div>`).join('')
+      || '<div class="aud-set-empty">// nothing in this set yet — ADD TRACK</div>';
+
+    const undoChip = removeUndo && removeUndo.setId === s.id
+      ? `<button class="btn btn-sm btn-ghost aud-undo" onclick="_setUndoRemove()"
+          title="Put back the track you just took out of this set">↩ UNDO</button>`
+      : '';
+    const full = (s.tracks || []).length >= AUDIO_MAX_PLAYLIST;
+
+    return `<div class="aud-set">
+      <div class="aud-set-head">
+        <div class="aud-set-main">
+          <div class="aud-title">${escapeHTML(_setLabel(s))}</div>
+          <div class="aud-meta">${escapeHTML(`/listen/?set=${s.slug} · ${tally}`)}</div>
+        </div>
+        <div class="aud-actions">
+          <button class="btn btn-sm btn-ghost" onclick="_setAddTrack('${escapeAttrJS(s.id)}')" ${full ? 'disabled' : ''}
+            title="${full ? `A set holds at most ${AUDIO_MAX_PLAYLIST} tracks` : 'Pick a track from the shelf'}">+ ADD TRACK</button>${undoChip}
+          <button class="btn btn-sm btn-ghost" onclick="_setShare('${escapeAttrJS(s.id)}')"
+            title="Copy the link, stamp the share images, or download this set's card">⤴ SHARE</button>
+          <button class="btn btn-sm btn-ghost" onclick="_setRename('${escapeAttrJS(s.id)}')"
+            title="Change the name — the address stays the same">✎ RENAME</button>
+          <button class="btn btn-sm btn-danger" onclick="_setDelete('${escapeAttrJS(s.id)}')">✕</button>
+        </div>
+      </div>
+      <div class="aud-set-tracks">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
 export function renderAudio() {
   // Before the empty-shelf early return below: a site with no tracks still
   // wants to be told where its feed is and that nothing is in it.
   renderPodcastCard();
+  // Same reasoning: a shelf whose tracks are all retired still has sets, and a
+  // shelf with no tracks at all still needs to be told what a set is.
+  renderAudioSets();
 
   const host = document.getElementById('audio-display');
   if (!host) return;
@@ -891,6 +1340,8 @@ export function renderAudio() {
           title="Offer a download link on the track page">↓ DL</button>
         <button class="btn btn-sm btn-ghost" onclick="_audioInsert('${escapeAttrJS(a.id)}')"
           title="Insert into the open field note">✎ INSERT</button>
+        <button class="btn btn-sm btn-ghost" onclick="_audioShare('${escapeAttrJS(a.id)}')"
+          title="Copy the link, stamp the share images, or download this track's card">⤴ SHARE</button>
         <button class="btn btn-sm btn-ghost" onclick="_audioEdit('${escapeAttrJS(a.id)}')">✎ EDIT</button>${undoTarget && undoTarget.entry.id === a.id ? `
         <button class="btn btn-sm btn-ghost aud-undo" onclick="_audioUndoEdit()"
           title="Put back the title and subtitle this track had before your last edit">↩ UNDO EDIT</button>` : ''}
@@ -907,6 +1358,7 @@ export function renderAudio() {
 // AUDIO LIBRARY / PICKER MODAL
 // ============================================================
 let _audioLibCallback = null;
+let _audioLibConfirmLabel = '';
 let _audioLibMultiSelect = false;
 let _audioLibSelected = new Set(); // set of slugs in selection order
 let _audioLibFilter = 'all';       // 'all' | 'tracks' | 'episodes' | 'card'
@@ -931,10 +1383,17 @@ export function _audioLibSearchDebounced() {
   _audioLibSearchTimer = setTimeout(renderAudioLibrary, 150);
 }
 
-export function openAudioLibrary(callback, multiSelect = false) {
+// `opts.preselect` is a list of slugs to open with already ticked, and
+// `opts.confirmLabel` renames the confirm button. Both exist for the studio's
+// ♪ CHOOSE TRACKS, where the picker is not inserting into a document but
+// SHOWING A LIST THE OWNER ALREADY HAS and taking edits to it — opening that
+// with nothing ticked would read as "the card is empty", and confirming would
+// then quietly rebuild it from scratch. (docs/cards-core-complete.md chunk 5.)
+export function openAudioLibrary(callback, multiSelect = false, opts = {}) {
   _audioLibCallback = callback;
   _audioLibMultiSelect = !!multiSelect;
-  _audioLibSelected = new Set();
+  _audioLibConfirmLabel = opts.confirmLabel || '';
+  _audioLibSelected = new Set(multiSelect ? (opts.preselect || []) : []);
   _audioLibFilter = 'all';
   _audioLibSortBy = 'recent';
   _audioLibSearch = '';
@@ -964,6 +1423,7 @@ export function closeAudioLibrary() {
   }
   _audioLibCallback = null;
   _audioLibMultiSelect = false;
+  _audioLibConfirmLabel = '';
   _audioLibSelected = new Set();
 }
 
@@ -1118,7 +1578,7 @@ export function _audioLibUpdateInsertBar() {
     <span class="audio-lib-insert-count">${count} TRACK${count !== 1 ? 'S' : ''} SELECTED</span>
     <button class="btn btn-sm btn-ghost" onclick="_audioLibClearSelection()" ${dis}>CLEAR</button>
     <button class="btn btn-sm btn-stage" onclick="_audioLibInsertSelected()" ${dis}>
-      ${count > 1 ? 'INSERT TRACKLIST' : 'INSERT TRACK'}
+      ${escapeHTML(_audioLibConfirmLabel) || (count > 1 ? 'INSERT TRACKLIST' : 'INSERT TRACK')}
     </button>
   `;
 }

@@ -226,12 +226,27 @@ function slice(src, from, to) {
 // The cap lives in two files and they have to agree.
 
 describe('the 6-track cap agrees across the console and the card', () => {
-  it('the renderer cap matches the console refusal', () => {
+  // Tightened with cards chunk 4. The console used to refuse on a bare literal
+  // (`currentFeatured.length >= 6`), so this test compared a NAMED constant in
+  // one file against an anonymous number in the other — it could tell you the
+  // two disagreed, but nothing in the console said what that 6 was. The cap now
+  // has the same name on both sides, and a SET is bounded by it too: a set
+  // exists to be borrowed by the homepage card, so one that could not fit would
+  // be a promise the card cannot keep.
+  it('the renderer cap and the console constant are the same number', () => {
     const cardCap = /AUDIO_MAX_PLAYLIST\s*=\s*(\d+)/.exec(CARD);
-    const consoleCap = /currentFeatured\.length\s*>=\s*(\d+)/.exec(read('js/console/audio.js'));
-    expect(cardCap, 'AUDIO_MAX_PLAYLIST vanished').not.toBeNull();
-    expect(consoleCap, 'the console stopped capping featured tracks').not.toBeNull();
+    const consoleCap = /AUDIO_MAX_PLAYLIST\s*=\s*(\d+)/.exec(read('js/console/audio.js'));
+    expect(cardCap, 'AUDIO_MAX_PLAYLIST vanished from the card').not.toBeNull();
+    expect(consoleCap, 'AUDIO_MAX_PLAYLIST vanished from the console').not.toBeNull();
     expect(consoleCap[1]).toBe(cardCap[1]);
+  });
+
+  it('the console refuses a seventh track, and a seventh set entry, by that name', () => {
+    const src = read('js/console/audio.js');
+    // Not a literal anywhere near the refusals — that is the drift this pins.
+    expect(src).toMatch(/currentFeatured\.length\s*>=\s*AUDIO_MAX_PLAYLIST/);
+    expect(src).toMatch(/set\.tracks\.length\s*>=\s*AUDIO_MAX_PLAYLIST/);
+    expect(src).not.toMatch(/currentFeatured\.length\s*>=\s*\d/);
   });
 });
 

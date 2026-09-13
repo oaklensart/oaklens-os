@@ -143,6 +143,32 @@
     return clamp01(Number(x) / w);
   }
 
+  // ---- sets ----
+  //
+  // A SET is a named, ordered list of tracks with its own address
+  // (/listen/?set=<slug>), saved on the audio shelf. Tracks are referenced BY
+  // SLUG, never copied: a slug is already a track's permanent address, so a set
+  // survives a re-titled track, and a track that goes away simply drops out.
+  //
+  // This resolver lives HERE, in the shared audio module, because three
+  // surfaces ask the same question and "what does this set play" must not have
+  // three answers: the console's SETS shelf, the /listen/?set= page, and the
+  // homepage audio card. The console loads this file for exactly that reason —
+  // the same move the Cards view makes with recent-index.js.
+  //
+  // Dropped silently: a slug with no entry, and one whose entry is a RETIRED
+  // tombstone — an address reserved with no media behind it. The set is a list
+  // of intentions; the registry is the truth about what exists.
+  function resolveSetTracks(set, registry) {
+    var byTrack = {};
+    (registry || []).forEach(function (t) {
+      if (t && t.slug && t.filename && !t.retired) byTrack[t.slug] = t;
+    });
+    return ((set && set.tracks) || [])
+      .map(function (slug) { return byTrack[slug]; })
+      .filter(function (t) { return !!t; });
+  }
+
   var g = (typeof globalThis !== 'undefined') ? globalThis
     : (typeof self !== 'undefined' ? self : this);
 
@@ -159,6 +185,7 @@
     durationLabel: durationLabel,
     seekFraction: seekFraction,
     groupAdjacent: groupAdjacent,
+    resolveSetTracks: resolveSetTracks,
   };
   g.AudioPlayer = API;
 

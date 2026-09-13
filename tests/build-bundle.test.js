@@ -93,14 +93,28 @@ function seedState() {
   ];
   STATE.cards = [
     {
-      id: 'card-1', order: 1, added_at: '2026-09-01',
+      id: 'card-1', order: 1, added_at: '2026-09-01', kind: 'photo',
       source: { type: 'archive', id: 'arc-1' }, media: 'c1.webp', folder: 'archive',
       focus: '10% 20%', cardFocus: '30% 40%', title: 'C1 Title', tease: 'C1 tease.',
       label: 'Archive', link: '/archive/?f=arc-1', palette: 'flow', card: { layout: 'hero' },
-      img: { w: 2048, h: 1536, lum: 0.2 },
+      // The overlay band and the measurement its ink is derived from (chunk 3).
+      // `img` is the shape measureCardBands actually produces — three band
+      // luminances of the 4:5 crop — not the `{ w, h, lum }` sketch that sat in
+      // docs before the ladder was built.
+      overlay: { place: 'top', treat: 'blur', blur: 3 },
+      img: { lum: { top: 0.42, mid: 0.61, bottom: 0.18 } },
     },
     // minimal: a free-form card with nothing but words
     { id: 'card-2', order: 2, title: 'C2 Title', added_at: '2026-09-02' },
+    // An audio card borrowing a set (chunk 5) — a slug, never a copy of the
+    // tracks. The set is the one answer to what it plays.
+    { id: 'card-3', order: 3, kind: 'audio', set: 'dusk', added_at: '2026-09-03' },
+    // A retired card (chunk 6) — the fourth tombstone. It carried words and a
+    // picture before it was retired; none of that may survive the serializer.
+    {
+      id: 'card-4', order: 4, retired: true, retired_at: '2026-09-11T00:00:00.000Z',
+      title: 'Should not publish', media: 'gone.webp', _imported: true,
+    },
   ];
   STATE.staged = { buffer: 1, archive: 1, posts: 1, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 1 };
 }
@@ -120,6 +134,7 @@ describe('buildBundle()', () => {
     expect(Object.keys(bundle).sort()).toEqual([
       'MANIFEST.txt',
       'data/archive.json',
+      'data/audio-sets.json',
       'data/audio.json',
       'data/barrel.json',
       'data/buffer.json',
@@ -206,18 +221,60 @@ describe('buildBundle()', () => {
     ]);
   });
 
-  // No 'img'. It was whitelisted from the day composed cards landed, for an
-  // image ladder that was handed off and never shipped — nothing in the repo
-  // ever wrote or read it, so the entry described a mechanism that did not
-  // exist. Removed 2026-09-08. This list pinned the field as PRESENT, which is
-  // why it never caught it: a whitelist test proves what publish will emit, not
-  // that anything fills it. The ladder is still tracked in docs/ideas/index.md,
-  // and lands its field back here alongside the code that writes it.
+  // 'img' IS BACK, and this time it has a producer. It was whitelisted from the
+  // day composed cards landed, for an image ladder that was handed off and never
+  // shipped — nothing in the repo ever wrote or read it, so the entry described a
+  // mechanism that did not exist, and it was removed on 2026-09-08. This list
+  // pinned the field as PRESENT, which is why it never caught it: a whitelist
+  // test proves what publish will emit, not that anything fills it. Chunk 3 of
+  // docs/cards-core-complete.md built the writer (measureCardBands in
+  // js/console/focal.js, called from cardsPickImage/cardsCropCard) and the reader
+  // (overlayInk in js/recent-index.js), so the condition on its return is met.
   it('composed cards keep every whitelisted field', () => {
+    // `kind` joined on 2026-09-10 (cards-core-complete chunk 2): which real kind
+    // draws the card. Conditional — absent means Automatic, which is also how
+    // every record written before it is read. `overlay` and `img` joined the
+    // same day with chunk 3 — the band's three choices, and the luminance its
+    // ink is derived from.
     expect(keysOf('data/cards.json')).toEqual([
-      'added_at', 'card', 'cardFocus', 'focus', 'folder', 'id', 'label',
-      'link', 'media', 'order', 'palette', 'source', 'tease', 'title',
+      'added_at', 'card', 'cardFocus', 'folder', 'id', 'img', 'kind', 'label',
+      'link', 'media', 'order', 'overlay', 'palette', 'source', 'tease', 'title',
     ]);
+    // `set` joined with chunk 5 and belongs to the audio card alone, so it is
+    // asserted on the record that carries it rather than widened into the list
+    // above — which would have said every card may carry one.
+    expect(keysOf('data/cards.json', 2)).toContain('set');
+  });
+
+  // A SLUG, never a track list. A copy of the tracks on the record would be a
+  // second answer to "what does this card play" the moment the shelf reorders
+  // the set — the argument chunk 4 made for putting the resolver in one place.
+  it('an audio card publishes the set it borrows, and nothing about its tracks', () => {
+    const [, , audio] = parse('data/cards.json');
+    expect(Object.keys(audio).sort()).toEqual(['added_at', 'id', 'kind', 'order', 'set']);
+    expect(audio.set).toBe('dusk');
+  });
+
+  // Both fields ride through whole, and both are conditional — a record that
+  // never wore the overlay layout publishes exactly the bytes it always did
+  // (proved by the minimal-card test below, which carries neither).
+  it('carries the overlay band and its measurement verbatim', () => {
+    const [ov] = parse('data/cards.json');
+    expect(ov.overlay).toEqual({ place: 'top', treat: 'blur', blur: 3 });
+    expect(ov.img).toEqual({ lum: { top: 0.42, mid: 0.61, bottom: 0.18 } });
+  });
+
+  // ⚠️ THE FOURTH TOMBSTONE. A composed card's id is its address at /card/<id>
+  // the moment it is published, so a retire that ran through the live whitelist
+  // would republish the record as a live card with no words — un-retiring
+  // itself on the next publish and freeing the address for the next card to
+  // take. Its own branch, asserted the way the other three are.
+  it('a retired card publishes as a tombstone and nothing else', () => {
+    const [, , , tomb] = parse('data/cards.json');
+    expect(Object.keys(tomb).sort()).toEqual(['id', 'order', 'retired', 'retired_at']);
+    expect(tomb.retired).toBe(true);
+    expect(tomb.title, 'the words must not ride through the live whitelist').toBeUndefined();
+    expect(tomb.media, 'nor the picture it used to show').toBeUndefined();
   });
 
   // A card may be a picture with no words, words with no picture, or a plain

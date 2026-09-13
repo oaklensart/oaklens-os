@@ -70,10 +70,14 @@ describe('the Cards view stylesheet matches its markup', () => {
       '.tone-badge[data-tone="going"]', '.tone-badge[data-tone="quiet"]',
       // The one control that answers "which card am I looking at".
       '.cards-pill.is-active', '.cards-pill:focus-visible',
-      // The card's two shapes. `data-shape` decides which half is visible, and
-      // both halves stay in the DOM so a picture can be added or removed without
-      // rebuilding the fields being typed into.
-      '[data-shape="words"]',
+      // The composed card's shape, stamped by the engine's cardRoot and moved by
+      // the surgical repaint: the palette ground binds to it on picture cards.
+      '[data-shape="picture"]',
+      // The editable leaves — the composer is the renderer's own card since
+      // chunk 2 — and the placeholder that lives on an attribute, not a value.
+      '[contenteditable]', '[data-empty]::before',
+      // The words tile's furniture, present on every mounted field-note card.
+      '.wk-dropcap', '.ed-caret', '.card-face .wk-text',
     ]) {
       expect(
         CSS.includes(rule),
@@ -172,25 +176,260 @@ describe('the Cards view stylesheet matches its markup', () => {
     expect(CSS).toMatch(/\.cards-ribbon-label,\s*\.cards-pill\s*\{\s*flex:\s*0 0 auto/);
   });
 
-  it('unbinds the view at the SAME breakpoint the rail drops under the stage', () => {
+  it('gives every chip in the rail a real tap target on a touch screen', () => {
+    // The swatches were 28px circles with an invisible 44px halo (a ::before
+    // bleeding 8px on every side). The labelled buttons that replaced them on
+    // 2026-09-12 dropped the halo and measured 28px tall on a phone — a target
+    // no thumb lands on twice. Same bargain the pills and the layout chips
+    // already make, in the same query.
+    // The Cards block carries two coarse-pointer queries (the composer's bar
+    // buttons have their own); the one under test is the one with the pills.
+    const blocks = [...BLOCK.matchAll(/@media \(pointer: coarse\) \{\n([\s\S]*?)\n\}/g)].map((m) => m[1]);
+    const q = blocks.find((b) => b.includes('.cards-pill'));
+    expect(q, 'the coarse-pointer block with the pills moved or lost its shape').toBeTruthy();
+    for (const sel of ['.cards-pill', '.layout-chip', '.cards-swatch']) {
+      expect(q, `${sel} takes --tap under a coarse pointer`)
+        .toMatch(new RegExp(`${sel.replace('.', '\\.')}\\s*\\{[^}]*min-height:\\s*var\\(--tap\\)`));
+    }
+  });
+
+  it('the studio footer fills the card, the way the homepage\'s does', () => {
+    // The grid stretches every card to its row. A footer that stops at its
+    // text leaves the card's ground showing beneath it — on a palette card, a
+    // tinted footer that "does not reach the bottom". A composer fix on
+    // 2026-09-12 snugged `.wk-body` to `flex: 0 0 auto` for every card face and
+    // the composed card came out 38px shorter than its neighbours.
+    expect(CSS).toMatch(/\.card-face \.wk-body\s*\{[^}]*flex:\s*1 1 auto/);
+    // The picture card's footer specifically — the audio caption and the
+    // overlay band are different objects with their own sizing.
+    expect(CSS, 'no picture-card rule may un-grow the footer')
+      .not.toMatch(/\.card-face[^{]*data-shape="picture"[^{]*\.wk-body\s*\{[^}]*flex:\s*0 0 auto/);
+  });
+
+  it('keeps the unbounding and the stacked rail in ONE query, below the tablet', () => {
     // The bug this pins, and it is the reuse-shelf bug in a second costume: the
-    // rail stops being a column and becomes a stacked ROW at 1180, but the rules
-    // that let the view scroll shipped at 640. Between the two — every tablet,
-    // which is the console's field device — the stage and the rail were crushed
-    // into one `height: 100%; overflow: hidden` box. Measured on an 834 × 700
-    // viewport: the card came out 296 × 139 (picture 138, words ~1) and the rail
-    // showed 203px of its natural 674 through its own thin nested scrollbar.
-    // The stack and the scroll are ONE change and must stay in one query.
-    // Scoped to the Cards block — the console has an earlier 1180px query of
-    // its own, and matching that one would test nothing.
-    const q = BLOCK.match(/@media \(max-width: 1180px\) \{\n([\s\S]*?)\n\}/);
-    expect(q, 'the 1180px block moved or lost its shape').not.toBeNull();
-    const block = q[1];
-    expect(block, 'this is the query that stacks the rail')
+    // rail stops being a column and becomes a stacked ROW, but the rules that
+    // let the page scroll ship at a different width. Between the two the stage
+    // and the rail are crushed into one `height: 100%; overflow: hidden` box
+    // with no scroller above them — measured once on an 834 × 700 viewport: the
+    // card came out 296 × 139 (picture 138, words ~1) and the rail showed 203px
+    // of its natural 674 through a thin nested scrollbar.
+    //
+    // These two have been split apart twice and had to be put back both times.
+    // The rule that survives is the invariant, not the number: WHEREVER the
+    // rail stacks under the stage, THAT query is also the one that unbinds the
+    // view, because a stacked rail has no scroller of its own and only the page
+    // can carry it. Beside the stage it is its own scroller and the view is
+    // bounded — which is the tablet block below.
+    const stack = BLOCK.match(
+      /@media \(max-width: (\d+)px\) \{\n((?:(?!@media)[\s\S])*?\.studio-rail\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit[\s\S]*?)\n\}/);
+    expect(stack, 'the query that stacks the rail moved or lost its shape').not.toBeNull();
+    const block = stack[2];
+    expect(block, 'stacked, the studio is one column')
       .toMatch(/\.cards-studio\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\)/);
-    expect(block, 'so it is the query that must let the page scroll')
+    expect(block, 'the query that stacks the rail must also let the page scroll')
       .toMatch(/#view-cards\.view--bounded\.active\s*\{[^}]*overflow:\s*visible/);
-    expect(block, 'and the studio itself must stop clipping its second row')
-      .toMatch(/\.cards-studio\.is-composing\s*\{[^}]*overflow:\s*visible/);
+    expect(block, 'and the studio itself must stop clipping its overflow')
+      .toMatch(/\.cards-studio,\s*\n\s*\.cards-studio\.is-composing\s*\{[^}]*overflow:\s*visible/);
+
+    // And the other half of the invariant: the stack may not reach up into the
+    // tablet band, where the view is bounded on purpose.
+    expect(Number(stack[1]), 'the rail may not stack where the view is bounded')
+      .toBeLessThan(700);
+  });
+
+  it('keeps the studio two panes on a tablet, bounded, with the rail the one scroller', () => {
+    // Two owner reports, one surface, 2026-09-12. The first: the settings were
+    // "all over the place" on an iPad mini — the rail was dropping under the
+    // stage for the whole band. The fix for THAT kept the page scrolling and
+    // pinned the stage with `position: sticky`, and the second report named what
+    // that costs: one flick drove the page and the card at two different rates,
+    // "very floaty". A sticky pane inside a scrolling page is two scrollers by
+    // construction. So the band is bounded like the desktop, the well holds
+    // still, and `.studio-rail`'s own overflow is the only thing that moves.
+    const q = BLOCK.match(/@media \(min-width: 700px\) and \(max-width: 1180px\) \{\n([\s\S]*?)\n\}/);
+    expect(q, 'the tablet block moved or lost its shape').not.toBeNull();
+    const block = q[1];
+
+    // Two panes, and the rail keeps the desktop's 340px — the SHARE block's
+    // address row has a min-content width of ~332px and hangs out of anything
+    // narrower.
+    const cols = block.match(/\.cards-studio,\s*\n\s*\.cards-studio\.is-composing\s*\{([^}]*)\}/);
+    expect(cols, 'the tablet studio must declare both columns').not.toBeNull();
+    expect(cols[1]).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) (3[4-9]\d|[4-9]\d\d)px/);
+
+    // THE REGRESSION. Neither of the two shapes that put a second scroller on
+    // this surface may come back: the stage is not sticky, and the view is not
+    // unbound.
+    expect(block, 'a sticky stage is the two-rate scroll — never again')
+      .not.toMatch(/position:\s*sticky/);
+    expect(block, 'the tablet view stays bounded')
+      .not.toMatch(/#view-cards\.view--bounded\.active\s*\{[^}]*overflow:\s*visible/);
+
+    // The well holds still AND answers the card's sizing — `container-type` is
+    // what makes `cqh` mean anything, and `overflow: hidden` is what "locked"
+    // means. They ship together or the card is measuring a box that can grow.
+    const stage = block.match(/\.studio-stage,\s*\n\s*\.cards-studio\.is-composing \.studio-stage\s*\{([^}]*)\}/);
+    expect(stage, 'the tablet stage must declare its own overflow').not.toBeNull();
+    expect(stage[1], 'the well is locked').toMatch(/overflow:\s*hidden/);
+    expect(stage[1], 'and it is the card\'s query container').toMatch(/container-type:\s*size/);
+
+    // The card is sized to the well rather than the well to the card, and the
+    // sum keeps its 300px cap through `min()` — which is also the fallback for a
+    // browser with no container query units.
+    expect(block, 'the card sum is declared once, on the studio')
+      .toMatch(/--card-w:\s*min\(300px,\s*calc\(\(100cqh\s*-\s*var\(--card-rsv\)\)\s*\*\s*0\.8\)\)/);
+    expect(block, 'and the card reads it').toMatch(/\.studio-stage \.card-face \.wk-card\s*\{[^}]*max-width:\s*var\(--card-w\)/);
+    // ⚠️ THREE CLASSES, NEVER FOUR. At four it outranks WRITE MODE's
+    // `body.kb-open .card-face .wk-card` and sizes the card against a well the
+    // keyboard has already taken — a 113px card, seen on the way in. State goes
+    // in `--card-rsv`, which is why that variable exists.
+    expect(block, 'no state may be written into the card selector itself')
+      .not.toMatch(/\.is-composing[^{]*\.wk-card\s*\{[^}]*max-width/);
+
+    // Keys up the rail is hidden (WRITE MODE), so its column goes too — else the
+    // card writes itself into two thirds of the width with 340px of nothing
+    // beside it. That rule moved INTO write mode when write mode grew to cover
+    // the whole band; a landscape tablet is 744px tall with ~350px of keyboard
+    // on it and cannot afford the head, the ribbon or the rail.
+    const write = BLOCK.match(/@media \(max-width: 1180px\) \{\n((?:(?!@media)[\s\S])*?body\.kb-open[\s\S]*?)\n\}/);
+    expect(write, 'the WRITE MODE block moved or lost its shape').not.toBeNull();
+    expect(write[1], 'with the rail hidden the studio is one column')
+      .toMatch(/body\.kb-open \.cards-studio[\s\S]*?\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
+    expect(write[1], 'keys up, the rail goes')
+      .toMatch(/body\.kb-open \.cards-studio\.is-composing \.studio-rail\s*\{\s*display:\s*none/);
+  });
+
+  it('buys back the rows a bounded tablet needs, and says which', () => {
+    // Bounded, the rows are finite and every one has to be earned. Two step
+    // aside for the whole band and two more when the tablet is held sideways —
+    // if any of them comes back without the height coming with it, the card is
+    // what pays, and the card is the thing this surface is for.
+    const band = BLOCK.match(/@media \(min-width: 700px\) and \(max-width: 1180px\) \{\n([\s\S]*?)\n\}/)[1];
+    expect(band, 'the note steps aside band-wide').toMatch(/\.cards-note\s*\{\s*display:\s*none/);
+    expect(band, 'and the re-feature strip while composing')
+      .toMatch(/body:has\(\.cards-studio\.is-composing\) \.cards-reuse\s*\{\s*display:\s*none/);
+
+    const short = BLOCK.match(
+      /@media \(min-width: 700px\) and \(max-width: 1180px\) and \(max-height: (\d+)px\) \{\n([\s\S]*?)\n\}/);
+    expect(short, 'the sideways block moved or lost its shape').not.toBeNull();
+    // Above every 4:3 tablet in landscape (744, 768, 810, 820) and below every
+    // one of them held upright (1024 and up) — the cut is the ORIENTATION.
+    expect(Number(short[1])).toBeGreaterThanOrEqual(820);
+    expect(Number(short[1])).toBeLessThan(1024);
+    const sideways = short[2];
+    expect(sideways, 'sideways, the strip goes entirely').toMatch(/\.cards-reuse\s*\{\s*display:\s*none/);
+    expect(sideways, 'and the ribbon while composing')
+      .toMatch(/body:has\(\.cards-studio\.is-composing\) \.cards-ribbon\s*\{\s*display:\s*none/);
+    // The well turns sideways too: what was stacked over and under the card
+    // stands beside it, which is where the card's height comes from.
+    expect(sideways, 'the well lays its contents in a row').toMatch(/flex-flow:\s*row wrap/);
+    expect(sideways, 'and the card takes a definite width to be the tall column')
+      .toMatch(/body:not\(\.kb-open\) \.studio-stage \.card-face\s*\{[^}]*width:\s*var\(--card-w\)/);
+    // A row layout carries less above and below the card, so the reserve the
+    // sum spends is restated here rather than inherited from the column one.
+    expect(sideways, 'the sideways reserve is restated for the layout it uses')
+      .toMatch(/\.cards-studio\s*\{\s*--card-rsv:\s*\d+px/);
+  });
+});
+
+// ---- the overlay layout's attributes, in BOTH stylesheets (chunk 3) ----
+//
+// The layout's whole division of labour is "JS sets attributes, CSS owns
+// everything downstream" — which means an attribute value with no rule is not a
+// missing style, it is a card the author can compose and the browser will not
+// draw. The values are read out of the ENGINE's own arrays rather than listed
+// here, so a fourth placement fails this test the day it is registered instead
+// of the day someone notices a band in the wrong place.
+//
+// Checked in main.css AND field-console.css: the console mounts buildCard's own
+// node, so a rule that exists only on the public side means the composer shows
+// the author something the homepage will not produce — the one thing that
+// surface exists not to do.
+describe('the overlay layout is described wherever its card is drawn', () => {
+  const ENGINE = readFileSync(join(ROOT, 'js', 'recent-index.js'), 'utf8');
+  const arr = (name) => {
+    const m = new RegExp(`var ${name} = \\[([^\\]]*)\\]`).exec(ENGINE);
+    expect(m, `${name} moved or changed shape in js/recent-index.js`).not.toBeNull();
+    return m[1].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
+  };
+  const places = arr('OVERLAY_PLACES');
+  const treats = arr('OVERLAY_TREATS');
+  const blurs = arr('OVERLAY_BLURS');
+  const scales = arr('OVERLAY_SCALES');
+
+  it('finds the engine\'s vocabulary at all', () => {
+    expect(places.length).toBeGreaterThan(2);
+    expect(treats.length).toBeGreaterThan(2);
+    expect(blurs.length).toBeGreaterThan(2);
+  });
+
+  it.each([['css/main.css', MAIN], ['css/field-console.css', CSS]])(
+    '%s has a rule for every value the engine can stamp', (_name, sheet) => {
+      for (const p of places) expect(sheet).toContain(`[data-place="${p}"]`);
+      for (const t of treats) expect(sheet).toContain(`[data-treat="${t}"]`);
+      for (const b of blurs) expect(sheet).toContain(`[data-blur="${b}"]`);
+      // The plate (2026-09-11): a scale the engine stamps with no size behind
+      // it is a headline that silently stays small, and a mark with no rule is
+      // a full stop that never appears.
+      expect(scales.length).toBeGreaterThan(3);
+      for (const sc of scales) expect(sheet).toContain(`[data-scale="${sc}"]`);
+      expect(sheet).toContain('[data-mark="dot"]');
+      // The picture is the card: the well fills it, in both sheets, or the
+      // bare-strip footer comes back on one side.
+      //
+      // ⚠️ AND ITS WIDTH IS PINNED. `flex-grow` and `aspect-ratio` on one box
+      // disagree across engines once it grows — WebKit lets the ratio compute
+      // the width from the new height, which on the live site pushed the well
+      // ~70px past the card and clipped the chip against `overflow: hidden`
+      // ("AR" instead of "ARCHIVE", owner 2026-09-12). An explicit width is
+      // definite everywhere, and a box with two definite sides ignores the
+      // ratio. Dropping it re-opens the bug on Safari while every test and
+      // every Chromium screenshot stays green, so the pairing is asserted.
+      expect(sheet).toMatch(/\[data-layout="overlay"\] \.wk-img \{\s*flex: 1 0 auto;\s*width: 100%;/);
+      // Both ink polarities. 'light' is the default and rides the base rule, so
+      // only the flip needs its own selector — but the token pair it flips must
+      // exist in both sheets or the type inherits the page's colour onto a
+      // photograph.
+      expect(sheet).toContain('[data-ink="dark"]');
+      expect(sheet).toMatch(/--ov-ink:/);
+      expect(sheet).toMatch(/--ov-veil:/);
+    },
+  );
+
+  it('names no colour of its own in main.css either', () => {
+    // Same rule as the console block below: the band's polarity is one token
+    // pair of black-and-white alphas (the .wk-tag precedent — over a photo,
+    // contrast is a luminance decision, not a theme one). A hex would be a
+    // colour that is right on one preset and wrong on the other four.
+    const start = MAIN.indexOf('OVERLAY layout (data-layout="overlay")');
+    expect(start, 'the overlay block moved or lost its banner').toBeGreaterThan(-1);
+    const block = MAIN.slice(start, MAIN.indexOf('@media (max-width: 900px)', start))
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const hexes = [...block.matchAll(/#[0-9a-f]{3,8}\b/gi)].map((m) => m[0]);
+    expect(hexes, `hardcoded colours in the overlay block: ${hexes.join(', ')}`).toEqual([]);
+  });
+
+  it('falls back to the scrim where backdrop-filter is unavailable', () => {
+    // Frosted is the one treatment that can silently do NOTHING — an engine
+    // without backdrop-filter drops the declaration and leaves bare type on a
+    // photograph. The degradation must be a different look, never an unreadable
+    // card.
+    for (const sheet of [MAIN, CSS]) {
+      expect(sheet).toMatch(/@supports not \(\(backdrop-filter/);
+    }
+  });
+
+  it('scopes each card\'s own stacking context, in both sheets', () => {
+    // `backdrop-filter` resolves its BACKDROP ROOT at the nearest stacking
+    // context. Without `isolation: isolate` on the card, the frosted band
+    // reaches PAST the card and samples whatever is behind it — in the console
+    // that is the studio's ground, and the whole picture well painted flat
+    // black. main.css has carried this on .wk-card since the pulse card (for
+    // the sibling reason: an inner z-index escaping to the root); the console's
+    // copy of the card had never needed it until chunk 3, and nothing would
+    // have reported its absence but opening the page.
+    expect(MAIN).toMatch(/\.wk-card\s*\{[\s\S]*?isolation:\s*isolate/);
+    expect(CSS).toMatch(/\.card-face \.wk-card\s*\{[\s\S]*?isolation:\s*isolate/);
   });
 });

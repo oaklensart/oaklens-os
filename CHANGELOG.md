@@ -25,6 +25,278 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-11 (words on a picture look like a plate, and audio from the composer)
+
+**Nothing to do on merge.** Four refinements from the owner's first day with
+the finished card studio.
+
+- **A card with words on the picture is all picture now.** The picture fills
+  the card to its floor instead of stopping at 4:5 and leaving a bare strip of
+  the card's ground underneath it next to a taller neighbour.
+- **The words on the picture are set like a museum label.** The title runs in
+  the display face, sentence case, and steps up as it gets shorter — a
+  two-word title is large on purpose — closing on a full stop in your site's
+  accent; the caption sits under a short accent rule. Nothing to configure:
+  the size comes from the title's length, the same way the words tile already
+  works. Share images draw the same plate.
+- **The composer's side panel stays where you scrolled it.** Pressing a chip
+  no longer sends the panel back to the top.
+- **♪ ADD AUDIO, right under the picture.** Any card you compose can become
+  the audio card from its own panel, and the track picker opens on the spot —
+  browse and pick up to six tracks without going to the Audio shelf. Your
+  picture and words are kept, so ✕ REMOVE AUDIO brings them straight back.
+
+---
+
+## 2026-09-12 (the stamped card is the card, in colour)
+
+**Nothing to do on merge.** Fixes from the first week of living with the card
+studio.
+
+- **Stamped share images carry the card's atmosphere.** A words card with a
+  palette, an audio card and a pulse card used to stamp as a flat grey tile;
+  they now paint the same ground the homepage draws — the hue, the veil, the
+  corner light — read off your site's own stylesheet at stamp time, in
+  whichever theme you are in. Re-stamp a card to pick it up.
+- **The little light beside a card's label is a part now, not a dot.** The
+  words tile's kicker dot (`.wk-dot`) is the same square LED the pulse card
+  wears, in the palette's colour on a palette card. Visible on every words
+  card on your homepage after you merge; nothing to configure.
+- **The composer shows the card at the homepage's proportions** — the picture
+  holds 4:5 and the footer is as tall as its words, instead of the footer
+  eating two thirds of the card.
+- **A staged card's address says so.** The CARD ADDRESS block wears STAGED
+  until you publish and LIVE after, and copying a staged link tells you it
+  works once you publish — because it does not before.
+- **Palette swatches are labelled buttons** with a real tap target on a phone.
+
+---
+
+## 2026-09-11 (a SHARE button on everything you make)
+
+**Nothing to do on merge.** The share images the last update could draw now have
+buttons that actually make them — and one more thing finished with them: the
+homepage card system is **done**.
+
+- **A SHARE block, wherever the thing is made.** On the focused card in the
+  Cards studio, on a card you compose, on every track and every set on the Audio
+  shelf, and in the field-note editor's ⋯ menu. Four things, always the same
+  four: **copy the link**, **stamp the share images**, **download NATIVE**
+  (the shape a feed post wants), **download STORY** (full-screen vertical).
+- **Stamping is what makes a pasted link show your card.** Press it once and all
+  three sizes go up together. Press it again after you change the card — until
+  you do, the old picture keeps showing, and the block says so.
+- **It tells you what it has.** "not stamped yet" or "stamped", read from your
+  own CDN rather than from a local flag, so it is still right after a reload and
+  still right on another device.
+- **It works on the LIVE grid too.** Sharing is the one thing that acts on what
+  is already published: it happens now and does not wait for a publish.
+- **Nothing is ever half-stamped.** If a picture fails to load while the images
+  are being drawn, nothing is uploaded at all — a permanent link is never left
+  pointing at half a card.
+- **Still your gesture, never automatic.** Publishing does not stamp anything by
+  itself. A stamp for every entry on every publish would be storage churn you
+  did not ask for.
+
+**And with it, the card program is complete.** Over nine updates the homepage
+card system went from "four tiles the site picked for you" to: cards you compose
+yourself, a second layout that puts your words on the picture, audio sets as a
+first-class thing, an address for every card, share images that *are* the card,
+and now the buttons that publish them. Everything stayed opt-in — a site that
+does nothing publishes exactly the bytes it always did.
+
+---
+
+## 2026-09-11 (your share image looks like your card)
+
+**Nothing to do on merge.** When you paste one of your links into a message,
+the little picture that appears is now **your card** — the same card your
+homepage shows, drawn at the size each app wants.
+
+- **Every kind gets one, not just photographs.** A field note that leads with
+  words instead of a picture had no share image at all before; now it gets its
+  own words tile. So do audio tracks, saved sets, and the cards you compose.
+- **It is the card, not a picture of a card.** Same crop, same palette, same
+  type, same chip, same band if you wrote on the picture — because it is drawn
+  from the same record your homepage draws from. Change the card, re-stamp, and
+  the preview changes with it.
+- **It wears YOUR colours.** The old share image had two reds baked into it, so
+  every fork's link previews came out in someone else's brand no matter which
+  preset they ran. The colours are now read from your own theme at the moment
+  the image is drawn.
+- **Three sizes.** The wide one for link previews, a tall one for a feed post,
+  and a full-height one for a story. Today the framing modal still publishes
+  only the wide one; the buttons for the other two arrive in the next update.
+- **Nothing you already stamped changes.** Your existing share images keep
+  serving at the same addresses until you re-stamp them.
+- **Publish waits for your photo.** Pressing publish the instant the window
+  opens used to be able to save a card with an empty space where the picture
+  goes. It waits now — and for your fonts too, so the first one you stamp is
+  set in your typefaces rather than a browser default.
+- **Reordering the tracks on your audio card sticks.** Picking the same tracks
+  in a different order used to do nothing at all.
+- **A card's page works on a preview server.** Opening it at
+  `/card/index.html?id=…` — how a staging host or a local preview spells it —
+  showed "no card here". It finds the card now.
+
+---
+
+## 2026-09-11 (every card has an address)
+
+**Nothing to do on merge.** Every card you compose now has a page of its own —
+a real link you can text, post or put in a newsletter.
+
+- **Its own address.** A card you build in the studio lives at
+  `yoursite.com/card/<id>` as well as on your homepage. The rail shows it, with
+  a **COPY** button, the moment the card exists.
+- **Once you publish it, it's permanent.** That address will never point at a
+  different card — the same promise a track's `/listen/?a=` link and a frame
+  number already make. So removing a published card **retires** it: the slot
+  goes back to filling itself, and the old link tells anyone who follows it
+  that the card is gone rather than quietly showing them something else.
+  `↩ UNDO RETIRE` in the Cards header puts it back, until you publish.
+- **A card you never published** still just goes to the trash, with
+  `↩ RESTORE` in the publish view, exactly as before — nothing was pointing at
+  it yet.
+- **It unfurls properly.** Paste a card link into a message and it shows your
+  own title and words, not the bare site.
+- Your card pages are listed in your sitemap and ride along in Export Site.
+
+Nothing about your existing cards changes: the homepage renders exactly the
+same, and a card still opens whatever it opened before when someone taps it.
+
+---
+
+## 2026-09-10 (the audio card, in the studio)
+
+**Nothing to do on merge.** The homepage's audio card can now be composed in the
+Cards studio like every other card — and taking it over no longer loses the
+player, which was the one reason the studio used to refuse.
+
+- **Take it over.** Console → CARDS → focus the audio card → `✎ EDIT THIS CARD`.
+  It keeps playing exactly what it was playing; the words are now yours.
+- **Choose what plays.** A new **WHAT THIS CARD PLAYS** block in the rail. Two
+  options, both always on screen, so picking the other one is the undo:
+  - **♪ The homepage tracks** — the tracks you've put on the card, the same list
+    the Audio shelf edits. `♪ CHOOSE TRACKS` opens your library with the current
+    ones already ticked, so you can add or drop without rebuilding it.
+  - **▤ A saved set** — borrow one of your sets. The card takes the set's name
+    and opens the set's own page, and reordering the set on the shelf reorders
+    the card. (Sets are the entry above this one.)
+- **Write on it.** A title and a line render under the waveform as a caption —
+  the same quiet grammar a photo card's caption uses. The card's own headline
+  stays the name of what's playing, so the two never say the same thing twice.
+  Leave both empty and there's no caption at all.
+- **The badge.** Leave it blank and an audio card says what it is (`Audio`,
+  `Audio // Multi-track`) instead of `Featured`.
+- **`♪ CHOOSE TRACKS` is on the plain audio card too**, so you can change the
+  homepage tracks from the studio without going to the shelf. There's still one
+  list — change it in either place and both agree.
+
+---
+
+## 2026-09-10 (make a set, give it an address)
+
+**Nothing to do on merge.** The Audio shelf can hold **sets** — a named, ordered
+list of tracks that lives at its own web address, so you can send someone *this*
+handful of tracks in *this* order with one link.
+
+- **Where to find it.** Console → AUDIO → a new **SETS** block above your
+  tracks. `+ NEW SET` names it, `+ ADD TRACK` picks from the shelf you already
+  have, `▲`/`▼` reorder, and `✕` takes a track out (with one `↩ UNDO` if that
+  was a mistake). A set holds up to six tracks — the same six the homepage
+  audio card can play.
+- **Every set has its own page.** `/listen/?set=<name>` plays it in your order,
+  and sharing that link unfurls with the set's name and how many tracks are in
+  it, the same way a single track's link already does. It shows up in your
+  sitemap once it actually has something to play.
+- **A set is a list, not a copy.** It points at tracks by their address, so
+  renaming a track doesn't break anything, and taking one off the shelf just
+  makes it quietly drop out of the set. Your tracks are never duplicated and
+  never deleted by anything you do to a set.
+- **Renaming never moves the address.** Once a set is published, its link is
+  permanent: deleting it leaves the address reserved rather than freeing it for
+  the next set to take, so nobody's old link ever quietly plays something else.
+  A set you haven't published yet just goes to the trash, and comes straight
+  back.
+- **Your podcast feed is untouched, in both directions.** Putting an episode in
+  a set changes nothing for your subscribers, and gathering tracks into a set is
+  never a way to publish them to a podcast app.
+- **Coming next:** the homepage audio card will be able to borrow a set, so what
+  plays on your front page and what lives at that link are the same thing.
+
+---
+
+## 2026-09-10 (words on a picture)
+
+**Nothing to do on merge.** Homepage cards learned a new look: **the words can
+sit on the picture** instead of under it.
+
+- **Where to find it.** Card Studio → a card with a picture → `CARD LAYOUT` →
+  *Words on the picture*. A new block appears underneath with three choices:
+  **where** the words sit (bottom, top or middle), **what is behind them**
+  (shaded, frosted, or bare picture), and **how heavy the frost** is. Every
+  option is a button, the standard one is always on screen, and pressing it puts
+  the card back — there is nothing to undo.
+- **You never pick the text colour.** When you choose a picture or re-crop one,
+  your site measures how bright it is at the top, the middle and the bottom, and
+  picks light or dark type for wherever your words land. If it can't measure a
+  picture — it's offline, it's still uploading — the card still works: light
+  type over a soft shade, which reads on anything.
+- **It works on the automatic cards too.** An archive photo or a starred frame
+  now offers the same *Words on the picture* option in the layout picker,
+  using the standard shading.
+- **Nothing about your existing cards changed.** A card that doesn't ask for the
+  new layout publishes exactly the bytes it did before.
+
+---
+
+## 2026-09-10 (the studio catches up with its cards)
+
+**Nothing to do on merge.** Three things in the Card Studio:
+
+- **The dressing chips are back** — *Automatic / Always the picture / Always
+  the words* — and *Always the words* now gives you the real field-note tile,
+  drop cap and blinking caret included. Under the hood each chip writes which
+  kind of card yours is; *Automatic* writes nothing and lets the site decide
+  from the shape, which is also how every card you dressed before this update
+  is read. A card you dressed earlier is quietly rewritten in the new shape the
+  next time you open the studio, and renders exactly as it did.
+- **What you type on is the card itself.** The composer used to draw its own
+  copy of the card; now it shows the very card the homepage will draw and lets
+  you type straight into its headline and its line. A picture card's headline
+  is still capped at 48 characters (it is a caption); a words card's headline
+  runs as long as a field note's title does.
+- **Edit a live card in one click.** On the LIVE side every slot offers
+  `✎ EDIT THE STAGED CARD`, which takes you to that same card on the STAGED
+  side with its controls open.
+
+One thing the studio will not do yet: take over the audio card. That arrives
+with the audio update; until then the button's place says so.
+
+---
+
+## 2026-09-10 (a composed card is one of your real cards)
+
+**Nothing to do on merge — your cards render the same.** Under the hood, a
+composed homepage card (one you built in the Card Studio) used to be its own
+fifth kind of card with its own renderer, a near-copy of the archive card and
+the field-note tile that had already started to drift. Now it is one of the
+real kinds — a picture card, a words card, an audio card — with your words and
+picture laid over it, drawn by the same code that draws every other card on
+the grid. Every record you have already published is read exactly as before.
+
+**One visible change, on purpose:** a composed *words* card is now the real
+field-note tile, drop cap and blinking caret included, instead of a slightly
+plainer copy of it. Picture cards are byte-for-byte what they were.
+
+**One control is resting for a session:** the Card Studio's *Automatic / Always
+the picture / Always the words* chips are hidden on composed cards until the
+next update, which teaches them the new shape. Cards you already dressed keep
+their dressing.
+
+---
+
 ## 2026-09-08 (your site knows what day it is)
 
 **Your dates were being rendered in California.** The engine had one timezone

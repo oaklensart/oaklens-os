@@ -2897,10 +2897,83 @@ body.sidebar-collapsed .sidebar { display: none; }
   flex-shrink: 0;
 }
 
+
+/* ---- SETS ----------------------------------------------------------------
+ * A set is a named, ordered list of tracks with its own address. It borrows the
+ * row's vocabulary (.aud-title / .aud-meta / .aud-badge / .aud-actions) rather
+ * than inventing a second one, and adds only what a LIST inside a row needs:
+ * a head, and numbered track lines under it. */
+.aud-sets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.aud-set {
+  background: var(--bg-elev-1);
+  border: 1px solid var(--border);
+  transition: border-color 150ms ease;
+}
+.aud-set:hover { border-color: var(--border-strong); }
+.aud-set-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+}
+.aud-set-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.aud-set-tracks {
+  border-top: 1px solid var(--border);
+}
+.aud-set-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+}
+.aud-set-row + .aud-set-row { border-top: 1px solid var(--border); }
+.aud-set-num {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.aud-set-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aud-set-dur {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.aud-set-empty {
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--text-faint);
+}
+/* Same posture as a retired track's row: visible, legible, inert. */
+.aud-set-retired { opacity: 0.62; }
+.aud-set-retired .aud-title { font-family: var(--font-mono); color: var(--text-faint); }
+
 @media (max-width: 640px) {
   /* Six actions beside a title does not fit a phone — stack, and let the
      buttons run full width rather than shrinking the track name to nothing. */
   .aud-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .aud-set-head { flex-direction: column; align-items: stretch; gap: 8px; }
   .aud-actions { justify-content: flex-start; }
   .aud-playlist-banner { flex-direction: column; align-items: stretch; }
 }
@@ -6078,6 +6151,98 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   background: none;
 }
 
+/* The card's own address, read-only beside a COPY. A path is machine text and
+   is shown as such — mono, dimmed, scrollable rather than wrapped, because a
+   broken-across-lines URL invites the owner to mistype it when reading it back
+   to someone. (docs/cards-core-complete.md chunk 6.) */
+.cards-address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cards-address-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  padding: 6px 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* ---- THE SHARE BLOCK (chunk 8) ----
+   One body, two frames: inline in the studio rail's inspector, and inside
+   #share-sheet for the Audio shelf and the field-note editor, which have no
+   rail. The rules below therefore style the BODY only — the frame is whatever
+   the surface already uses, which is why the sheet needs almost nothing. */
+
+/* The address, read-only above the actions. Same treatment as the card's own
+   address block above: mono, dimmed, scrolls rather than wraps, because a URL
+   broken across lines is a URL somebody mistypes reading it back. */
+.share-addr {
+  display: flex;
+  align-items: center;
+  margin: 0 0 10px;
+}
+.share-addr-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  padding: 6px 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* The two DOWNLOAD buttons are a pair and read as one — they differ by a single
+   word — so they share a row where there is width for it and stack where there
+   is not. The first two (copy, stamp) keep a line each: those are the gestures
+   with consequences, and a full-width button is how this console says so.
+   ⚠️ .action-dock is a COLUMN, so the pair needs its own wrapping row rather
+   than a flex-basis on two children — which would have done nothing. */
+.share-dock { display: block; }
+.share-dock > .btn { width: 100%; }
+.share-dock-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.share-dock-pair > .btn {
+  flex: 1 1 46%;
+  min-width: 14ch;
+  justify-content: center;
+  border-radius: var(--r-1);
+}
+.share-dock > .btn + .btn { margin-top: 8px; }
+
+/* The sheet frame. The body is the same markup the rail renders, so the only
+   thing it needs is room to breathe under the title. */
+.share-sheet-body {
+  margin-top: 4px;
+}
+.share-sheet-body .action-dock {
+  margin-top: 0;
+}
+#share-sheet .control-block-note {
+  margin: 12px 2px 0;
+}
+
+/* ↩ UNDO RETIRE — one chip, in the header where the retired card no longer is.
+   Sits beside the pending count rather than in a slot, because the slot it
+   would have lived in has gone back to filling itself. */
+.cards-undo-retire {
+  white-space: nowrap;
+}
+
 .cards-warn {
   margin: 0 0 12px;
   padding: 8px 10px;
@@ -6191,7 +6356,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   letter-spacing: 0.1em;
   line-height: 1;
   padding: 3px 6px;
-  border-radius: 999px;
+  border-radius: var(--r-1);
   border: 1px solid transparent;
   white-space: nowrap;
 }
@@ -6270,27 +6435,40 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   min-height: 420px;
 }
 
-/* ---- the composer well FITS, it does not scroll ----
-   Editing is one card with no row to align, so here the well sizes the card to
-   the height it has and the picture may flex to fill it. (In the GRID the picture
-   must HOLD its 4:5 for the cells to line up — that rule lives above and this
-   never reaches it.) This is what keeps "edit card" inside the viewport instead
-   of scrolling the stage. */
-.cards-studio.is-composing .studio-stage { overflow: hidden; }
+/* ---- the composer well holds the card at its OWN proportions ----
+   Editing is one card with no row to align, so it is the card exactly as the
+   homepage draws it — the picture at 4:5, the footer as tall as its words — and
+   it sits centred in the well. It used to be sized to the well instead: the
+   picture flexed to whatever height was left and the footer, with `margin-top:
+   auto` pushing the caption to the floor, ate two thirds of the card. That was
+   the "crushed picture" the owner saw (2026-09-12). A tall viewport now shows
+   the card with room around it; a short one scrolls the well, which is the
+   cheaper wrong. */
+.cards-studio.is-composing .studio-stage {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 .cards-studio.is-composing .studio-stage .card-face.is-editing {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
   align-items: center;
+  margin: auto 0;
 }
 .cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card {
-  height: 100%;
-  min-height: 0;
-  max-height: 100%;
+  height: auto;
+  max-height: none;
 }
 .cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card[data-shape="picture"] .wk-img {
-  flex: 1 1 auto;
-  aspect-ratio: auto;
-  min-height: 140px;
+  flex: 0 0 auto;
+  aspect-ratio: 4 / 5;
+  width: 100%;
+}
+/* Under the overlay layout the card IS its picture, so the 420px floor the
+   studio grid needs (below) would leave a bare strip of the card's own ground
+   under the 4:5 well — the "blank footer" the owner saw (2026-09-11). No floor
+   here: the composer shows the card at exactly the ratio the painter stamps. */
+.cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card[data-layout="overlay"] {
+  min-height: 0;
 }
 
 /* ---- the composer status & action bar ----
@@ -6322,9 +6500,12 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .cards-composer-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: 1px;
   background: var(--accent);
-  box-shadow: 0 0 6px var(--accent);
+  border: 1px solid var(--led-bezel, rgba(0, 0, 0, 0.9));
+  box-shadow:
+    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.55)),
+    0 0 6px var(--accent);
   animation: cardsDotPulse 1.2s ease-in-out infinite alternate;
 }
 .cards-composer-title {
@@ -6375,6 +6556,26 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   width: 100%;
   display: flex;
   justify-content: center;
+  /* THE CARD'S OWN TOKENS, SPELLED IN THE CONSOLE'S. The painter reads a card's
+     colours off computed style — --surface, --fg, --line, the faces — and the
+     console never loads main.css, so on a card mounted here those names were
+     EMPTY and the painter fell through to its fallbacks: a dark surface and
+     light ink whatever the theme, which is why a DAYLIGHT stamp came out as a
+     dark card on a paper ground. Found 2026-09-12 when the veil started
+     inverting with the theme and left light ink on a light card. These are
+     aliases, not values: each points at the console token the card rules
+     under this class already use, so the painter reads exactly what the
+     mounted card draws. */
+  --surface: var(--surface-1);
+  --line: var(--line-2);
+  --fg: var(--ink-2);
+  --fg-strong: var(--ink-1);
+  --faint: var(--ink-3);
+  --font-meta: var(--font-mono);
+  --accent-rgb: var(--brand-rgb);
+}
+:root[data-theme="light"] .card-face {
+  --accent-rgb: var(--brand-ink-rgb, 196, 17, 17);
 }
 /* ⚠️ The CARD is not 4:5 — its PICTURE is, and the body sits beneath it. That is
    how the real hero card is built (css/main.css: .wk-text[data-layout="hero"]
@@ -6392,6 +6593,15 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border: 1px solid var(--line-2);
   border-radius: var(--r-1);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  /* A CARD'S INTERNAL LAYERING MUST NOT ESCAPE THE CARD — css/main.css says the
+     same thing about .wk-card, at length, and this copy of the card had simply
+     never carried it. It cost nothing until the overlay band arrived with a
+     `backdrop-filter`, which resolves its BACKDROP ROOT at the nearest stacking
+     context: without this the frosted band reached past the card, sampled the
+     console's ground instead of the photograph, and painted the whole picture
+     well flat black. Caught by opening the page — the suite cannot see a card
+     that renders as a hole. */
+  isolation: isolate;
 }
 .card-face.is-editing .wk-card {
   border-color: var(--accent);
@@ -6412,7 +6622,6 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   background-size: cover;
   background-position: center;
 }
-.card-face .wk-card[data-shape="words"] .wk-img { display: none; }
 .card-face .wk-tag {
   position: absolute;
   top: 8px;
@@ -6457,31 +6666,12 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
-/* WYSIWYG: once a composed card has a picture, the EDITABLE title renders as the
-   caption it will publish as — the small uppercase .wk-title scale, not the big
-   words-tile headline. In the words shape it stays the headline (rules below). */
-.card-face .wk-card[data-shape="picture"] .wk-t-title {
-  font-family: var(--font-display);
-  font-weight: 640;
-  text-transform: uppercase;
-  letter-spacing: 0.01em;
-  font-size: 0.8rem;
-  line-height: 1.15;
-}
-/* WYSIWYG, second half: on a picture card the tease publishes as the card's
-   .wk-meta caption (recent-index.js composedCard) — the small mono line, not the
-   body-copy tease of the words tile. The composer showed it at 0.82rem in the
-   body face, so a caption looked twice the size it publishes at. Same treatment
-   the headline already gets in the rule above, for the same reason.
-   ⚠️ It deliberately still WRAPS here while the live line ellipsises at one:
-   you cannot type into a clipped field. The size is the truth this can tell. */
-.card-face .wk-card[data-shape="picture"] .wk-snip {
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  line-height: 1.45;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-}
+/* THE COMPOSER IS THE RENDERER'S OWN CARD (chunk 2, docs/cards-core-complete.md):
+   a picture card's editable headline IS its .wk-title and its editable tease IS
+   its .wk-meta, so the caption rules above are the truth with nothing restated.
+   ⚠️ The editable caption WRAPS while the live line ellipsises at one: you
+   cannot type into a clipped field. The size is the truth this can tell. */
+.card-face .wk-meta[contenteditable] { white-space: pre-wrap; overflow: visible; text-overflow: clip; }
 
 /* The card's own meta line — location, camera, the year. */
 .card-face .wk-meta {
@@ -6493,27 +6683,452 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 4px;
+  margin-top: 0;
 }
+/* The footer, as main.css .wk-body draws it: the same padding and gap, title
+   and caption at the TOP, and `flex: 1 1 auto` so the body fills the card down
+   to its edge. In the studio grid every card is stretched to its row, and a
+   footer that stopped at its text left the card's own ground showing under it
+   — on a palette card that read as the tinted footer "not reaching the bottom"
+   (main.css's own comment names the same trap). A pass on 2026-09-12 snugged
+   the footer to `flex: 0 0 auto` to fix the COMPOSER (where it was right, see
+   the well rules above) and reached the grid too, where it was that bug: the
+   composed card ended 38px above its neighbours. The composer's card has
+   `height: auto`, so the grow never fires there and one rule serves both.
+   The caption used to be pushed to the floor here (`margin-top: auto`) so
+   four cards lined up along the bottom; the homepage does not do that, and
+   the owner asked for the studio's card to be the homepage's card. */
 .card-face .wk-body {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  padding: 16px;
+  padding: 12px 13px 13px;
+  gap: 5px;
 }
-/* The meta line sits on the floor of the card, so four cards of different
-   content still line up along the bottom instead of each ending wherever their
-   words happened to stop. */
-.card-face .wk-meta { margin-top: auto; }
 
-/* ⚠️ A WORDS CARD FILLS ITS PLATE. In a grid of equal-height rows a card with no
+/* ---- the words tile's shell (main.css .wk-text) ----
+   Padded, one gap, CENTRED. In a grid of equal-height rows a card with no
    picture is stretched to match one that has one — and pinning its text to the
    top leaves a void underneath, which is the "wasted space at the bottom" this
-   layout was sent back for twice. Centring is not a cosmetic choice: it is what
-   the real text card does, and the tier ladder exists precisely so a short line
-   grows to fill the tile rather than rattling around in it. */
-.card-face .wk-card[data-shape="words"] .wk-body { justify-content: center; }
+   layout was sent back for twice. Centring is what the real text card does,
+   and the tier ladder exists precisely so a short line grows to fill the tile.
+   Every field-note tile the studio mounts — automatic, composed, or being
+   typed on — is this element since chunk 2; before it the automatic ones
+   rendered flush to the card's edge here, unnoticed. */
+.card-face .wk-text {
+  padding: 16px 16px 14px;
+  gap: 10px;
+  justify-content: center;
+}
+/* The hero layout resets the shell to the photo tile's shape, picture first
+   (main.css .wk-text[data-layout="hero"]); the title keeps its display face
+   at caption scale under the picture. `overlay` is the same card with its words
+   moved onto the picture, so it takes the same reset. */
+.card-face .wk-text[data-layout="hero"],
+.card-face .wk-text[data-layout="overlay"] {
+  padding: 0;
+  gap: 0;
+  justify-content: flex-start;
+}
+.card-face .wk-text[data-layout="hero"] .wk-t-title,
+.card-face .wk-text[data-layout="overlay"] .wk-t-title {
+  font-size: 0.92rem;
+  line-height: 1.16;
+  letter-spacing: -0.005em;
+  margin-bottom: 8px;
+}
+
+/* ---- OVERLAY: the band, restated for the console (main.css, same attributes) ----
+   The engine stamps data-place / data-treat / data-blur / data-ink and this
+   surface has to honour all four, or the composer shows a card the homepage
+   will not draw — which is the one thing this view exists not to do. Same
+   polarity rule as the public sheet: the veil is the OPPOSITE of the ink, never
+   the theme's ground, because the band sits on a photograph. */
+.card-face .wk-card[data-layout="overlay"] {
+  --ov-ink: rgba(255, 255, 255, 0.97);
+  --ov-ink-2: rgba(255, 255, 255, 0.78);
+  --ov-veil: 0, 0, 0;
+  --ov-blur: 10px;
+}
+.card-face .wk-card[data-layout="overlay"][data-ink="dark"] {
+  --ov-ink: rgba(0, 0, 0, 0.94);
+  --ov-ink-2: rgba(0, 0, 0, 0.7);
+  --ov-veil: 255, 255, 255;
+}
+/* THE PICTURE IS THE CARD (main.css says why, at length): in the studio grid the
+   well grows to the card's floor rather than holding 4:5 above a bare strip. The
+   composer rule above wins there and the card hugs its 4:5 instead.
+   ⚠️ `width: 100%` is load-bearing — a grown box with `aspect-ratio` widens
+   itself in WebKit, which is what pushed the chip out of the card on the live
+   site (2026-09-12). A definite width leaves the ratio nothing to compute. */
+.card-face .wk-card[data-layout="overlay"] .wk-img {
+  flex: 1 0 auto;
+  width: 100%;
+}
+.card-face .wk-card[data-layout="overlay"] .wk-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  flex: 0 0 auto;
+  gap: 3px;
+  z-index: 1;
+}
+/* The caption inside a band wraps rather than ellipsising — a band is read,
+   not scanned. (Until 2026-09-12 .card-face also pinned the caption to the
+   card's floor with `margin-top: auto`, and this rule existed to undo that
+   inside a band; the floor rule is gone — the studio's card is the homepage's
+   card now — and the `margin-top: 0` here is simply the truth restated.) */
+.card-face .wk-card[data-layout="overlay"] .wk-meta {
+  margin-top: 0;
+  white-space: normal;
+}
+.card-face .wk-card[data-layout="overlay"][data-place="bottom"] .wk-body {
+  bottom: 0;
+  padding: 48px 16px 16px;
+}
+.card-face .wk-card[data-layout="overlay"][data-place="top"] .wk-body {
+  top: 0;
+  padding: 16px 16px 48px;
+}
+.card-face .wk-card[data-layout="overlay"][data-place="centre"] .wk-body {
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 22px 18px;
+  text-align: center;
+  align-items: center;
+}
+/* The chip crosses to the empty end at `top` placement — main.css makes the
+   same move for the same reason: the band and the chip cannot share a corner. */
+.card-face .wk-card[data-layout="overlay"] .wk-tag { z-index: 2; }
+.card-face .wk-card[data-layout="overlay"][data-place="top"] .wk-tag {
+  top: auto;
+  bottom: 8px;
+}
+.card-face .wk-card[data-layout="overlay"][data-treat="scrim"][data-place="bottom"] .wk-body {
+  background: linear-gradient(to top,
+    rgba(var(--ov-veil), 0.8) 0%, rgba(var(--ov-veil), 0.46) 52%, rgba(var(--ov-veil), 0) 100%);
+}
+.card-face .wk-card[data-layout="overlay"][data-treat="scrim"][data-place="top"] .wk-body {
+  background: linear-gradient(to bottom,
+    rgba(var(--ov-veil), 0.8) 0%, rgba(var(--ov-veil), 0.46) 52%, rgba(var(--ov-veil), 0) 100%);
+}
+.card-face .wk-card[data-layout="overlay"][data-treat="scrim"][data-place="centre"] .wk-body {
+  background: rgba(var(--ov-veil), 0.52);
+}
+.card-face .wk-card[data-layout="overlay"][data-treat="blur"] .wk-body {
+  background: rgba(var(--ov-veil), 0.24);
+  backdrop-filter: blur(var(--ov-blur)) saturate(105%);
+  -webkit-backdrop-filter: blur(var(--ov-blur)) saturate(105%);
+}
+.card-face .wk-card[data-layout="overlay"][data-blur="1"] { --ov-blur: 5px; }
+.card-face .wk-card[data-layout="overlay"][data-blur="2"] { --ov-blur: 10px; }
+.card-face .wk-card[data-layout="overlay"][data-blur="3"] { --ov-blur: 18px; }
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .card-face .wk-card[data-layout="overlay"][data-treat="blur"][data-place="bottom"] .wk-body {
+    background: linear-gradient(to top,
+      rgba(var(--ov-veil), 0.8) 0%, rgba(var(--ov-veil), 0.46) 52%, rgba(var(--ov-veil), 0) 100%);
+  }
+  .card-face .wk-card[data-layout="overlay"][data-treat="blur"][data-place="top"] .wk-body {
+    background: linear-gradient(to bottom,
+      rgba(var(--ov-veil), 0.8) 0%, rgba(var(--ov-veil), 0.46) 52%, rgba(var(--ov-veil), 0) 100%);
+  }
+  .card-face .wk-card[data-layout="overlay"][data-treat="blur"][data-place="centre"] .wk-body {
+    background: rgba(var(--ov-veil), 0.52);
+  }
+}
+.card-face .wk-card[data-layout="overlay"][data-treat="none"] .wk-body {
+  background: none;
+  text-shadow: 0 1px 3px rgba(var(--ov-veil), 0.55);
+}
+/* THE PLATE, restated (main.css "THE PLATE" says why): display face, sentence
+   case, the ladder the engine stamps as data-scale, the accent full stop under
+   data-mark, and the caption as a tracked second line under a short accent
+   rule. Every size here is main.css's, so the card the owner types on is the
+   card the homepage draws. */
+.card-face .wk-card[data-layout="overlay"] .wk-title,
+.card-face .wk-card[data-layout="overlay"] .wk-t-title {
+  color: var(--ov-ink);
+  font-family: var(--font-display);
+  text-transform: none;
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  -webkit-line-clamp: 3;
+  margin-bottom: 0;
+}
+.card-face .wk-card[data-layout="overlay"][data-scale="statement"] .wk-title,
+.card-face .wk-card[data-layout="overlay"][data-scale="statement"] .wk-t-title {
+  font-size: clamp(2.4rem, 1.5rem + 3vw, 3.4rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+}
+.card-face .wk-card[data-layout="overlay"][data-scale="feature"] .wk-title,
+.card-face .wk-card[data-layout="overlay"][data-scale="feature"] .wk-t-title {
+  font-size: clamp(1.9rem, 1.2rem + 2.2vw, 2.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+.card-face .wk-card[data-layout="overlay"][data-scale="standard"] .wk-title,
+.card-face .wk-card[data-layout="overlay"][data-scale="standard"] .wk-t-title {
+  font-size: 1.5rem;
+}
+.card-face .wk-card[data-layout="overlay"][data-scale="compact"] .wk-title,
+.card-face .wk-card[data-layout="overlay"][data-scale="compact"] .wk-t-title {
+  font-size: 1.18rem;
+  line-height: 1.14;
+  letter-spacing: -0.015em;
+}
+.card-face .wk-card[data-layout="overlay"][data-mark="dot"] .wk-title::after,
+.card-face .wk-card[data-layout="overlay"][data-mark="dot"] .wk-t-title::after {
+  content: '.';
+  color: var(--accent);
+}
+.card-face .wk-card[data-layout="overlay"] .wk-meta {
+  color: var(--ov-ink-2);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  margin-top: 6px;
+}
+.card-face .wk-card[data-layout="overlay"] .wk-meta::before {
+  content: '';
+  display: block;
+  width: 22px;
+  height: 2px;
+  margin-bottom: 9px;
+  background: var(--accent);
+}
+.card-face .wk-card[data-layout="overlay"][data-place="centre"] .wk-meta::before {
+  margin-left: auto;
+  margin-right: auto;
+}
+/* The editable caption keeps the band's ink too — the leaf is the card's own
+   .wk-meta, so this is the same declaration reaching the same node. */
+.card-face .wk-card[data-layout="overlay"] [contenteditable]:focus {
+  box-shadow: inset 0 -1px 0 var(--ov-ink);
+}
+
+/* ---- THE AUDIO CARD, restated (chunk 5) ----
+   The composer mounts the real audio card now, which means the console needs
+   the real audio card's rules — the ground, the transport and the index — for
+   the same reason it needs every other card's: it cannot load css/main.css.
+   Until now it had NONE of them (found and logged in chunk 2), so an audio
+   card in the studio rendered as unstyled rows on a bare tile.
+
+   ⚠️ THE TRANSPORT IS INERT HERE. The composer is a surface to type on, so the
+   play control does not invite a press — no pointer, no hover colour, no focus
+   ring. The waveform is still drawn from the track's stored peaks, because the
+   bars ARE the card's artwork and a card without them is not the card. */
+.card-face .wk-audio {
+  padding: 16px 16px 14px;
+  gap: 10px;
+  justify-content: center;
+  /* The listening room, derived exactly as main.css derives it: one veil over
+     whatever surface the console's preset already has, plus the accent wash. */
+  --audio-rgb: var(--brand-rgb);
+  --audio-veil: rgba(0, 0, 0, 0.55);
+  background:
+    radial-gradient(circle at 88% 0%, rgba(var(--audio-rgb), 0.12) 0%, transparent 58%),
+    linear-gradient(168deg, rgba(var(--audio-rgb), 0.055) 0%, rgba(var(--audio-rgb), 0.018) 55%, rgba(var(--audio-rgb), 0) 100%),
+    linear-gradient(var(--audio-veil), var(--audio-veil)),
+    var(--surface-2);
+}
+:root[data-theme="light"] .card-face .wk-audio { --audio-veil: rgba(255, 255, 255, 0.5); }
+.card-face .wk-audio .wk-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.card-face .wk-a-title {
+  font-family: var(--font-display);
+  font-weight: 680;
+  font-size: 1.12rem;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  color: var(--ink-1);
+  overflow: hidden;
+}
+.card-face .wk-a-title a { color: inherit; text-decoration: none; }
+.card-face .wk-a-sub {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.card-face .wk-a-foot {
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.card-face .wk-a-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-x);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-face .wk-a-share {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-x);
+  cursor: default;
+}
+.card-face .wk-a-share svg { width: 13px; height: 13px; fill: currentColor; }
+
+/* The caption — main.css's own reset, restated (see its block for why .wk-body
+   arrives carrying the picture card's padding and flex). */
+.card-face .wk-audio .wk-body {
+  padding: 0;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+/* The transport. Inert, per the warning above. */
+.card-face .ap {
+  --ap-progress: 0;
+  --ap-wave-h: 34px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+}
+.card-face .ap-play {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ink-2);
+  cursor: default;
+  pointer-events: none;
+}
+.card-face .ap-glyph { width: 13px; height: 15px; fill: currentColor; }
+.card-face .ap-glyph-pause { display: none; }
+.card-face .ap-wave {
+  position: relative;
+  flex: 1 1 auto;
+  height: var(--ap-wave-h);
+  min-width: 0;
+  cursor: default;
+  pointer-events: none;
+  overflow: hidden;
+}
+.card-face .ap-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.card-face .ap-bar {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 1px;
+  background: var(--ink-x);
+}
+.card-face .ap-bars-fill {
+  -webkit-clip-path: inset(0 calc(100% - var(--ap-progress) * 100%) 0 0);
+  clip-path: inset(0 calc(100% - var(--ap-progress) * 100%) 0 0);
+}
+.card-face .ap-bars-fill .ap-bar { background: var(--accent); }
+.card-face .ap-flat .ap-bars-base .ap-bar { background: var(--line-2); }
+.card-face .ap-time {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+  text-align: right;
+}
+.card-face .ap-card { --ap-wave-h: 40px; }
+.card-face .ap-row { --ap-wave-h: 22px; gap: 9px; }
+.card-face .ap-row .ap-play { width: 18px; height: 18px; }
+.card-face .ap-row .ap-glyph { width: 10px; height: 12px; }
+.card-face .ap-row .ap-time { font-size: 0.58rem; min-width: 3em; }
+
+/* ---- the playlist variation: a head over an index ---- */
+.card-face .wk-audio-playlist {
+  gap: 8px;
+  justify-content: flex-start;
+}
+.card-face .wk-audio-playlist .ap {
+  --ap-wave-h: 96px;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+.card-face .wk-audio-playlist .wk-a-foot { margin-top: auto; }
+.card-face .wk-pl-index {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border-top: 1px solid var(--line-2);
+  padding-top: 9px;
+}
+.card-face .wk-audio-playlist[data-tier="roomy"] .wk-pl-index { gap: 10px; }
+.card-face .wk-audio-playlist[data-tier="dense"] .wk-pl-index { gap: 4px; }
+.card-face .wk-pl-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  cursor: default;
+  pointer-events: none;
+}
+.card-face .wk-pl-item.is-active { background: var(--accent-wash); }
+.card-face .wk-pl-num {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--ink-x);
+  font-variant-numeric: tabular-nums;
+}
+.card-face .wk-pl-item.is-active .wk-pl-num { color: var(--accent); }
+.card-face .wk-pl-name {
+  flex: 0 1 auto;
+  font-family: var(--font-body);
+  font-size: 0.86rem;
+  color: var(--ink-2);
+  text-decoration: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.card-face .wk-pl-leader {
+  flex: 1 1 auto;
+  border-bottom: 1px dotted var(--line-2);
+  transform: translateY(-3px);
+}
+.card-face .wk-pl-dur {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--ink-x);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---- the type ----
    Mirrored from css/main.css's card rules, scaled for a ~300px preview. The
@@ -6527,17 +7142,13 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
      · the tease runs the SAME tier ladder the homepage runs, so a short line
        becomes the pull-quote and the headline stops being the biggest thing
 
-   ⚠️ No drop cap here, and that is a real limit rather than an oversight: the
-   published card opens `feature` and `standard` teases with one
-   (.wk-dropcap, a <span> injected at render), and a <textarea> cannot carry a
-   child element. The rail says so in words instead — see the WORDS block. */
+   The drop cap and the caret are below, restated once for an editable leaf. */
 
 /* The kicker belongs to the words shape; the picture shape has its chip. */
 .card-face .wk-kicker {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 11px;
   font-family: var(--font-mono);
   font-size: 0.58rem;
   letter-spacing: 0.18em;
@@ -6545,25 +7156,45 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   color: var(--accent-text);
 }
 .card-face .wk-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 1px;
   background: var(--accent);
+  border: 1px solid var(--led-bezel, rgba(0, 0, 0, 0.9));
+  box-shadow:
+    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.55)),
+    0 0 6px var(--accent);
 }
-.card-face .wk-card[data-shape="picture"] .wk-kicker { display: none; }
-
-/* The two fields ARE the card's text nodes, not inputs sitting on top of it. */
-.card-face .wk-t-title,
-.card-face .wk-snip {
-  width: 100%;
-  background: transparent;
-  border: 0;
+.card-face .wk-composed[data-state]:not([data-state="default"]) .wk-dot {
+  background: rgb(var(--pulse-rgb));
+  box-shadow:
+    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.55)),
+    0 0 6px rgba(var(--pulse-rgb), 0.55);
+}
+/* The two fields ARE the card's text nodes — the renderer's own leaves made
+   editable in place (composerCardHtml). No box, no outline, no resize handle:
+   an input drawn inside the card would break the illusion the whole surface
+   depends on. Line breaks stay as typed, and a long word wraps rather than
+   widening the card. */
+.card-face [contenteditable] {
   outline: none;
-  resize: none;
-  padding: 0;
-  margin: 0;
-  overflow: hidden;
+  cursor: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 1.2em;    /* an empty field is still a target */
 }
+/* The placeholder is CSS on an attribute the input handler toggles — never a
+   value written into the field (tests/cards-composer.test.js pins the
+   surgical rule). */
+.card-face [contenteditable][data-empty]::before {
+  content: attr(data-placeholder);
+  color: var(--ink-x);
+  pointer-events: none;
+}
+/* The field being edited says so with a hairline, not a box. */
+.card-face [contenteditable]:focus { box-shadow: inset 0 -1px 0 var(--accent); }
+
 .card-face .wk-t-title {
   font-family: var(--font-display);
   font-weight: 680;
@@ -6571,8 +7202,6 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   line-height: 1.16;
   letter-spacing: -0.012em;
   color: var(--ink-1);
-  margin-bottom: 8px;
-  min-height: 1.2em;    /* an empty field is still a target */
 }
 .card-face .wk-snip {
   font-family: var(--font-body);
@@ -6582,36 +7211,32 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   color: var(--ink-2);
   min-height: 1.4em;
 }
-.card-face .wk-t-title::placeholder,
-.card-face .wk-snip::placeholder { color: var(--ink-x); }
-/* The field being edited says so with a hairline, not a box — a form outline
-   inside the card would break the illusion the whole surface depends on. */
-.card-face .wk-t-title:focus,
-.card-face .wk-snip:focus { box-shadow: inset 0 -1px 0 var(--accent); }
 
-/* ---- the words shape: the tease becomes the design ----
+/* ---- the words tile: the tease becomes the design ----
    With no picture the type has the whole plate, so the headline steps up and
    the tease runs the ladder. At `statement` the tease is the biggest thing on
    the card and switches to the display face — a one-line tease is a pull-quote,
-   which is the single most editorial move the real card makes. */
-.card-face .wk-card[data-shape="words"] .wk-t-title {
+   which is the single most editorial move the real card makes. Keyed on
+   .wk-text: since chunk 2 the composed words card IS the field-note tile, so
+   one set of rules serves the automatic note, the composed card, and the one
+   being typed on. */
+.card-face .wk-text .wk-t-title {
   font-size: 1.16rem;
   line-height: 1.1;
   letter-spacing: -0.015em;
-  margin-bottom: 10px;
 }
-.card-face .wk-card[data-shape="words"] .wk-snip {
+.card-face .wk-text .wk-snip {
   font-size: 1.02rem;
   line-height: 1.42;
   letter-spacing: -0.005em;
   color: var(--ink-1);
 }
-.card-face .wk-card[data-shape="words"][data-tier="feature"] .wk-snip {
+.card-face .wk-text[data-tier="feature"] .wk-snip {
   font-size: 1.28rem;
   line-height: 1.3;
   letter-spacing: -0.01em;
 }
-.card-face .wk-card[data-shape="words"][data-tier="statement"] .wk-snip {
+.card-face .wk-text[data-tier="statement"] .wk-snip {
   font-family: var(--font-display);
   font-weight: 560;
   font-size: 1.7rem;
@@ -6620,14 +7245,61 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   color: var(--ink-1);
 }
 /* A statement tease outweighs its own headline, so the headline steps back to
-   a label rather than competing with it. */
-.card-face .wk-card[data-shape="words"][data-tier="statement"] .wk-t-title {
+   a label rather than competing with it — with more air under it: the quote
+   below is now the largest thing on the card and needs room to read as the
+   subject rather than as the next line of the same paragraph. */
+.card-face .wk-text[data-tier="statement"] .wk-t-title {
   font-size: 0.92rem;
   color: var(--ink-2);
-  /* More air under a headline that has become a label: the quote below it is
-     now the largest thing on the card and needs room to read as the subject
-     rather than as the next line of the same paragraph. */
-  margin-bottom: 16px;
+  margin-bottom: 6px;
+}
+
+/* ---- the drop cap and the caret, restated once for an editable leaf ----
+   On the homepage both are <span>s the renderer injects (.wk-dropcap,
+   .ed-caret; main.css). The read-only cards in the grid and on the stage
+   carry those spans and take the rules below directly. The composer's tease
+   is an editable leaf, and a field cannot carry a child element — so there
+   the same two are drawn by CSS: ::first-letter for the cap (feature and
+   standard tiers only, never on the placeholder), ::after for the caret,
+   hidden while the field has focus because the browser's own caret is the
+   caret then. The known limit of ::first-letter — a leading quote or number
+   rides along with the cap — is the composer's alone; the published card
+   uses the grapheme the engine picks. */
+.card-face .wk-dropcap,
+.card-face .wk-text[data-tier="feature"] .wk-snip[contenteditable]:not([data-empty])::first-letter,
+.card-face .wk-text[data-tier="standard"] .wk-snip[contenteditable]:not([data-empty])::first-letter {
+  float: left;
+  font-family: var(--font-display);
+  font-weight: 720;
+  font-size: 3em;
+  line-height: 0.62;
+  margin: 6px 10px -2px 0;
+  color: var(--accent);
+}
+.card-face .wk-text[data-tier="feature"] .wk-dropcap,
+.card-face .wk-text[data-tier="feature"] .wk-snip[contenteditable]:not([data-empty])::first-letter {
+  font-size: 3.3em;
+}
+.card-face .ed-caret,
+.card-face .wk-snip[contenteditable]::after {
+  content: '';
+  display: inline-block;
+  width: 2px;
+  height: 1.02em;
+  margin-left: 3px;
+  vertical-align: -2px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: cards-ed-blink 1.15s ease-in-out infinite;
+}
+.card-face .wk-snip[contenteditable]:focus::after { display: none; }
+@keyframes cards-ed-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-face .ed-caret,
+  .card-face .wk-snip[contenteditable]::after { animation: none; opacity: 0.9; }
 }
 
 /* ---- pulse and composed palette grounds in .card-face ---- */
@@ -6674,7 +7346,11 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .card-face .wk-card[data-state="tide"]   { --pulse-rgb: 58, 134, 176; }
 .card-face .wk-card[data-state="signal"] { --pulse-rgb: var(--brand-rgb); }
 
-.card-face .wk-card[data-shape="picture"][data-state]:not([data-state="default"]) .wk-body {
+/* ⚠️ NOT on an overlay card — main.css makes the same exclusion for the same
+   reason: an overlay card has no ground to tint (the picture is the whole card),
+   and washing the band in the palette hue fights the treatment under it and the
+   derived ink over it. */
+.card-face .wk-card[data-shape="picture"][data-state]:not([data-state="default"]):not([data-layout="overlay"]) .wk-body {
   background: linear-gradient(180deg, rgba(var(--pulse-rgb, var(--brand-rgb)), 0.12) 0%, rgba(var(--pulse-rgb, var(--brand-rgb)), 0.04) 100%);
 }
 .card-face .wk-card[data-shape="picture"][data-state]:not([data-state="default"]) {
@@ -6738,17 +7414,6 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   text-transform: uppercase; color: var(--ink-3); flex: 0 0 auto;
 }
 
-/* A visible label would compete with the card's own kicker; the field's purpose
-   is obvious on screen and the name is here for anyone not looking at it. */
-.composer-sr {
-  position: absolute;
-  width: 1px; height: 1px;
-  padding: 0; margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
 .composer-input {
   width: 100%;
   padding: 10px 12px;
@@ -6810,6 +7475,19 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border: 1px solid var(--line-1);
   color: var(--ink-3);
 }
+/* An aside that carries a TONE reads as the badge of that tone (the ribbon's
+   LIVE / STAGED pills), so "this address is live" says it in the same green
+   wherever it is said. Text, coloured — never markup passed through the aside. */
+.control-block-aside[data-tone="live"] {
+  color: var(--ok);
+  background: rgba(var(--ok-rgb), 0.10);
+  border-color: rgba(var(--ok-rgb), 0.28);
+}
+.control-block-aside[data-tone="staged"] {
+  color: var(--accent-text);
+  background: var(--accent-wash);
+  border-color: rgba(var(--brand-rgb), 0.25);
+}
 .control-block-note {
   font-family: var(--font-mono);
   font-size: var(--t-micro);
@@ -6819,46 +7497,70 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   margin: 12px 0 0;
 }
 
-/* Palette Swatches */
+/* Palette Hardware Selector */
 .cards-palette-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 0;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 6px;
+  padding: 2px 0;
 }
 .cards-swatch {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  background: rgb(var(--chip-rgb, 120, 120, 120));
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-1);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   cursor: pointer;
-  position: relative;
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  min-height: 28px;
+  box-sizing: border-box;
 }
-.cards-swatch::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  right: -8px;
-  bottom: -8px;
-}
-.cards-swatch:hover { transform: scale(1.15); }
-.cards-swatch:active { transform: scale(0.95); }
-.cards-swatch.is-active {
-  border-color: var(--ink-1);
-  box-shadow: 0 0 10px rgba(var(--chip-rgb, 255, 255, 255), 0.7);
-}
-.cards-swatch--default {
+.cards-swatch:hover {
   background: var(--surface-3);
-  border: 1px solid var(--line-3);
+  border-color: var(--line-3);
+  color: var(--ink-1);
 }
-.cards-swatch--default.is-active {
-  border-color: var(--ink-1);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
+.cards-swatch.is-active {
+  background: var(--surface-3);
+  border-color: var(--accent);
+  color: var(--ink-1);
+  box-shadow: 0 0 0 1px var(--accent), inset 0 0 6px rgba(var(--brand-rgb), 0.15);
+}
+.cards-swatch-pip {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 1px;
+  background: rgb(var(--chip-rgb, 120, 120, 120));
+  border: 1px solid var(--led-bezel, rgba(0, 0, 0, 0.85));
+  box-shadow: inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.45));
+}
+.cards-swatch.is-active .cards-swatch-pip {
+  box-shadow:
+    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.65)),
+    0 0 6px rgba(var(--chip-rgb), 0.7);
+}
+.cards-swatch-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Default has no hue: an unlit part, and no glow when it is the one chosen —
+   the glow above would otherwise fall through to whatever --chip-rgb is not. */
+.cards-swatch--default .cards-swatch-pip {
+  background: var(--surface-3);
+  border-color: var(--line-3);
+}
+.cards-swatch--default.is-active .cards-swatch-pip {
+  box-shadow: inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.65));
 }
 .cards-swatch--signal { --chip-rgb: var(--brand-rgb); }
 .cards-swatch--ember  { --chip-rgb: 214, 72, 60; }
@@ -6948,6 +7650,57 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .layout-chip-label { color: inherit; }
 .layout-chip-name { color: var(--ink-x); letter-spacing: 0.04em; }
 .layout-chip.is-on .layout-chip-name { color: var(--accent-text); }
+
+/* ---- the OVERLAY block's three rows (overlayBlockHtml) ----
+   Three questions, three or fewer answers each, all single words — so these
+   chips sit SIDE BY SIDE rather than stacking like the layout picker's, and the
+   whole row reads as one switch with one position thrown. Each row's default is
+   always on screen, which is the whole reversibility story (vision §5.4). */
+.cards-ov-row + .cards-ov-row { margin-top: 10px; }
+.cards-ov-label {
+  display: block;
+  margin-bottom: 5px;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-x);
+}
+.cards-ov-row .layout-chips { flex-direction: row; gap: 6px; }
+/* Equal thirds, and `min-width: 0` so a long word shrinks the chip instead of
+   widening the rail — the reuse-shelf lesson, one rail over. */
+.cards-ov-row .layout-chip {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
+  text-align: center;
+  padding: 9px 6px;
+}
+
+/* A block's plain-language line where controls would be (nothing lands here,
+   read only) — and the one dock LIVE offers beneath its own. */
+.control-empty {
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.control-empty + .action-dock { margin-top: 12px; }
+
+/* What the focused audio card actually plays, resolved by the engine and
+   printed as words — so the rail and the card can never disagree about an
+   emptied homepage card or a set whose tracks all retired. */
+.cards-plays {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.composer-input + .cards-plays,
+.layout-chips + .action-dock { margin-top: 10px; }
 
 /* The dock: tactile buttons with refined geometry. */
 .action-dock { display: flex; flex-direction: column; gap: 8px; }
@@ -7227,22 +7980,217 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 /* ============================================
    CARDS — TABLET AND PHONE
    --------------------------------------------
-   The rail is the thing that has to move. On a tablet it drops under the stage
-   as a two-up grid of blocks; on a phone it becomes one column beneath the card.
-   Both keep the ribbon and the reuse strip horizontal, because those are already
-   scroll containers and stacking them would cost more height than they save.
+   THE STUDIO KEEPS ITS TWO PANES ON A TABLET, AND THE VIEW STAYS BOUNDED —
+   the desktop shape on the console's field device: the card sits still in its
+   well and the inspector rail is the ONLY thing that scrolls. Below 700px none
+   of it holds: there is no width for a 340px rail beside a 300px card, so the
+   rail drops under the stage and the PAGE scrolls again.
+
+   ⚠️ TWO EARLIER CUTS DIED HERE; DO NOT RE-DERIVE EITHER.
+   (1) The rail dropped under the stage for everything below 1180px — which is
+       BOTH of an iPad mini's orientations — and a stacked rail is a
+       `repeat(auto-fit, minmax(260px, 1fr))` grid with `align-items: start`, so
+       every block shorter than its row leaves a hole under it. Nine composer
+       blocks made a ragged 2-up/4-up zigzag (owner, 2026-09-12: "all over the
+       place").
+   (2) The fix for that kept the page scrolling and pinned the stage with
+       `position: sticky`. That put TWO scrollers under one finger: the page
+       moved, the card lagged at the sticky offset, and one flick drove two
+       things at two rates — "very floaty" (owner, same day, second pass). A
+       sticky pane inside a scrolling page is two rates by construction. A
+       bounded view with one scroller is one rate. This is the one scroller.
+
+   ⚠️ BOUNDED MEANS THE ROWS ARE FINITE, so every row has to be earned. Two
+   secondary rows step aside inside the band — the note always, the re-feature
+   strip while composing — and two more when the tablet is held sideways, where
+   744px of height has none to spare. The card is then sized to the well that is
+   LEFT rather than the well being sized to the card:
+   `min(300px, calc((100cqh - var(--card-rsv)) * 0.8))`, so it is never crushed
+   out of proportion and never clipped.
+
+   Whatever survives, the ribbon and the reuse strip stay HORIZONTAL: both are
+   already scroll containers, and stacking either would cost more height than it
+   saves.
    ============================================ */
-/* ---- THE MOMENT THE RAIL DROPS UNDER THE STAGE, THE VIEW HAS TO SCROLL ----
-   ⚠️ These two things are ONE change and must stay in one media query.
-   Single-column means stage and rail are stacked rows inside a box that is still
-   `height: 100%; overflow: hidden` — so the rail sits in the hidden overflow with
-   no scroller anywhere above it, and on a tablet (the console's field device)
-   the picture picker, the crop button, the swatches and the layout chips are all
-   simply unreachable. The unbounding shipped for phones only; the rail starts
-   dropping at 1180. So the scroll rules live HERE, at the same breakpoint as the
-   stack that needs them, and the phone block below keeps only what is about
-   being narrow. */
-@media (max-width: 1180px) {
+
+/* ---- TABLET: TWO PANES, THE CARD LOCKED, THE RAIL THE ONE SCROLLER ----
+   The desktop studio's shape and its scroll contract, unchanged: the view is
+   `height: 100%; overflow: hidden` from its own base rule, `#cards-body` is the
+   flex column inside it, the stage holds still, and `.studio-rail`'s own
+   `overflow-y: auto` carries the settings. Nothing here re-states any of that —
+   it only stops the old block from undoing it.
+
+   ⚠️ 340px is not a taste call. The SHARE block's address row (a `<code>` of a
+   full URL, `white-space: nowrap`) has a min-content width of ~332px and cannot
+   shrink below it, so a narrower rail is a rail the block hangs out of. If the
+   rail is ever re-cut, check that block first.
+
+   ⚠️ `align-items` stays at the base `stretch` — it was `start` while the stage
+   was sticky (a stretched stage cannot stick) and it must not go back: the
+   stage has to take the grid row's whole height, or `container-type: size`
+   below has no height to answer the card with. */
+@media (min-width: 700px) and (max-width: 1180px) {
+  .cards-studio,
+  .cards-studio.is-composing {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 12px;
+  }
+
+  /* THE WELL HOLDS STILL — not a scroller, and nothing to stick to any more.
+     `container-type: size` makes it the query container the card measures
+     itself against, which is safe here for exactly one reason: the well's
+     height comes from the grid row, never from its contents. */
+  .studio-stage,
+  .cards-studio.is-composing .studio-stage {
+    overflow: hidden;
+    container-type: size;
+  }
+
+  /* THE CARD IS SIZED TO THE WELL. A card is a 4:5 picture over a footer of
+     words, so its height runs about 1.25 × its width + ~60px; a well H tall can
+     carry a card roughly (H − 100) / 1.25 wide once the well's padding and the
+     composer bar are paid for — so the sum is `(the well − what else it holds)
+     × 0.8`, and `--card-rsv` is that "what else". The well never holds the card
+     alone: the preview stacks ✎ EDIT THIS CARD under it, the composer stacks
+     its status bar above it, and either may also be carrying an undo chip. At
+     200px of reserve the cap resolves to the full 300px the moment the well
+     passes ~590px — every tablet held upright, in both states — and scales the
+     card down at TRUE proportions on the one that does not. The sideways block
+     below re-states the reserve for the layout it uses.
+     ⚠️ Two things this rule must NOT do, both learned the hard way:
+     · Never add a class to it. At three it loses to WRITE MODE's
+       `body.kb-open .card-face .wk-card` (three classes + an element), which is
+       what has to win while the keys are up. A fourth class here silently took
+       that fight and sized the card against a well the keyboard had already
+       taken — down to a 113px card. The STATE belongs in `--card-rsv`, set on
+       the studio, for exactly that reason.
+     · Never drop the `min()`. It carries its own fallback — a browser without
+       container query units drops the whole declaration and inherits the plain
+       300px cap, which is the right answer there. */
+  .cards-studio {
+    --card-rsv: 200px;
+    --card-w: min(300px, calc((100cqh - var(--card-rsv)) * 0.8));
+  }
+  .studio-stage .card-face .wk-card {
+    max-width: var(--card-w);
+    min-height: 0;
+  }
+
+  /* ---- the two rows a bounded view buys back ----
+     THE NOTE. Two lines of explanation the surface already gives in controls:
+     the head's STAGED / LIVE pair and its pending pill carry the publish state,
+     and slot 04's own TABLET ONLY badge carries the rest. Free on a desktop;
+     here it is the bottom inch of the card. */
+  .cards-note { display: none; }
+
+  /* THE RE-FEATURE STRIP, while composing — a picker for the surface you are
+     not on. Composing, the rail's own PICTURE block is the picker, three inches
+     to the right. (`:has()` rather than a sibling combinator because the strip
+     follows the studio but the ribbon below precedes it, and one form for both
+     reads better than two.) */
+  body:has(.cards-studio.is-composing) .cards-reuse { display: none; }
+}
+
+/* ---- TABLET HELD SIDEWAYS: two more rows step aside ----
+   744px of height (an iPad mini in landscape) leaves the studio ~290px once the
+   topbar, the view header, the head, the ribbon, the tab bar and the gutters
+   have taken theirs — and a card wants ~460. Rather than crush the card or hand
+   the page its scrollbar back, the rows that are SHORTCUTS rather than
+   structure go: the re-feature strip (every frame it offers is still one tap
+   away in the rail's PICTURE block) and, while composing, the slot ribbon (the
+   composer bar directly above the card is that mode's header, and a pill tapped
+   mid-edit is a lost edit anyway). The view's own subtitle and meta go with
+   them — three lines of masthead on a surface with 744px to spend.
+
+   820px, not 780: it sits above every tablet in landscape (744, 768, 810, 820)
+   and below every one of them held upright (1024 and up), which is exactly the
+   cut this is about. */
+@media (min-width: 700px) and (max-width: 1180px) and (max-height: 820px) {
+  #view-cards .view-sub,
+  #view-cards .view-header--tight .view-meta { display: none; }
+
+  .cards-reuse { display: none; }
+  body:has(.cards-studio.is-composing) .cards-ribbon { display: none; }
+
+  /* ---- and the well turns sideways ----
+     Same move Pulse makes at the same height and for the same reason (§ "the
+     short landscape: stage turns sideways"): width was never the problem —
+     the well is ~740px around a card that caps at 300 — HEIGHT is, and
+     everything the well holds besides the card was stacked on top of it,
+     spending the one axis there is none of. So they stand BESIDE the card
+     instead, and the card gets the well's full height: ~240px across here
+     rather than ~150 under the stacked layout, which is the difference between
+     a preview and a thumbnail. Same DOM, same order for a screen reader.
+     The composer's status bar is the exception — it is a header, it keeps its
+     own row across the top, and `flex: 0 0 100%` is what makes the rest wrap
+     under it. */
+  .studio-stage,
+  .cards-studio.is-composing .studio-stage {
+    flex-flow: row wrap;
+    align-items: center;
+    align-content: center;
+    justify-content: center;
+    gap: 10px 16px;
+  }
+  .cards-composer-bar { flex: 0 0 100%; margin-bottom: 0; }
+  /* The card stops being a full-width row and becomes the tall column, and it
+     takes a DEFINITE width to do it — `--card-w`, the same sum that caps it in
+     the block above. ⚠️ Not `width: auto`: a `width: 100%` card inside a
+     shrink-to-fit `.card-face` is circular, and it resolves to min-content — a
+     67px card, which is what this looked like on the way in. Keys up, the width
+     goes back to the base 100% and WRITE MODE sizes the card instead. */
+  body:not(.kb-open) .studio-stage .card-face {
+    width: var(--card-w);
+    flex: 0 0 auto;
+  }
+  .studio-stage .card-face,
+  .cards-studio.is-composing .studio-stage .card-face.is-editing { margin: 0; }
+  /* Two chips beside the card read as a column, not a second row under it. */
+  .studio-stage .cards-undo { flex-direction: column; }
+
+  /* The reserve the sum above spends: sideways, the only thing left ABOVE or
+     BELOW the card is the composer's status bar, so the preview pays for its
+     own footer and a little slack and the composer pays for the bar as well. */
+  .cards-studio { --card-rsv: 80px; }
+  .cards-studio.is-composing { --card-rsv: 132px; }
+}
+
+/* ---- TABLET HELD UPRIGHT: the head is two deliberate rows ----
+   At this width the head's one row cannot hold both groups, so it wraps — and
+   wrapped, both groups pack left and the second row reads as a pile that landed
+   there. Given the rows, they may as well be structural: the two pickers keep
+   the left edge as the pair they are, and the actions go to the right edge,
+   where ＋ COMPOSE A CARD lines up with the rail below it.
+
+   The composer bar is tightened for the same reason it is tightened at all: the
+   stage is ~352px here, and the coarse-pointer rule above pads CANCEL and DONE
+   out to 8px 14px, which pushed "EDITING SLOT 01" into "EDITING SLOT …". The
+   tap HEIGHT is untouched — it is the horizontal padding that was spending the
+   label's width. */
+@media (min-width: 700px) and (max-width: 900px) {
+  .cards-head { flex-direction: column; align-items: stretch; }
+  .cards-head-right { width: 100%; justify-content: flex-end; }
+
+  .cards-composer-bar { gap: 8px; padding: 6px 10px; }
+  .cards-cancel-btn,
+  .cards-done-btn { padding-left: 10px; padding-right: 10px; }
+}
+
+/* ---- NARROWER THAN A TABLET: the rail drops under the stage, the PAGE scrolls
+   Below 700px the two panes stop fitting (340px of rail + 300px of card + the
+   gutters), so the rail goes under the card as a grid of blocks, and the phone
+   block below narrows that grid to one column. ⚠️ `align-items: start` is what
+   makes this ragged; it is tolerable in a 2-up and is why the tablet does not
+   use it.
+
+   ⚠️ THE STACKED RAIL AND THE UNBOUNDING ARE ONE CHANGE AND MUST STAY TOGETHER.
+   Bounded, the view is `height: 100%; overflow: hidden`, and a rail standing
+   under the stage inside that box puts the picture picker, the crop button, the
+   swatches and the layout chips in hidden overflow with no scroller above them
+   — unreachable. Beside the stage the rail is its own scroller and the bounded
+   view is right (§ TABLET above); under it, only the page can carry it. Move
+   one of these two and the other has to move with it. */
+@media (max-width: 699px) {
   .cards-studio { grid-template-columns: minmax(0, 1fr); }
   .studio-rail {
     display: grid;
@@ -7279,8 +8227,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   /* The card sizes to its own content and the stage grows to hold it — the
      desktop "fit the well" sizing is off, because there is no fixed well any
      more. ⚠️ NOT `max-width` here: the base rule's 300px cap is what keeps the
-     card a CARD. Letting it take the column turned a tablet's 834px into a
-     764 × 1024 slab. The phone widens it deliberately, one breakpoint down. */
+     card a CARD. The phone widens it deliberately, one breakpoint down. */
   .studio-stage .card-face .wk-card,
   .cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card {
     height: auto;
@@ -7303,6 +8250,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
     overflow: visible;
   }
 }
+
 /* ---- PHONE: what is left is about being NARROW ----
    Head, ribbon, a full card, its whole control rail AND the reuse strip cannot
    share one bounded viewport without crushing each other — the zero-scroll canvas
@@ -7351,8 +8299,15 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
    phone, because the card was the only elastic row and absorbed the whole
    keyboard inset (docs/maintenance/2026-08-24-pulse-mobile-keyboard-and-glyph-menu.md).
    So: collapse everything that is not the card, and let the PICTURE yield before
-   the words do. Structural, and it reverses the instant the keys drop. */
-@media (max-width: 900px) {
+   the words do. Structural, and it reverses the instant the keys drop.
+
+   ⚠️ THE WHOLE BAND, NOT 900px. This started at `max-width: 900px` because the
+   tablet band above it scrolled the page, so a landscape tablet could always
+   push the field up into view. It cannot any more — the band is bounded — and
+   a mini in landscape is 744px tall with ~350px of keyboard on top of it, which
+   leaves the studio about 50px if the head, the ribbon and the rail all stay.
+   So the collapse now covers every width the tab bar covers. */
+@media (max-width: 1180px) {
   /* Scoped on the classes themselves, not on an #id ancestor: these names
      belong to this view alone, and depending on the host element would make the
      rule silently inert anywhere the markup is mounted somewhere else. */
@@ -7362,10 +8317,22 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   body.kb-open .cards-reuse,
   body.kb-open .cards-studio.is-composing .studio-rail { display: none; }
 
+  /* The rail is gone, so the column it stood in goes with it — or the card
+     writes itself into two thirds of the width with 340px of nothing beside it. */
+  body.kb-open .cards-studio,
+  body.kb-open .cards-studio.is-composing {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   body.kb-open .cards-studio.is-composing .studio-stage {
     padding: 8px;
     border: 0;
     background: none;
+    /* The one place the well is allowed to move. Everything else on the surface
+       is hidden while the keys are up, so this is still ONE scroller — and it is
+       the difference between a long title pushing the line being written off a
+       bounded well and simply scrolling to it. */
+    overflow-y: auto;
   }
   /* The picture gives up its height first; the fields keep theirs. THIS is where
      a floor under the text belongs — with the keys up and the surface bounded,
@@ -7379,5 +8346,8 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 @media (pointer: coarse) {
   .cards-pill { min-height: var(--tap); padding: 8px 14px; }
   .layout-chip { min-height: var(--tap); }
+  /* The swatches were 28px circles with an invisible 44px halo; the labelled
+     buttons that replaced them dropped the halo, and 28px is not a tap. */
+  .cards-swatch { min-height: var(--tap); }
 }
 

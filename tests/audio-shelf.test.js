@@ -26,7 +26,7 @@ const {
   audioSlugify, audioUniqueSlug, audioNormalizePeaks, audioPeaksToString,
   _audioPromote, _audioToggleEpisode, _audioToggleDownload, renderAudio,
   audioWeightHint, _audioClearCard, _audioEdit, audioAddFiles,
-  _audioRestoreCard, _audioCardRestoreTarget,
+  _audioRestoreCard, _audioCardRestoreTarget, _audioReorderFeatured,
 } = await import('../js/console/audio.js');
 const { sessionTrash } = await import('../js/console-state.js');
 
@@ -454,5 +454,70 @@ describe('↩ RESTORE CARD', () => {
     _audioClearCard();
     _audioPromote('a1');
     expect(_audioCardRestoreTarget()).toBeNull();
+  });
+});
+
+// ------------------------------------------- the ORDER of the featured list
+
+describe('_audioReorderFeatured — the mutator that owns featured_order', () => {
+  // _audioPromote owns MEMBERSHIP and only ever appends, so until this landed
+  // nothing owned ORDER. The studio's ♪ CHOOSE TRACKS picker hands back the
+  // tracks in the order they were ticked — and re-ticking two already-featured
+  // tracks the other way round changed nothing at all: neither was added,
+  // neither was removed, and the author's reordering was dropped without a word.
+  // Found by a code review of chunk 7.
+  const three = () => {
+    STATE.audio = [
+      track({ id: 'a1', slug: 'one', title: 'One', featured: true, featured_order: 1 }),
+      track({ id: 'a2', slug: 'two', title: 'Two', featured: true, featured_order: 2 }),
+      track({ id: 'a3', slug: 'three', title: 'Three', featured: true, featured_order: 3 }),
+    ];
+  };
+  const order = () => STATE.audio.filter((t) => t.featured)
+    .sort((a, b) => a.featured_order - b.featured_order).map((t) => t.slug);
+
+  it('re-indexes the featured list to the order it is handed', () => {
+    three();
+    expect(_audioReorderFeatured(['three', 'one', 'two'])).toBe(true);
+    expect(order()).toEqual(['three', 'one', 'two']);
+  });
+
+  it('keeps featured_order 1..n contiguous — the invariant _audioPromote holds', () => {
+    three();
+    _audioReorderFeatured(['two', 'three', 'one']);
+    expect(STATE.audio.map((t) => t.featured_order).sort()).toEqual([1, 2, 3]);
+  });
+
+  it('stages exactly one change, because it is one gesture', () => {
+    three();
+    STATE.staged.audio = 0;
+    _audioReorderFeatured(['three', 'two', 'one']);
+    expect(STATE.staged.audio).toBe(1);
+  });
+
+  it('stages NOTHING when the order did not actually move', () => {
+    // Pressing confirm on an unchanged list is not a change, and a ledger row
+    // for it would be a publish the author did not make.
+    three();
+    STATE.staged.audio = 0;
+    expect(_audioReorderFeatured(['one', 'two', 'three'])).toBe(false);
+    expect(STATE.staged.audio).toBe(0);
+  });
+
+  it('a partial list never silently drops a track off the card', () => {
+    // Anything featured the caller did not name keeps its relative place at the
+    // end — reordering is not a way to unfeature something by omission.
+    three();
+    _audioReorderFeatured(['three']);
+    expect(order()).toEqual(['three', 'one', 'two']);
+    expect(STATE.audio.filter((t) => t.featured)).toHaveLength(3);
+  });
+
+  it('ignores a slug that is not featured, and an empty card', () => {
+    three();
+    _audioReorderFeatured(['nonesuch', 'two']);
+    expect(order()).toEqual(['two', 'one', 'three']);
+    STATE.audio = [track({ featured: false })];
+    expect(_audioReorderFeatured(['take-one'])).toBe(false);
   });
 });

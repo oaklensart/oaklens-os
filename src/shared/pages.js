@@ -20,10 +20,14 @@ export const PUBLIC_PAGES = ['/', '/about', '/archive', '/field-notes', '/suppor
 // actually has something in it, so the page earns its listing rather than
 // needing a fork to switch it off. It still lives here so `pages.listen:
 // false` can turn it off end to end like any other page.
+// `card` (/card/<id>, one composed card at its own address) is absent for the
+// same reason and one more: bare /card is not a page at all — there is no
+// index of cards, only addresses — so the sitemap lists the live ids it finds
+// and nothing else.
 export const PAGE_ROUTES = {
   archive: '/archive', fieldNotes: '/field-notes', wall: '/wall',
   about: '/about', support: '/support',
-  listen: '/listen',
+  listen: '/listen', card: '/card',
 };
 
 // Console infrastructure under /dev/ that must never be gated — disabling the

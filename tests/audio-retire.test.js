@@ -32,6 +32,8 @@ const {
   _audioDelete, _audioRetire, _audioUndoRetire, _audioRetireUndoTarget,
   _audioEdit, _audioUndoEdit, _audioEditUndoTarget,
   audioUniqueSlug, renderAudio,
+  _setDelete, _setRetire, _setUndoRetire, _setRetireUndoTarget,
+  setUniqueSlug, renderAudioSets,
 } = await import('../js/console/audio.js');
 const { buildBundle } = await import('../js/console/publish.js');
 
@@ -49,11 +51,14 @@ beforeEach(() => {
   document.body.innerHTML = `
     <div id="audio-display"></div><span id="audio-count"></span>
     <span id="audio-stats"></span><div id="audio-feed-card"></div>
+    <div id="audio-sets-display"></div><span id="audio-sets-count"></span>
     <div id="toast-host"></div>`;
   STATE.audio = [];
+  STATE.audioSets = [];
   STATE.posts = []; STATE.buffer = []; STATE.archive = [];
   STATE.wallpapers = []; STATE.barrel = []; STATE.friends = []; STATE.library = [];
-  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0 };
+  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0,
+    audio: 0, audioSets: 0, cards: 0 };
   STATE.stagedLog = [];
   sessionTrash.length = 0;
   _pendingR2Deletes.length = 0;
@@ -281,5 +286,119 @@ describe('↩ UNDO EDIT — the prompt pair that overwrote with no way back', ()
     renderAudio();
     const rows = document.getElementById('audio-display').innerHTML;
     expect((rows.match(/UNDO EDIT/g) || []).length).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A SET retires on exactly the same terms, and for exactly the same reason.
+//
+// A set's slug is its address the moment it is published: a share link points
+// at it, and (cards chunk 7) a stamped share image is keyed by it. Free the
+// slug and the next set named the same thing quietly answers someone else's
+// old link with a different playlist. Nothing errors.
+//
+// The one difference from a track: a set owns no media, so there is no R2
+// delete to pair with the tombstone. Retiring one takes down a PRESENTATION.
+
+const PUB_SET = () => ({
+  id: 's1', slug: 'late-mix', name: 'Late mix', tracks: ['ferry-at-dawn'],
+  added_at: '2026-09-10', _imported: true,
+});
+const LOCAL_SET = () => ({
+  id: 's2', slug: 'drafts', name: 'Drafts', tracks: [], added_at: '2026-09-10',
+});
+
+describe('a published set retires; an unpublished one is trashed', () => {
+  it('retires rather than removing, and keeps id + slug and nothing else', () => {
+    STATE.audioSets = [PUB_SET()];
+    _setDelete('s1');
+    expect(STATE.audioSets).toHaveLength(1);
+    expect(STATE.audioSets[0]).toMatchObject({ id: 's1', slug: 'late-mix', retired: true });
+    expect(STATE.audioSets[0].name).toBeUndefined();
+    expect(STATE.audioSets[0].tracks).toBeUndefined();
+    expect(sessionTrash).toHaveLength(0);
+  });
+
+  it('queues NO R2 delete — a set owns no media', () => {
+    STATE.audioSets = [PUB_SET()];
+    _setDelete('s1');
+    expect(_pendingR2Deletes).toHaveLength(0);
+  });
+
+  it('leaves the tracks alone', () => {
+    STATE.audio = [PUBLISHED()];
+    STATE.audioSets = [PUB_SET()];
+    _setDelete('s1');
+    expect(STATE.audio).toHaveLength(1);
+    expect(STATE.audio[0].retired).toBeUndefined();
+  });
+
+  it('reserves the slug forever — a new set cannot take the dead address', () => {
+    STATE.audioSets = [PUB_SET()];
+    _setRetire('s1');
+    expect(setUniqueSlug('Late mix', STATE.audioSets)).toBe('late-mix-2');
+  });
+
+  it('trashes a never-published set instead, which has nothing pointing at it', () => {
+    STATE.audioSets = [LOCAL_SET()];
+    _setDelete('s2');
+    expect(STATE.audioSets).toHaveLength(0);
+    expect(sessionTrash).toHaveLength(1);
+  });
+
+  it('↩ UNDO RETIRE puts the whole set back, tracks and all', () => {
+    STATE.audioSets = [PUB_SET()];
+    _setRetire('s1');
+    expect(_setRetireUndoTarget()).not.toBeNull();
+    _setUndoRetire();
+    expect(STATE.audioSets[0]).toMatchObject({ name: 'Late mix', tracks: ['ferry-at-dawn'] });
+    expect(STATE.audioSets[0].retired).toBeUndefined();
+    expect(STATE.staged.audioSets).toBe(0);
+    expect(_setRetireUndoTarget()).toBeNull();
+  });
+
+  it('drops the chip when the tombstone is no longer the tombstone we wrote', () => {
+    STATE.audioSets = [PUB_SET()];
+    _setRetire('s1');
+    STATE.audioSets = [];
+    expect(_setRetireUndoTarget()).toBeNull();
+  });
+
+  it('renders the tombstone as a visible reservation, not a gap', () => {
+    STATE.audioSets = [PUB_SET()];
+    _setRetire('s1');
+    renderAudioSets();
+    const html = document.getElementById('audio-sets-display').innerHTML;
+    expect(html).toContain('ADDRESS RESERVED');
+    expect(html).toContain('/listen/?set=late-mix');
+    expect(html).toContain('UNDO RETIRE');
+    // A reservation is not a set you can add to.
+    expect(html).not.toContain('ADD TRACK');
+  });
+});
+
+// The trap CLAUDE.md names by name: the live whitelist drops the tombstone flag
+// and republishes the record as live. Three record kinds now need their own
+// branch in buildBundle() — dark frames, retired tracks, retired sets.
+describe('the set tombstone survives a publish', () => {
+  it('serializes as a tombstone, not as a live set with an empty track list', () => {
+    STATE.audioSets = [PUB_SET()];
+    _setRetire('s1');
+    const out = JSON.parse(buildBundle()['data/audio-sets.json']);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toEqual({ id: 's1', slug: 'late-mix', retired: true, retired_at: expect.any(String) });
+  });
+
+  it('a live set keeps its name and its order', () => {
+    STATE.audioSets = [{ id: 's3', slug: 'a-mix', name: 'A mix', tracks: ['b', 'a'], added_at: '2026-09-10' }];
+    const out = JSON.parse(buildBundle()['data/audio-sets.json']);
+    expect(out[0]).toEqual({ id: 's3', slug: 'a-mix', name: 'A mix', tracks: ['b', 'a'], added_at: '2026-09-10' });
+  });
+
+  it('a site with no sets publishes an empty array, never a missing file', () => {
+    // The ZIP exporter treats every dataFile as required — a 404 sinks the
+    // whole export — and the listen page reads it on every render.
+    STATE.audioSets = [];
+    expect(buildBundle()['data/audio-sets.json']).toBe('[]');
   });
 });

@@ -29,6 +29,12 @@ export const CHROME_PAGES = [
   'wall/index.html',
   'field-notes/index.html',
   'listen/index.html',
+  // One composed card at its own address (/card/<id>). It carries the same full
+  // chrome as the pages above — nav, footer, site-common.js — so it belongs in
+  // the same sweep. It was parked in THEMED_PAGES only, with a comment citing
+  // "the /listen reason"; /listen is right here, which a code review noticed
+  // before anyone else did.
+  'card/index.html',
   'support/index.html',
   '404.html',
 ].filter(present);

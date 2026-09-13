@@ -22,14 +22,21 @@ globalThis.refreshStageIndicators = () => {};
 globalThis.renderTrash = () => {};
 globalThis.fetch = async () => new Response('[]', { status: 200 });
 
+// The real load order: dev/field-console.html loads audio-player as a classic
+// script BEFORE recent-index, so the engine can resolve a borrowed set through
+// AudioPlayer.resolveSetTracks rather than keeping a second copy (chunk 4).
+await import('../js/audio-player.js');
 await import('../js/recent-index.js');
 const { STATE, sessionTrash } = await import('../js/console-state.js');
 const cards = await import('../js/console/cards.js');
 const {
   cardsCompose, cardsSetText, cardsClearImage, cardsReorder, cardsResetToAuto,
   cardsDoneEditing, cardsCancelEdit, cardsHandleStageClick, cardsSetPalette,
-  cardsSetMode, cardsSetLayout, _composedCards, _composingId, _activeMode,
+  cardsSetMode, cardsSetLayout, cardsSetDressing, cardsFieldInput, cardsGuardTitle,
+  cardsEditStaged, _dressingOf, _normalizeCard, _titleCap,
+  _composedCards, _composingId, _activeMode,
 } = cards;
+const RI = globalThis.RecentIndex;
 
 const SOURCE = readFileSync(
   join(import.meta.dirname, '..', 'js', 'console', 'cards.js'), 'utf8');
@@ -129,10 +136,28 @@ describe('writing on the card', () => {
   it('the surgical repaint never writes a field value back', () => {
     const fn = SOURCE.match(/function _paintComposed\([\s\S]*?\n}/)[0];
     expect(fn).not.toMatch(/\.value\s*=/);
+    // The fields are editable leaves now, so their "value" is their content.
+    expect(fn).not.toMatch(/innerHTML\s*=|innerText\s*=/);
+  });
+
+  it('the input handler moves an attribute, never the field\'s content', () => {
+    const fn = SOURCE.match(/export function cardsFieldInput[\s\S]*?\n}/)[0];
+    expect(fn).not.toMatch(/innerHTML\s*=|innerText\s*=|textContent\s*=/);
+    expect(fn).toContain('data-empty');
   });
 });
 
 describe('the picture', () => {
+  it('clearing it takes the picture-led dressing with it', () => {
+    const card = cardsCompose();
+    card.media = 'X.webp';
+    cardsSetDressing(card.id, 'picture');
+    expect(card.kind).toBe('photo');
+    cardsClearImage(card.id);
+    expect(card.kind, '"Always the picture" cannot survive losing the picture').toBeUndefined();
+    expect(_dressingOf(card)).toBe('auto');
+  });
+
   it('clearing it takes the picture-led layout with it', () => {
     const card = cardsCompose();
     Object.assign(card, {
@@ -166,6 +191,17 @@ describe('order is a rank, and it compacts', () => {
     expect(_composedCards()[0].id).toBe(a.id);
   });
 
+  // `_cards().length + 1` counted tombstones, which after a retire mints the
+  // next card at rank 3 in a row of one. Harmless to the sort, and still a
+  // break of the 1..n-and-contiguous invariant _recompact exists to hold.
+  it('mints the next LIVE rank, with a tombstone in the list', () => {
+    const a = composeNamed('One');
+    a._imported = true;
+    cardsResetToAuto(a.id);
+    const next = composeNamed('Two');
+    expect(next.order).toBe(1);
+  });
+
   it('a delete promotes the survivor rather than leaving a hole', () => {
     const a = composeNamed('A'); const b = composeNamed('B');
     cardsResetToAuto(a.id);
@@ -193,6 +229,144 @@ describe('reset to automatic', () => {
     cardsResetToAuto(card.id);
     expect(asked).toBe(true);
     expect(STATE.cards).toHaveLength(1);
+  });
+});
+
+// ---- chunk 6: a published card keeps its address ----
+//
+// The fourth tombstone (after dark frames, retired tracks and retired sets) and
+// the same argument each time: the id is a permanent address the moment it is
+// published, so freeing it would let a later card quietly answer someone's old
+// link. These pin the SPLIT — never-published goes to trash, published retires
+// — and that the tombstone survives everything that could quietly undo it.
+describe('retiring a published card', () => {
+  const publish = (card) => { card._imported = true; STATE.stagedLog = []; STATE.staged = emptyStaged(); };
+
+  it('retires instead of deleting, keeping the id and nothing else', () => {
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+
+    expect(STATE.cards).toHaveLength(1);
+    const tomb = STATE.cards[0];
+    expect(tomb.id).toBe(card.id);
+    expect(tomb.retired).toBe(true);
+    expect(tomb.retired_at).toBeTruthy();
+    expect(tomb.title, 'a tombstone holds an address, not content').toBeUndefined();
+    expect(tomb.media).toBeUndefined();
+  });
+
+  it('does not put a published card in the trash — there is nothing to restore it INTO', () => {
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+    expect(sessionTrash.some((t) => t.surface === 'cards')).toBe(false);
+  });
+
+  it('still trashes a never-published card — its address was never spoken for', () => {
+    const card = composeNamed('Never shipped');
+    cardsResetToAuto(card.id);
+    expect(STATE.cards).toHaveLength(0);
+    expect(sessionTrash.some((t) => t.surface === 'cards')).toBe(true);
+  });
+
+  it('asks first, and says the address stays reserved', () => {
+    let asked = '';
+    globalThis.confirm = (msg) => { asked = msg; return false; };
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+    expect(asked).toContain('/card/');
+    expect(asked).toContain('reserved');
+    expect(STATE.cards[0].retired).toBeUndefined();
+  });
+
+  it('stages exactly one change, as a removal', () => {
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+    expect(STATE.staged.cards).toBe(1);
+    expect(STATE.stagedLog.filter((r) => r.surface === 'cards')).toHaveLength(1);
+  });
+
+  it('leaves the tombstone out of the studio, so the budget is a LIVE-card budget', () => {
+    const a = composeNamed('One'); const b = composeNamed('Two');
+    publish(a);
+    cardsResetToAuto(a.id);
+    expect(_composedCards().map((c) => c.id)).toEqual([b.id]);
+    // The freed place is usable at once — two tombstones must not wedge ＋ COMPOSE.
+    expect(cardsCompose()).not.toBeNull();
+  });
+
+  it('survives the ghost sweep — a tombstone is empty on purpose', async () => {
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+    await cards.renderCards();
+    expect(STATE.cards.filter((c) => c.retired)).toHaveLength(1);
+  });
+
+  it('is not rendered by the engine, which is what makes the slot automatic again', () => {
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+    expect(RI.composedPick(STATE.cards, [], [])).toEqual([]);
+  });
+});
+
+describe('↩ UNDO RETIRE — one chip, resolved against state now', () => {
+  const publish = (card) => { card._imported = true; STATE.stagedLog = []; STATE.staged = emptyStaged(); };
+
+  it('puts the card back whole, with its words and its rank', () => {
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+    cards._cardUndoRetire();
+
+    expect(STATE.cards).toHaveLength(1);
+    expect(STATE.cards[0].retired).toBeUndefined();
+    expect(STATE.cards[0].title).toBe('Out there');
+    expect(_composedCards()[0].order).toBe(1);
+  });
+
+  it('takes the staged removal back with it', () => {
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+    cards._cardUndoRetire();
+    expect(STATE.staged.cards).toBe(0);
+    expect(STATE.stagedLog.filter((r) => r.surface === 'cards')).toHaveLength(0);
+  });
+
+  it('offers nothing when nothing has been retired', () => {
+    expect(cards._cardRetireUndoTarget()).toBeNull();
+  });
+
+  // Retiring frees a place, so the owner can compose into it before undoing.
+  // Restoring on top of that would put a third card in a two-card budget — the
+  // third invisible on the homepage (composedPick slices) and present in the
+  // studio. The chip withdraws rather than becoming a button that refuses.
+  it('withdraws once the freed place has been taken', () => {
+    const a = composeNamed('One'); const b = composeNamed('Two');
+    a._imported = true;
+    cardsResetToAuto(a.id);
+    expect(cards._cardRetireUndoTarget()).not.toBeNull();
+
+    composeNamed('Three');
+    expect(_composedCards()).toHaveLength(2);
+    expect(cards._cardRetireUndoTarget()).toBeNull();
+    cards._cardUndoRetire();
+    expect(_composedCards(), 'the budget is not exceeded by an undo').toHaveLength(2);
+    expect(b).toBeTruthy();
+  });
+
+  it('offers nothing once the card is back — never a dead button', () => {
+    const card = composeNamed('Out there');
+    publish(card);
+    cardsResetToAuto(card.id);
+    expect(cards._cardRetireUndoTarget()).not.toBeNull();
+    cards._cardUndoRetire();
+    expect(cards._cardRetireUndoTarget()).toBeNull();
   });
 });
 
@@ -231,37 +405,160 @@ describe('the composer surface', () => {
 
     const title = document.getElementById('composer-title');
     const tease = document.getElementById('composer-tease');
-    // Real fields on the card, not a form beside a picture of one.
-    expect(title.tagName).toBe('TEXTAREA');
-    expect(tease.tagName).toBe('TEXTAREA');
-    expect(title.value).toBe('The Geometry of Silence');
+    // The card's OWN text nodes made editable — not a form beside a picture of
+    // one, and not inputs laid over it (chunk 2: the composer is buildCard's
+    // card). A field cannot carry a child element, which is why it is the leaf
+    // itself that becomes editable rather than a textarea standing in for it.
+    expect(title.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(tease.getAttribute('contenteditable')).toBe('plaintext-only');
+    expect(title.textContent).toBe('The Geometry of Silence');
     expect(title.closest('.wk-card'), 'the field must be INSIDE the card').not.toBeNull();
+    expect(title.classList.contains('wk-t-title'), 'the headline is the tile\'s headline node').toBe(true);
+    expect(tease.classList.contains('wk-snip'), 'the tease is the tile\'s snip node').toBe(true);
   });
 
-  it('wears the real card classes, so it is the card the homepage draws', async () => {
+  it('is the card the renderer draws — same root, same classes, same tier', async () => {
     const card = cardsCompose();
-    // An empty card is deliberately invisible to the grid (composedPick), so
-    // give it something before asking where it landed.
     cardsSetText(card.id, 'title', 'Something');
-    const html = await openComposerOn(card);
-    for (const cls of ['wk-card', 'wk-img', 'wk-tag', 'wk-t-title', 'wk-snip']) {
-      expect(html, `the composer card should carry .${cls}`).toContain(cls);
-    }
+    cardsSetText(card.id, 'tease', 'A short line.');
+    await openComposerOn(card);
+    const root = document.getElementById('composer-card');
+    const real = RI.buildCard(RI.composedItem(card));
+    expect(root.className).toBe(real.className);
+    expect(root.getAttribute('data-shape')).toBe(real.getAttribute('data-shape'));
+    expect(root.getAttribute('data-tier')).toBe(real.getAttribute('data-tier'));
+    // The words tile's furniture is the engine's: a <span> kicker with its
+    // aria-hidden dot, no place-and-year line (every word was typed).
+    expect(root.querySelector('span.wk-kicker .wk-dot[aria-hidden="true"]')).not.toBeNull();
+    expect(root.querySelector('.wk-t-meta')).toBeNull();
+    // And it is not a link: a takeover keeps its link, the composer must not be one.
+    expect(root.hasAttribute('href')).toBe(false);
   });
 
-  it('keeps both shapes in the DOM and switches with an attribute', async () => {
-    // Rendering one or the other would mean rebuilding the card when a picture
-    // is added or removed — and the fields live inside the card, so a rebuild is
-    // what destroys a caret.
+  it('mounts the shape the engine renders — no media band on a words card, no kicker on a picture card', async () => {
     const card = cardsCompose();
     cardsSetText(card.id, 'title', 'Words only, for now');
     await openComposerOn(card);
     expect(document.getElementById('composer-card').getAttribute('data-shape')).toBe('words');
-    expect(document.getElementById('composer-media'), 'the media band stays in the DOM').not.toBeNull();
+    expect(document.querySelector('#composer-card .wk-img'), 'a words card has no picture').toBeNull();
 
     card.media = 'X.webp';
     await openComposerOn(card);
-    expect(document.getElementById('composer-card').getAttribute('data-shape')).toBe('picture');
+    const root = document.getElementById('composer-card');
+    expect(root.getAttribute('data-shape')).toBe('picture');
+    expect(root.querySelector('.wk-img'), 'a picture card has its picture').not.toBeNull();
+    expect(root.querySelector('.wk-kicker'), 'and wears the chip, not the kicker').toBeNull();
+    // The editable pair on a picture card is the CAPTION pair — .wk-title and
+    // .wk-meta — the grammar the archive card beside it uses.
+    expect(document.getElementById('composer-title').classList.contains('wk-title')).toBe(true);
+    expect(document.getElementById('composer-tease').classList.contains('wk-meta')).toBe(true);
+  });
+
+  it('gives a picture card with no tease the caption line to type into', async () => {
+    // captionOf() draws no line without a tease; the composer adds the one the
+    // renderer will draw the moment there is a word — same class, same place.
+    const card = cardsCompose();
+    card.media = 'X.webp';
+    await openComposerOn(card);
+    const tease = document.getElementById('composer-tease');
+    expect(tease.closest('.wk-body')).not.toBeNull();
+    expect(tease.hasAttribute('data-empty')).toBe(true);
+  });
+
+  // The address is not something the owner picks — it is minted with the card
+  // and, once published, permanent. So the rail SHOWS it rather than offering to
+  // edit it, and the string comes from the engine's own entryHref so the studio
+  // and the grid can never spell it two ways.
+  it('shows the card its own address, with a copy', async () => {
+    const card = cardsCompose();
+    cardsSetText(card.id, 'title', 'Somewhere');
+    const html = await openComposerOn(card);
+    expect(html).toContain(RI.entryHref('composed', card));
+    expect(html).toContain('cardsCopyAddress');
+    expect(html, 'not yet permanent — nothing is until it publishes')
+      .toContain('reserved on publish');
+  });
+
+  // ⚠️ ONE BUILDER FOR A CARD'S SHARE TARGET. The composer rail composed its own
+  // — its own stem, its own address, its own idea of what the card is called —
+  // and the name was the first thing to drift: a card with no title but a tease
+  // reads as its tease on the studio rail and read as "this card" here. It goes
+  // through _slotOf → _shareOf now, the same path the grid's rail takes, so the
+  // two cannot disagree about a card they are both looking at.
+  it('builds its share target through the one builder, never inline', async () => {
+    const card = cardsCompose();
+    cardsSetText(card.id, 'tease', 'A quiet morning on the water.');
+    const html = await openComposerOn(card);
+    expect(html).toContain('SHARE');
+    expect(html).toContain('shareStampImages');
+
+    // ⚠️ STRUCTURAL, because the rendered markup CANNOT show this. The thing
+    // that drifted is the target's `name`, and a name only ever reaches a
+    // toast — both spellings emit identical HTML, so an assertion over the
+    // markup passes either way (it did, which is how this test got rewritten).
+    // What can be checked is that the composer asks the same function the grid's
+    // rail asks; the behaviour it must agree about is asserted below it.
+    const composer = SOURCE.slice(SOURCE.indexOf('function composerRailHtml'));
+    expect(composer, 'the composer must route through _shareOf')
+      .toContain('_shareOf(_slotOf(item))');
+    expect(composer.slice(0, composer.indexOf('function railHtml')),
+      'and must not compose a target of its own')
+      .not.toContain('shareTarget({');
+
+    // The answer they now share: a card with no title is named by its tease.
+    const viaStudio = cards._shareOf(cards._slotOf(RI.composedItem(card, [], [])));
+    expect(viaStudio.name).toBe('A quiet morning on the water.');
+    expect(viaStudio.stem).toBe(`meta/card-${card.id}`);
+  });
+
+  // The block above it already shows the address with its own COPY, so this one
+  // drops both halves rather than putting a second identical button three
+  // inches below the first.
+  it('and carries no second copy of the address it sits under', async () => {
+    const card = cardsCompose();
+    cardsSetText(card.id, 'title', 'Somewhere');
+    const html = await openComposerOn(card);
+    expect(html).toContain('cardsCopyAddress');          // the ADDRESS block's
+    expect(html).not.toContain('shareCopyLink');         // not a second one
+    expect(html).toContain('the address above');         // and the copy says which
+  });
+
+  it('says the address is permanent once the card has been published', async () => {
+    const card = cardsCompose();
+    cardsSetText(card.id, 'title', 'Somewhere');
+    card._imported = true;
+    const html = await openComposerOn(card);
+    expect(html).toContain('permanent');
+    // …and the removal gesture says what it will actually do.
+    expect(html).toContain('RETIRE THIS CARD');
+    expect(html).not.toContain('RESET TO AUTOMATIC');
+  });
+
+  // LIVE or STAGED, as a coloured aside on the ADDRESS block (2026-09-12) — the
+  // owner's report was a copied link that 404ed, because the card was staged.
+  // ⚠️ The aside is TEXT and controlBlock escapes it: the first cut passed a
+  // `<span class="tone-badge">` through it and the rail printed the markup.
+  it('badges the address STAGED until the card is published, LIVE after — as text, never markup', async () => {
+    const card = cardsCompose();
+    cardsSetText(card.id, 'title', 'Somewhere');
+    let html = await openComposerOn(card);
+    expect(html).toMatch(/<span class="control-block-aside"[^>]*data-tone="staged"[^>]*>STAGED<\/span>/);
+    expect(html).not.toContain('&lt;span');
+    card._imported = true;
+    html = await openComposerOn(card);
+    expect(html).toMatch(/<span class="control-block-aside"[^>]*data-tone="live"[^>]*>LIVE<\/span>/);
+  });
+
+  // OPEN ↗ goes to where the card CAME FROM. It said `cards` for every composed
+  // card — an OPEN CARDS ↗ on the Cards view, reopening the view it was on.
+  it('opens the surface a composed card came from, and offers nothing for one made from nothing', () => {
+    const fromBuffer = { id: 'c-b', title: 'B', media: 'X.webp', source: { surface: 'buffer', id: 'f1' }, added_at: '2026-09-10' };
+    const fromNote = { id: 'c-n', title: 'N', source: { surface: 'posts', id: 'p1' }, added_at: '2026-09-10' };
+    const scratch = { id: 'c-s', title: 'S', added_at: '2026-09-10' };
+    expect(cards._slotOf(RI.composedItem(fromBuffer, [], [])).view).toBe('buffer');
+    expect(cards._slotOf(RI.composedItem(fromNote, [], [])).view, 'notes are the fn view').toBe('fn');
+    expect(cards._slotOf(RI.composedItem(scratch, [], [])).view).toBe('');
+    expect(cards._slotOf(RI.composedItem(scratch, [], [])).view).not.toBe('cards');
   });
 
   it('offers every control a card needs, and names them plainly', async () => {
@@ -269,20 +566,64 @@ describe('the composer surface', () => {
     card.media = 'X.webp';
     const html = await openComposerOn(card);
     for (const call of ['cardsPickImage', 'cardsCropCard', 'cardsClearImage',
-      'cardsSetText', 'cardsResetToAuto', 'cardsSetLayout']) {
+      'cardsFieldInput', 'cardsGuardTitle', 'cardsSetDressing', 'cardsResetToAuto']) {
       expect(html, `${call} should be reachable from the composer`).toContain(call);
     }
     expect(html).toContain('RESET TO AUTOMATIC');
   });
 
-  it('names the composed layouts for what they do, not for the engine', async () => {
-    // A composed card's `default` leads with the picture when it has one, so
-    // calling it "Standard tile" would misdescribe what publish produces.
+  it('offers the three dressings, lights the one worn, and greys the one the card cannot wear', async () => {
+    const card = cardsCompose();
+    cardsSetText(card.id, 'title', 'No picture yet');
+    await openComposerOn(card);
+    const labels = [...document.querySelectorAll('.layout-chip-label')].map((n) => n.textContent);
+    // Three dressings, then whatever further layouts the engine registers for
+    // the kind — `overlay` since chunk 3, with nothing in cards.js listing it.
+    expect(labels).toEqual([
+      'Automatic', 'Always the picture', 'Always the words', 'Words on the picture',
+    ]);
+    const on = [...document.querySelectorAll('.layout-chip.is-on .layout-chip-label')].map((n) => n.textContent);
+    expect(on).toEqual(['Automatic']);
+    // Greyed, not hidden: the option exists, and the reason is in the tooltip.
+    // Both picture-led dressings are refused for the same reason — there is no
+    // picture — which is one gate asked twice, not two rules.
+    const blocked = [...document.querySelectorAll('.layout-chip.is-blocked .layout-chip-label')].map((n) => n.textContent);
+    expect(blocked).toEqual(['Always the picture', 'Words on the picture']);
+
+    card.media = 'X.webp';
+    cardsSetDressing(card.id, 'words');
+    await openComposerOn(card);
+    expect(document.querySelectorAll('.layout-chip.is-blocked')).toHaveLength(0);
+    expect(document.querySelector('.layout-chip.is-on .layout-chip-label').textContent).toBe('Always the words');
+  });
+
+  it('widens by itself when the engine registers a further layout for the kind', async () => {
+    // The chips are read off RecentIndex.cardLayouts. Chunk 3's `overlay` duly
+    // appeared here with nothing in cards.js listing it (the test above pins
+    // that); this one keeps the MECHANISM pinned for the layout after it, using
+    // a throwaway registered on the photo kind.
     const card = cardsCompose();
     card.media = 'X.webp';
-    await openComposerOn(card);
-    const labels = [...document.querySelectorAll('.layout-chip-label')].map((n) => n.textContent.trim());
-    expect(labels).toEqual(['Automatic', 'Always the picture', 'Always the words']);
+    RI.cardLayouts.photo.push('throwaway');
+    try {
+      await openComposerOn(card);
+      const names = [...document.querySelectorAll('.layout-chip-name')].map((n) => n.textContent);
+      expect(names).toContain('photo · throwaway');
+      cardsSetDressing(card.id, 'throwaway');
+      expect(card.kind).toBe('photo');
+      expect(card.card).toEqual({ layout: 'throwaway' });
+      expect(_dressingOf(card)).toBe('throwaway');
+    } finally {
+      RI.cardLayouts.photo.pop();
+    }
+  });
+
+  it('cardsSetLayout does nothing to a composed card — the dressing owns both halves', () => {
+    const card = cardsCompose();
+    card.media = 'X.webp';
+    cardsSetLayout('composed', card.id, 'hero');
+    expect(card.card).toBeUndefined();
+    expect(card.kind).toBeUndefined();
   });
 
   it('offers COMPOSE while there is room, and disables it at the budget', async () => {
@@ -372,6 +713,27 @@ describe('editing a card the grid picked', () => {
     expect(photo.card).toBeUndefined();
     expect(photo.link).toBeUndefined();
     expect(_composingId()).toBe(made.id);
+  });
+
+  it('a takeover of a note that leads with its hero stays the note\'s hero card', async () => {
+    STATE.posts = [{
+      id: 'n-hero', fn_id: 'fn-hero', title: 'Hero Note', body: 'Body.',
+      hero_filename: 'H.webp', card: { layout: 'hero' }, added_at: '2026-08-01',
+    }];
+    await cards.renderCards();
+    const at = cards._cardSlots(cards._stagedInputs()).findIndex((s) => s && s.key === 'text:fn-hero');
+    cards.cardsEditSlot(at);
+    const card = STATE.cards[0];
+    expect(card.kind).toBe('text');
+    expect(card.card).toEqual({ layout: 'hero' });
+    expect(card.media).toBe('H.webp');
+    expect(_dressingOf(card)).toBe('picture');
+    // A note without a hero, and a photo, start Automatic: no kind written.
+    cardsCancelEdit();
+    STATE.posts = [{ id: 'n-plain', fn_id: 'fn-plain', title: 'Plain Note', body: 'Body.', added_at: '2026-08-01' }];
+    await cards.renderCards();
+    cards.cardsEditSlot(cards._cardSlots(cards._stagedInputs()).findIndex((s) => s && s.key === 'text:fn-plain'));
+    expect(STATE.cards[0].kind).toBeUndefined();
   });
 
   it('keeps a field note card\'s link to the note', async () => {
@@ -678,7 +1040,9 @@ describe('exiting edit mode and canceling', () => {
   });
 
   it('_slotOf carries palette attribute on composed cards', () => {
-    const slot = cards._slotOf({ kind: 'composed', data: { id: 'c-pal', palette: 'flow', title: 'Flow Card' } });
+    // The engine hands a composed card over as a real kind carrying `over`.
+    const slot = cards._slotOf({ kind: 'text', data: {}, over: { id: 'c-pal', palette: 'flow', title: 'Flow Card' } });
+    expect(slot.kind).toBe('composed');
     expect(slot).not.toBeNull();
     expect(slot.palette).toBe('flow');
   });
@@ -782,8 +1146,12 @@ describe('exiting edit mode and canceling', () => {
   // the same row. Cancel has to revert card.card AND give back every folded
   // gesture, not just one — else a Hero pick rides silently into publish and the
   // counter keeps a phantom.
-  it('cardsCancelEdit reverts a layout pick and every folded gesture with it', async () => {
-    STATE.cards = [{ id: 'c-lay', order: 1, title: 'Lay', media: 'pic.webp', folder: 'archive', added_at: '2026-08-01' }];
+  it('cardsCancelEdit reverts every folded gesture, not just the last', async () => {
+    // (This drove the second gesture through cardsSetLayout until chunk 1 of
+    // docs/cards-core-complete.md made that mutator inert for composed cards;
+    // chunk 2 brings a layout gesture back here. Two text gestures fold into
+    // the same row and prove the same thing.)
+    STATE.cards = [{ id: 'c-lay', order: 1, title: 'Lay', tease: 'Tease', media: 'pic.webp', folder: 'archive', added_at: '2026-08-01' }];
     STATE.staged.cards = 0;
     STATE.stagedLog = [];
     await cards.renderCards();
@@ -794,12 +1162,13 @@ describe('exiting edit mode and canceling', () => {
     cards.cardsSelectSlot(at);
 
     cardsSetText('c-lay', 'title', 'Lay edited');   // gesture 1
-    cardsSetLayout('composed', 'c-lay', 'hero');     // gesture 2, folds into the row
-    expect(STATE.cards[0].card).toEqual({ layout: 'hero' });
-    expect(STATE.staged.cards).toBe(2);
+    cardsSetText('c-lay', 'tease', 'Tease edited'); // gesture 2, folds into the row
+    expect(STATE.cards[0].tease).toBe('Tease edited');
+    // Repeat edits to the same card fold into ONE staged row (the staging law).
+    expect(STATE.staged.cards).toBe(1);
 
     cardsCancelEdit();
-    expect(STATE.cards[0].card, 'a layout pick must not survive cancel').toBeUndefined();
+    expect(STATE.cards[0].tease, 'the second gesture must not survive cancel').toBe('Tease');
     expect(STATE.cards[0].title).toBe('Lay');
     expect(STATE.staged.cards,
       'both folded gestures must be given back, not just one').toBe(0);
@@ -1060,6 +1429,425 @@ describe('the composer wears the layout the card will publish in', () => {
       .findIndex((s) => s && s.composed && s.id === 'c-auto');
     cards.cardsSelectSlot(at);
     expect(document.getElementById('composer-card').getAttribute('data-shape')).toBe('picture');
+  });
+});
+
+// -------------------------------------------------- the dressing, onto kind + layout
+
+describe('the dressing writes kind + layout, and Automatic is the undo', () => {
+  const fresh = (over) => {
+    const c = cardsCompose();
+    cardsSetText(c.id, 'title', 'Dressed');
+    Object.assign(c, over || {});
+    return c;
+  };
+
+  it('Always the words → text, no layout', () => {
+    const c = fresh({ media: 'X.webp' });
+    cardsSetDressing(c.id, 'words');
+    expect(c.kind).toBe('text');
+    expect(c.card).toBeUndefined();
+    expect(_dressingOf(c)).toBe('words');
+    expect(RI.composedShape(c), 'the engine draws the words tile, picture or not').toBe('words');
+  });
+
+  it('Always the picture → photo — and text + hero when the card came from a note', () => {
+    const c = fresh({ media: 'X.webp' });
+    cardsSetDressing(c.id, 'picture');
+    expect(c.kind).toBe('photo');
+    expect(c.card).toBeUndefined();
+    expect(_dressingOf(c)).toBe('picture');
+
+    const n = fresh({ media: 'H.webp', source: { surface: 'posts', id: 'p-1' }, link: '/field-notes/?n=1' });
+    cardsSetDressing(n.id, 'picture');
+    expect(n.kind).toBe('text');
+    expect(n.card).toEqual({ layout: 'hero' });
+    expect(_dressingOf(n)).toBe('picture');
+    expect(RI.buildCard(RI.composedItem(n)).getAttribute('data-layout'), 'it is the note\'s own hero card').toBe('hero');
+  });
+
+  it('Automatic → neither field, and the engine reads the shape again', () => {
+    const c = fresh({ media: 'X.webp' });
+    cardsSetDressing(c.id, 'words');
+    cardsSetDressing(c.id, 'auto');
+    expect(c.kind).toBeUndefined();
+    expect(c.card).toBeUndefined();
+    expect(_dressingOf(c)).toBe('auto');
+    expect(RI.composedShape(c)).toBe('picture');
+  });
+
+  it('reads every shape back — written, legacy, or automatic', () => {
+    expect(_dressingOf({ id: 'a' })).toBe('auto');
+    expect(_dressingOf({ id: 'b', kind: 'text' })).toBe('words');
+    expect(_dressingOf({ id: 'c', kind: 'photo', media: 'X.webp' })).toBe('picture');
+    expect(_dressingOf({ id: 'd', kind: 'text', media: 'X.webp', card: { layout: 'hero' } })).toBe('picture');
+    expect(_dressingOf({ id: 'e', media: 'X.webp', card: { layout: 'plain' } }), 'legacy plain').toBe('words');
+    expect(_dressingOf({ id: 'f', media: 'X.webp', card: { layout: 'hero' } }), 'legacy hero').toBe('picture');
+    expect(_dressingOf({ id: 'g', kind: 'audio' })).toBe('audio');
+  });
+
+  it('refuses the picture without one, and stages nothing', () => {
+    const c = fresh();
+    const before = STATE.staged.cards;
+    cardsSetDressing(c.id, 'picture');
+    expect(c.kind).toBeUndefined();
+    expect(STATE.staged.cards).toBe(before);
+  });
+
+  it('folds into the card\'s one ledger row and never goes negative', () => {
+    const c = fresh({ media: 'X.webp' });
+    expect(STATE.staged.cards).toBe(1);
+    cardsSetDressing(c.id, 'words');
+    cardsSetDressing(c.id, 'picture');
+    cardsSetDressing(c.id, 'auto');
+    expect(STATE.stagedLog.filter((r) => r.surface === 'cards')).toHaveLength(1);
+    expect(STATE.staged.cards).toBe(1);
+  });
+
+  it('pressing the dressing already worn changes nothing', () => {
+    const c = fresh({ media: 'X.webp', kind: 'photo' });
+    const snap = JSON.stringify(c);
+    cardsSetDressing(c.id, 'picture');
+    expect(JSON.stringify(c)).toBe(snap);
+  });
+
+  it('Cancel puts the pair back whole', async () => {
+    STATE.cards = [{ id: 'c-dress', order: 1, title: 'Dressed', media: 'X.webp', added_at: '2026-09-01' }];
+    globalThis.fetch = async (path) => new Response(
+      JSON.stringify(path === '/api/buffer-summary' ? { featured: [] }
+        : (path === '/api/pulse' ? { pulse: null } : [])),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+    await cards.renderCards();
+    const at = cards._cardSlots(cards._stagedInputs()).findIndex((s) => s && s.composed && s.id === 'c-dress');
+    cards.cardsSelectSlot(at);
+    cardsSetDressing('c-dress', 'words');
+    expect(STATE.cards[0].kind).toBe('text');
+    cardsCancelEdit();
+    expect(STATE.cards[0].kind).toBeUndefined();
+    expect(STATE.cards[0].card).toBeUndefined();
+  });
+});
+
+describe('a record the shipped console wrote is rewritten as the new shape, and renders the same', () => {
+  const base = (over) => ({ id: 'c-legacy', order: 1, added_at: '2026-08-01', title: 'Mine', tease: 'A line.', ...over });
+  it.each([
+    ['plain with a picture', { media: 'X.webp', card: { layout: 'plain' } }, { kind: 'text' }],
+    ['plain without one', { card: { layout: 'plain' } }, { kind: 'text' }],
+    ['hero with a picture', { media: 'X.webp', card: { layout: 'hero' } }, { kind: 'photo' }],
+    ['hero without one (gated)', { card: { layout: 'hero' } }, { kind: 'photo' }],
+    ['an explicit default', { media: 'X.webp', card: { layout: 'default' } }, {}],
+  ])('%s', (_name, legacy, expected) => {
+    const before = RI.buildCard(RI.composedItem(base(legacy))).outerHTML;
+    const card = base(legacy);
+    expect(_normalizeCard(card)).toBe(true);
+    expect(card.card, 'the legacy layout is gone').toBeUndefined();
+    expect(card.kind).toBe(expected.kind);
+    expect(RI.buildCard(RI.composedItem(card)).outerHTML, 'byte-identical either way').toBe(before);
+  });
+
+  it('leaves an automatic record and a written one alone', () => {
+    expect(_normalizeCard(base({ media: 'X.webp' }))).toBe(false);
+    expect(_normalizeCard(base({ kind: 'text', media: 'X.webp', card: { layout: 'hero' } }))).toBe(false);
+    expect(_normalizeCard(base({ card: { focus: 'x' } }))).toBe(false);
+  });
+
+  it('runs on the way into the view and stages nothing', async () => {
+    STATE.cards = [base({ media: 'X.webp', card: { layout: 'plain' } })];
+    globalThis.fetch = async () => new Response('[]', { status: 200 });
+    await cards.renderCards();
+    expect(STATE.cards[0].kind).toBe('text');
+    expect(STATE.cards[0].card).toBeUndefined();
+    expect(STATE.staged.cards, 'a representation change is not a change to publish').toBe(0);
+  });
+});
+
+// -------------------------------------------------- LIVE's one action
+
+// Chunk 8 widened this from "one action" to two KINDS of action, and the
+// distinction is the point: LIVE still offers nothing that stages a change —
+// ✎ EDIT THE STAGED CARD hands you to the staged grid to make one — but it does
+// offer SHARE, because a stamp and a copied link act on the card that is on the
+// site right now. Sharing is not a staged change and does not wait for publish.
+describe('LIVE offers the staged card, and sharing — and nothing that stages', () => {
+  const live = { archive: [], posts: [], summary: { featured: [] }, cards: [] };
+  let pulse = null;
+  beforeEach(() => {
+    globalThis.fetch = async (path) => new Response(
+      JSON.stringify(path === '/api/buffer-summary' ? live.summary
+        : path === '/api/pulse' ? { pulse }
+          : path === '/data/posts.json' ? live.posts
+            : path === '/data/cards.json' ? live.cards : []),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+    STATE.posts = [
+      { id: 'n-1', fn_id: 'fn-1', title: 'One', body: 'First note.', hero_filename: 'H.webp', added_at: '2026-08-02' },
+      { id: 'n-2', fn_id: 'fn-2', title: 'Two', body: 'Second note.', added_at: '2026-08-01' },
+    ];
+    live.posts = STATE.posts.map((p) => ({ ...p }));
+    pulse = null;
+  });
+
+  it('is the only control on the live rail, and lands on the same card in STAGED', async () => {
+    await cards.renderCards();
+    cards.cardsSetSource('live');
+    const liveSlots = cards._cardSlots({ archive: [], posts: live.posts, rawFeatured: [], audio: [], pulse: null, composed: [] });
+    const at = liveSlots.findIndex((s) => s && s.key === 'text:fn-2');
+    cards.cardsSelectSlot(at);
+    const rail = document.querySelector('.studio-rail');
+    expect([...rail.querySelectorAll('button')].map((b) => b.textContent.trim())).toEqual([
+      '✎ EDIT THE STAGED CARD',
+      '⧉ COPY LINK', '▲ STAMP SHARE IMAGES', '⤓ NATIVE', '⤓ STORY',
+    ]);
+    // Not a layout picker, not a takeover, not one mutator: everything on the
+    // live rail either navigates or acts on R2 now.
+    expect(rail.querySelector('.layout-chips'), 'LIVE stages nothing').toBeNull();
+    cardsEditStaged('text:fn-2');
+    expect(document.querySelector('.cards-seg-btn--live').getAttribute('aria-pressed')).toBe('false');
+    const focused = [...document.querySelectorAll('.cards-pill')].findIndex((p) => p.classList.contains('is-active'));
+    expect(cards._cardSlots(cards._stagedInputs())[focused].key).toBe('text:fn-2');
+    // And the picker is right there: a note has two layouts.
+    expect(document.querySelector('.layout-chips')).not.toBeNull();
+  });
+
+  it('finds the card by identity, not by index — a live pulse shifts every index', async () => {
+    pulse = { id: 'p-1', text: 'Live now', state: 'signal', expires_at: '2999-01-01T00:00:00Z' };
+    await cards.renderCards();
+    cards.cardsSetSource('live');
+    cardsEditStaged('text:fn-2');
+    // The inputs carry the /api/pulse PAYLOAD, as _paint hands it over.
+    const staged = cards._cardSlots({ ...cards._stagedInputs(), pulse: { pulse } });
+    const focused = [...document.querySelectorAll('.cards-pill')].findIndex((p) => p.classList.contains('is-active'));
+    expect(staged[0].kind, 'the pulse leads').toBe('pulse');
+    expect(staged[focused].key).toBe('text:fn-2');
+  });
+
+  it('opens the composer when the card is a composed one', async () => {
+    STATE.cards = [{ id: 'c-live', order: 1, title: 'Published card', added_at: '2026-08-01' }];
+    live.cards = STATE.cards.map((c) => ({ ...c }));
+    await cards.renderCards();
+    cards.cardsSetSource('live');
+    cardsEditStaged('composed:c-live');
+    expect(_composingId()).toBe('c-live');
+    expect(document.getElementById('composer-title')).not.toBeNull();
+  });
+
+  it('says so when the live card is not on the next publish', async () => {
+    // Toasts land in #toast-zone (js/console-telemetry.js showToast).
+    document.body.insertAdjacentHTML('beforeend', '<div id="toast-zone"></div>');
+    STATE.posts = STATE.posts.filter((p) => p.fn_id !== 'fn-2');
+    await cards.renderCards();
+    cards.cardsSetSource('live');
+    cardsEditStaged('text:fn-2');
+    expect(document.querySelector('.cards-seg-btn--live').getAttribute('aria-pressed'), 'still switches').toBe('false');
+    expect(document.getElementById('toast-zone').textContent).toContain('not on the next publish');
+  });
+});
+
+// -------------------------------------------------- the cap, on captions only
+
+describe('the 48-character cap applies to picture titles only', () => {
+  it('a words headline runs to the note\'s own limit — none', () => {
+    const c = cardsCompose();
+    const long = 'x'.repeat(80);
+    cardsSetText(c.id, 'title', long);
+    expect(c.title).toBe(long);
+    expect(_titleCap(c)).toBe(Infinity);
+  });
+
+  it('a picture caption is bounded, at the store and at the keyboard', () => {
+    const c = cardsCompose();
+    c.media = 'X.webp';
+    expect(_titleCap(c)).toBe(48);
+    cardsSetText(c.id, 'title', 'x'.repeat(80));
+    expect(c.title).toHaveLength(48);
+
+    const el = document.createElement('div');
+    el.textContent = 'x'.repeat(48);
+    let prevented = 0;
+    const ev = { inputType: 'insertText', data: 'y', currentTarget: el, preventDefault: () => { prevented++; } };
+    cardsGuardTitle(ev, c.id);
+    expect(prevented, 'the 49th character is refused before it lands').toBe(1);
+    cardsGuardTitle({ ...ev, inputType: 'deleteContentBackward' }, c.id);
+    expect(prevented, 'deleting is always allowed').toBe(1);
+    el.textContent = 'x'.repeat(10);
+    cardsGuardTitle(ev, c.id);
+    expect(prevented, 'room left → nothing refused').toBe(1);
+  });
+
+  it('a hero note keeps the caption cap — its title is a caption under the picture', () => {
+    const c = cardsCompose();
+    c.media = 'H.webp';
+    c.source = { surface: 'posts', id: 'p' };
+    cardsSetDressing(c.id, 'picture');
+    expect(_titleCap(c)).toBe(48);
+  });
+});
+
+// ---------------------------------------------------------- the audio slot
+//
+// CHUNK 5 TURNED THIS DESCRIBE INSIDE OUT. It used to assert that the studio
+// REFUSED the audio slot and said why in words where the button would be — the
+// right answer while a takeover would have seeded a words card and dropped the
+// player (the 2026-09-07 hole). The hole is closed, so the assertions are the
+// same in spirit with the verdict reversed: the takeover happens, and the thing
+// that made refusing necessary — losing the transport — is what is now pinned
+// as impossible.
+
+describe('the studio takes the audio slot over, and the card keeps playing', () => {
+  const TRACKS = [
+    { id: 'a-1', slug: 'one', filename: 'one.mp3', title: 'One', duration: 30, featured: true, featured_order: 1, added_at: '2026-08-01' },
+    { id: 'a-2', slug: 'two', filename: 'two.mp3', title: 'Two', duration: 40, featured: true, featured_order: 2, added_at: '2026-08-02' },
+    { id: 'a-3', slug: 'three', filename: 'three.mp3', title: 'Three', duration: 50, added_at: '2026-08-03' },
+  ];
+  const SETS = [{ slug: 'dusk', name: 'Dusk mix', tracks: ['three', 'one'], added_at: '2026-09-05' }];
+
+  beforeEach(() => {
+    globalThis.fetch = async (path) => new Response(
+      JSON.stringify(path === '/api/buffer-summary' ? { featured: [] }
+        : (path === '/api/pulse' ? { pulse: null } : [])),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+    STATE.audio = TRACKS.map((t) => ({ ...t }));
+    STATE.audioSets = SETS.map((s) => ({ ...s, tracks: [...s.tracks] }));
+    STATE.cards = [];
+  });
+
+  const audioSlot = () => cards._cardSlots(cards._stagedInputs())
+    .findIndex((s) => s && s.kind === 'audio');
+
+  it('offers the button, mints an audio card, and copies no tracks onto it', async () => {
+    await cards.renderCards();
+    const at = audioSlot();
+    expect(at).toBeGreaterThan(-1);
+    cards.cardsSelectSlot(at);
+    expect(document.querySelector('.studio-stage').textContent).toContain('EDIT THIS CARD');
+
+    cards.cardsEditSlot(at);
+    expect(STATE.cards).toHaveLength(1);
+    const made = STATE.cards[0];
+    expect(made.kind).toBe('audio');
+    expect(_composingId()).toBe(made.id);
+    // THE WHOLE POINT: no track list on the record. The card names a source —
+    // the absence of `set` IS "the homepage tracks" — and the registry answers,
+    // so there is nothing here to fall out of step with the shelf.
+    expect(made.set).toBeUndefined();
+    expect(made.tracks).toBeUndefined();
+    expect(made.source).toBeUndefined();
+    // No seeded link either: an audio card's address follows what it plays, so
+    // the rail offers no ✕ MAKE FREE-FORM — a button with nothing to change.
+    expect(made.link).toBeUndefined();
+    expect(STATE.staged.cards).toBe(1);
+  });
+
+  it('the player survives the takeover — the composed card plays what the slot played', async () => {
+    await cards.renderCards();
+    cards.cardsEditSlot(audioSlot());
+    const item = RI.composedItem(STATE.cards[0], STATE.audio, STATE.audioSets);
+    expect(item.kind).toBe('audio');
+    expect(item.data.tracks.map((t) => t.slug)).toEqual(['one', 'two']);
+    // …and the automatic audio card steps aside rather than doubling it.
+    const slots = cards._cardSlots(cards._stagedInputs()).filter(Boolean);
+    expect(slots.filter((s) => s.kind === 'audio')).toHaveLength(0);
+    expect(slots.filter((s) => s.composed)).toHaveLength(1);
+  });
+
+  it('borrowing a set is one staged gesture, and pressing the other chip is the undo', async () => {
+    await cards.renderCards();
+    cards.cardsEditSlot(audioSlot());
+    const card = STATE.cards[0];
+    const staged = STATE.staged.cards;
+
+    cards.cardsSetAudioSource(card.id, 'set');
+    expect(card.set).toBe('dusk');
+    expect(cards._audioSourceOf(card)).toBe('set');
+    // One gesture, one row — folded onto the card's existing staged row.
+    expect(STATE.staged.cards).toBe(staged);
+    expect(RI.composedTracks(card, STATE.audio, STATE.audioSets).map((t) => t.slug))
+      .toEqual(['three', 'one']);
+
+    // The reverse is the chip beside it, still on screen — reversibility layer
+    // 1 — and it leaves the record exactly as it was, key and all.
+    cards.cardsSetAudioSource(card.id, 'tracks');
+    expect('set' in card).toBe(false);
+    expect(RI.composedTracks(card, STATE.audio, STATE.audioSets).map((t) => t.slug))
+      .toEqual(['one', 'two']);
+  });
+
+  it('refuses to borrow when the shelf has no sets, rather than writing a dead slug', async () => {
+    STATE.audioSets = [];
+    await cards.renderCards();
+    cards.cardsEditSlot(audioSlot());
+    const card = STATE.cards[0];
+    cards.cardsSetAudioSource(card.id, 'set');
+    expect(card.set).toBeUndefined();
+    // And a retired set is not on offer either.
+    STATE.audioSets = [{ slug: 'old', name: 'Retired', tracks: ['one'], retired: true }];
+    cards.cardsSetAudioSource(card.id, 'set');
+    expect(card.set).toBeUndefined();
+    cards.cardsPickSet(card.id, 'old');
+    expect(card.set).toBeUndefined();
+  });
+
+  it('the rail says what it plays, and the block is drawn only for an audio card', async () => {
+    await cards.renderCards();
+    cards.cardsEditSlot(audioSlot());
+    const rail = document.querySelector('.studio-rail').textContent;
+    expect(rail).toContain('WHAT THIS CARD PLAYS');
+    expect(rail).toContain('CHOOSE TRACKS');
+    expect(rail).toContain('One · Two');
+    // A picture on an audio card is not in this program — the block that would
+    // offer one is the block this one replaced.
+    expect(rail).not.toContain('CHOOSE A PICTURE');
+    expect(rail).not.toContain('MAKE FREE-FORM');
+
+    STATE.cards = [];
+    cardsCompose();
+    cardsSetText(_composingId(), 'title', 'A words card');
+    expect(document.querySelector('.studio-rail').textContent).not.toContain('WHAT THIS CARD PLAYS');
+  });
+
+  it('the author\'s words are the caption, and the composer can type them on an empty card', async () => {
+    await cards.renderCards();
+    cards.cardsEditSlot(audioSlot());
+    const card = STATE.cards[0];
+    // audioCaption() draws no body at all until there is a word, so the
+    // composer has to add the leaves — otherwise the card cannot be typed on.
+    const face = document.getElementById('composer-card');
+    expect(face.getAttribute('data-shape')).toBe('audio');
+    expect(document.getElementById('composer-title')).not.toBeNull();
+    expect(document.getElementById('composer-tease')).not.toBeNull();
+    // …and in the place the renderer will draw them, so the line is typed where
+    // it publishes. Above the index's rule on the playlist card.
+    const kids = [...face.children].map((n) => n.className);
+    expect(kids.indexOf('wk-body')).toBeLessThan(kids.indexOf('wk-pl-index'));
+
+    cardsSetText(card.id, 'title', 'For the drive home');
+    cardsSetText(card.id, 'tease', 'Two takes, one evening.');
+    const node = RI.buildCard(RI.composedItem(card, STATE.audio, STATE.audioSets));
+    expect(node.querySelector('.wk-body .wk-title').textContent).toBe('For the drive home');
+    expect(node.querySelector('.wk-body .wk-meta').textContent).toBe('Two takes, one evening.');
+    // The caption is a caption, so it takes the caption's bound.
+    expect(_titleCap(card)).toBe(48);
+  });
+
+  it('♪ CHOOSE TRACKS goes through the shelf\'s own mutator — there is one featured list', () => {
+    // The studio is a second front door, never a second write path: the proof
+    // is in the source, because behaviour can agree today and drift tomorrow
+    // (chunk 4's lesson about a second resolveSetTracks).
+    const fn = SOURCE.slice(SOURCE.indexOf('export function cardsChooseTracks'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    expect(body).toContain('_audioPromote');
+    expect(body).not.toMatch(/\.featured\s*=/);
+    expect(body).not.toMatch(/featured_order\s*=/);
+    // And it opens showing what the card already plays, ticked.
+    expect(body).toContain('preselect');
+    // AND IT HANDS THE ORDER ON. _audioPromote only ever appends, so the two
+    // membership loops settle WHICH tracks play and nothing about the order —
+    // re-ticking two already-featured tracks the other way round used to be a
+    // no-op with no explanation (a code review of chunk 7). The reorder goes
+    // through the shelf's mutator for the same reason the membership does.
+    expect(body).toContain('_audioReorderFeatured(order)');
   });
 });
 

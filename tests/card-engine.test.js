@@ -125,15 +125,33 @@ describe('byte identity — the default layout adds nothing', () => {
 });
 
 describe('resolveLayout — unknown resolves to default, never breaks', () => {
-  it('registers exactly the five kinds, each with default', () => {
-    // `composed` joined on 2026-09-07 — the owner's own cards, overlaid on the
-    // automatic row (tests/card-composer.test.js). Every kind must still offer
-    // 'default', because that is what an unknown layout falls back to.
+  it('registers exactly the four kinds, each with default', () => {
+    // `composed` was a fifth kind from 2026-09-07 to 2026-09-10. It is now an
+    // OVERRIDE on these four (docs/cards-core-complete.md chunk 1;
+    // tests/card-composer.test.js) and must never come back as a kind. Every
+    // kind must still offer 'default', because that is what an unknown layout
+    // falls back to.
     expect(Object.keys(RI.cardLayouts).sort())
-      .toEqual(['audio', 'composed', 'photo', 'pulse', 'text']);
+      .toEqual(['audio', 'photo', 'pulse', 'text']);
+    expect(RI.cardLayouts.composed).toBeUndefined();
     for (const kind of Object.keys(RI.cardLayouts)) {
       expect(RI.cardLayouts[kind]).toContain('default');
     }
+  });
+
+  it('`composed` is not a registered kind, and an old `layout: plain` record still renders', () => {
+    // The shipped console wrote `card: { layout: 'plain' }` for "always the
+    // words". That name is nobody's layout now — it normalizes to the text kind
+    // — and it must degrade to a rendered card, never a throw or a hole.
+    expect(RI.resolveLayout('composed', 'plain')).toBe('default');
+    expect(RI.resolveLayout('text', 'plain')).toBe('default');
+    const [item] = RI.composedPick([{ id: 'c-old', order: 1, media: 'OLD.webp', title: 'Old', card: { layout: 'plain' } }]);
+    expect(item.kind).toBe('text');
+    const node = RI.buildCard(item);
+    expect(node.classList.contains('wk-text')).toBe(true);
+    expect(node.querySelector('.wk-img')).toBeNull();
+    expect(node.hasAttribute('data-layout')).toBe(false);
+    expect(node.querySelector('.wk-t-title').textContent).toBe('Old');
   });
 
   it.each([
@@ -213,8 +231,11 @@ describe('buildCard — dispatch + layout attribute', () => {
 // ---- Chunk 2: the field-note hero layout ----
 describe('the hero layout — the engine\'s first real layout', () => {
   it('registers hero on the text kind and nowhere else', () => {
-    expect(RI.cardLayouts.text).toEqual(['default', 'hero']);
-    expect(RI.cardLayouts.photo).toEqual(['default']);
+    // 'overlay' joined both picture-capable kinds in chunk 3; 'hero' is still
+    // the text kind's alone — it is what a NOTE does with its picture, where
+    // overlay is what any card does with one.
+    expect(RI.cardLayouts.text).toEqual(['default', 'hero', 'overlay']);
+    expect(RI.cardLayouts.photo).toEqual(['default', 'overlay']);
     expect(RI.cardLayouts.audio).toEqual(['default']);
     expect(RI.cardLayouts.pulse).toEqual(['default']);
   });
@@ -321,5 +342,372 @@ describe('the hero layout on the real selection path', () => {
     const texts = nodes.filter((n) => n.classList.contains('wk-text'));
     expect(texts.length).toBe(2);
     expect(texts.filter((n) => n.hasAttribute('data-layout')).length).toBe(1);
+  });
+});
+
+// ---- Chunk 3: the overlay layout (docs/cards-core-complete.md) ----
+//
+// The image ladder, v1. Two things are being pinned here, and they are
+// different in kind:
+//
+//   1. THE SPLIT. The engine emits four attributes and NOTHING else — no
+//      colour, no gradient, no measurement at render time. That is what makes
+//      the layout survive the offline export, which runs from file:// with no
+//      network and no layout to measure.
+//   2. THE INK THRESHOLD. Derived, never authored (§2.2), so the number has to
+//      be a pinned contract rather than a sentence in a comment.
+const OV_PHOTO = {
+  id: 'c-ov', order: 1, kind: 'photo', title: 'Evening, over the water',
+  tease: 'Twenty minutes before it went', media: 'OAKLENS_Hero.webp',
+  card: { layout: 'overlay' }, added_at: '2026-09-10',
+};
+
+describe('the overlay layout — the words on the picture', () => {
+  it('registers on both picture-capable kinds and on neither of the others', () => {
+    expect(RI.cardLayouts.photo).toContain('overlay');
+    expect(RI.cardLayouts.text).toContain('overlay');
+    expect(RI.cardLayouts.audio).not.toContain('overlay');
+    expect(RI.cardLayouts.pulse).not.toContain('overlay');
+  });
+
+  it('puts the body INSIDE the picture and stamps the four attributes', () => {
+    const node = RI.buildCard(RI.composedItem(OV_PHOTO));
+    expect(node.getAttribute('data-layout')).toBe('overlay');
+    expect(node.getAttribute('data-place')).toBe('bottom');
+    expect(node.getAttribute('data-treat')).toBe('scrim');
+    expect(node.getAttribute('data-ink')).toBe('light');
+
+    // The one structural difference between an overlay card and its default:
+    // which element the body hangs off. Same nodes, same text, same order.
+    const img = node.querySelector('.wk-img');
+    expect(img.querySelector('.wk-body')).toBeTruthy();
+    expect(node.querySelector(':scope > .wk-body')).toBeNull();
+    expect(img.querySelector('.wk-title').textContent).toBe('Evening, over the water');
+    expect(img.querySelector('.wk-meta').textContent).toBe('Twenty minutes before it went');
+  });
+
+  it('carries data-blur only under the frosted treatment', () => {
+    const scrim = RI.buildCard(RI.composedItem(OV_PHOTO));
+    expect(scrim.hasAttribute('data-blur')).toBe(false);
+
+    const frosted = RI.buildCard(RI.composedItem({
+      ...OV_PHOTO, overlay: { treat: 'blur', blur: 3 },
+    }));
+    expect(frosted.getAttribute('data-treat')).toBe('blur');
+    expect(frosted.getAttribute('data-blur')).toBe('3');
+  });
+
+  it('emits no colour, gradient or measurement of its own', () => {
+    // The division of labour: JS sets attributes, CSS owns everything
+    // downstream. The only inline style on the card is the picture the renderer
+    // has always set.
+    const node = RI.buildCard(RI.composedItem({
+      ...OV_PHOTO, overlay: { place: 'top', treat: 'blur', blur: 1 },
+      img: { lum: { top: 0.9, mid: 0.4, bottom: 0.1 } },
+    }));
+    const styled = [...node.querySelectorAll('[style]')].map((n) => n.getAttribute('style'));
+    for (const s of styled) {
+      expect(s).toMatch(/^background-image:|^background-position:|background-image:.*background-position/);
+    }
+    expect(node.outerHTML).not.toMatch(/rgba?\(|gradient|blur\(/);
+  });
+
+  it('reads the author\'s choices, and falls back to a legible card for anything else', () => {
+    expect(RI.overlayOf(null)).toEqual({ place: 'bottom', treat: 'scrim', blur: 2 });
+    expect(RI.overlayOf({ overlay: { place: 'top', treat: 'none', blur: 1 } }))
+      .toEqual({ place: 'top', treat: 'none', blur: 1 });
+    // A record from a NEWER console, naming values this engine has never heard
+    // of, degrades to the safe default rather than to a broken card — the same
+    // contract resolveLayout makes for layout names.
+    expect(RI.overlayOf({ overlay: { place: 'diagonal', treat: 'neon', blur: 9 } }))
+      .toEqual({ place: 'bottom', treat: 'scrim', blur: 2 });
+    expect(RI.overlayOf({ overlay: 'bottom' }))
+      .toEqual({ place: 'bottom', treat: 'scrim', blur: 2 });
+  });
+
+  // The derived half. 0.55, and the band the placement reads.
+  it.each([
+    ['bottom', { top: 0.9, mid: 0.9, bottom: 0.1 }, 'light'],
+    ['bottom', { top: 0.1, mid: 0.1, bottom: 0.9 }, 'dark'],
+    ['top', { top: 0.9, mid: 0.1, bottom: 0.1 }, 'dark'],
+    // 'centre' is the placement's word; 'mid' is the crop's. They are the one
+    // pair that does not share a name, so this case is the mapping.
+    ['centre', { top: 0.1, mid: 0.8, bottom: 0.1 }, 'dark'],
+    ['centre', { top: 0.9, mid: 0.2, bottom: 0.9 }, 'light'],
+    // The threshold itself: the tie goes to light, and dark waits for a
+    // genuinely bright band.
+    ['bottom', { bottom: 0.55 }, 'dark'],
+    ['bottom', { bottom: 0.54 }, 'light'],
+  ])('ink at %s over %j is %s', (place, lum, ink) => {
+    expect(RI.overlayInk({ img: { lum } }, place)).toBe(ink);
+  });
+
+  it('an unmeasured card takes light ink — the legible answer over the default scrim', () => {
+    expect(RI.INK_THRESHOLD).toBe(0.55);
+    expect(RI.overlayInk({}, 'bottom')).toBe('light');
+    expect(RI.overlayInk({ img: {} }, 'bottom')).toBe('light');
+    expect(RI.overlayInk({ img: { lum: { bottom: 'bright' } } }, 'bottom')).toBe('light');
+    expect(RI.overlayInk(null, 'bottom')).toBe('light');
+  });
+
+  it('refuses the layout on a card with no picture to write on', () => {
+    const wordsOnly = { ...OV_PHOTO, kind: 'text' };
+    delete wordsOnly.media;
+    const node = RI.buildCard(RI.composedItem(wordsOnly));
+    expect(node.hasAttribute('data-layout')).toBe(false);
+    expect(node.hasAttribute('data-place')).toBe(false);
+    // And it is EXACTLY the words tile — the gate falls back silently, it does
+    // not half-render.
+    const plain = { ...wordsOnly };
+    delete plain.card;
+    expect(node.outerHTML).toBe(RI.buildCard(RI.composedItem(plain)).outerHTML);
+  });
+
+  it('a note wearing overlay is the hero card with its words moved onto the picture', () => {
+    const node = RI.buildCard({ kind: 'text', data: { ...HERO_POST, card: { layout: 'overlay' } } });
+    expect(node.getAttribute('data-layout')).toBe('overlay');
+    expect(node.classList.contains('wk-text')).toBe(true);
+    const img = node.querySelector('.wk-img');
+    expect(img.style.backgroundImage).toBe(HERO_URL);
+    // The kicker stays where the kind puts it — the on-media chip, exactly as
+    // the hero card wears it. Only the body moved.
+    expect(img.querySelector('.wk-tag').textContent).toBe('Field Note');
+    expect(img.querySelector('.wk-t-title').textContent).toBe('The Long Way Round');
+
+    // Same nodes as the hero card: the difference is the parent and the
+    // attributes, nothing else.
+    const hero = RI.buildCard({ kind: 'text', data: HERO_POST });
+    expect(node.querySelector('.wk-body').innerHTML).toBe(hero.querySelector('.wk-body').innerHTML);
+  });
+
+  it('a composed note wearing overlay still reports the picture shape', () => {
+    // composedShape is what the console's composer and the palette CSS bind to;
+    // a picture-led card that called itself 'words' would draw the wrong face.
+    expect(RI.composedShape({ kind: 'text', media: 'X.webp', card: { layout: 'overlay' } }))
+      .toBe('picture');
+    expect(RI.composedShape({ kind: 'text', media: 'X.webp' })).toBe('words');
+  });
+
+  it('changes NOTHING for a card that never asked for it', () => {
+    // The byte-identity contract, asked of the two kinds that gained the layout.
+    const photo = RI.buildCard({ kind: 'photo', data: ARCHIVE_ENTRY });
+    expect(photo.hasAttribute('data-layout')).toBe(false);
+    expect(photo.hasAttribute('data-ink')).toBe(false);
+    expect(photo.querySelector('.wk-img .wk-body')).toBeNull();
+    // And a record carrying an overlay block it never wears is inert.
+    const inert = RI.buildCard(RI.composedItem({
+      id: 'c-x', order: 1, kind: 'photo', media: 'OAKLENS_Hero.webp', title: 'Plain',
+      overlay: { place: 'top', treat: 'blur', blur: 1 },
+    }));
+    expect(inert.hasAttribute('data-place')).toBe(false);
+  });
+});
+
+// ---- the plate: the band's type is a ladder and a mark, both stamped ----
+//
+// Owner, 2026-09-11: the band read as a generic template. The fix is
+// typographic and lives in the stylesheets, but the two decisions it needs —
+// how large the title runs, and whether it closes on the accent full stop — are
+// stamped here as attributes, the way data-tier is for the words tile. Pinned
+// as pure functions so the steps are numbers, not sentences.
+describe('the plate — the title\'s scale and its mark', () => {
+  it('steps the scale down as the title gets longer, counted in graphemes', () => {
+    expect(RI.overlayScales).toEqual(['statement', 'feature', 'standard', 'compact']);
+    expect(RI.overlayScale('Kearny')).toBe('statement');
+    expect(RI.overlayScale('Twelve chars')).toBe('statement');          // 12
+    expect(RI.overlayScale('Thirteen char')).toBe('feature');           // 13
+    expect(RI.overlayScale('A title of twenty-four!!')).toBe('feature'); // 24
+    expect(RI.overlayScale('Twenty-five characters..')).toBe('feature'); // 24 — the comment lies, the count does not
+    expect(RI.overlayScale('A title that runs to forty characters..')).toBe('standard'); // 39
+    expect(RI.overlayScale('A title that runs to forty-one characters')).toBe('compact'); // 41
+    // Graphemes, not code units: a frame citation and a CJK line are both short.
+    expect(RI.overlayScale('f#234')).toBe('statement');
+    expect(RI.overlayScale('東京の夜, 静か')).toBe('statement');
+    expect(RI.overlayScale('🌊🌊🌊🌊🌊')).toBe('statement');
+    expect(RI.overlayScale('')).toBe('statement');
+  });
+
+  it('marks a title that the author left open, and only that', () => {
+    expect(RI.overlayMark('Kearny Phantom')).toBe('dot');
+    expect(RI.overlayMark('Kearny Phantom  ')).toBe('dot');        // trailing space is not a stop
+    for (const closed of ['Done.', 'Really?', 'Now!', 'Wait…', 'Thus:', 'So;', 'Or,',
+      'A dash —', 'A hyphen -', '“Quoted”', "'Quoted'", '"Quoted"', '(aside)', '[note]']) {
+      expect(RI.overlayMark(closed), closed).toBe('');
+    }
+    expect(RI.overlayMark('')).toBe('');
+    expect(RI.overlayMark(null)).toBe('');
+  });
+
+  it('stamps both on the card, read off the headline the kind built', () => {
+    const node = RI.buildCard(RI.composedItem(OV_PHOTO));
+    expect(node.getAttribute('data-scale')).toBe('feature');    // 23 graphemes
+    expect(node.getAttribute('data-mark')).toBe('dot');
+
+    const closed = RI.buildCard(RI.composedItem({ ...OV_PHOTO, title: 'Gone.' }));
+    expect(closed.getAttribute('data-scale')).toBe('statement');
+    // An attribute nothing reads is a value somebody will later believe in.
+    expect(closed.hasAttribute('data-mark')).toBe(false);
+
+    // A note wearing overlay gets the same two, off its .wk-t-title.
+    const note = RI.buildCard(RI.composedItem({
+      ...OV_PHOTO, id: 'c-ovt', kind: 'text', title: 'On the way',
+    }));
+    expect(note.getAttribute('data-scale')).toBe('statement');
+    expect(note.getAttribute('data-mark')).toBe('dot');
+
+    // The mark is the STYLESHEET's: the title's text is exactly as typed.
+    expect(node.querySelector('.wk-title').textContent).toBe('Evening, over the water');
+  });
+
+  it('never reaches a card that is not wearing the layout', () => {
+    const plain = RI.buildCard(RI.composedItem({ ...OV_PHOTO, card: undefined }));
+    expect(plain.hasAttribute('data-scale')).toBe(false);
+    expect(plain.hasAttribute('data-mark')).toBe(false);
+  });
+});
+
+describe('the overlay layout on the real selection path', () => {
+  it('rides pickRecent → buildCard on an automatic frame', () => {
+    const entry = { ...ARCHIVE_ENTRY, card: { layout: 'overlay' } };
+    const picks = RI.pickRecent([entry], [SHORT_POST], [], [], { pulse: null });
+    const nodes = picks.map((item) => RI.buildCard(item));
+    const ov = nodes.find((n) => n.getAttribute('data-layout') === 'overlay');
+    expect(ov).toBeTruthy();
+    // An automatic entry carries no measurement — nothing measures one — so it
+    // takes light ink over the default scrim, which is legible on any picture.
+    expect(ov.getAttribute('data-ink')).toBe('light');
+    expect(ov.getAttribute('data-treat')).toBe('scrim');
+    expect(ov.querySelector('.wk-img .wk-body')).toBeTruthy();
+    // Nothing else on the row moved.
+    expect(nodes.filter((n) => n.hasAttribute('data-layout')).length).toBe(1);
+  });
+});
+
+// ---------------------------------------------- chunk 5: what an audio card plays
+//
+// A composed audio card names a SOURCE and the registry answers — it is the one
+// kind whose entry is not empty (composedItem's comment says why at length).
+// Two sources and only two: a borrowed set, or the homepage tracks. The second
+// is what makes taking the audio slot over free of the 2026-09-07 hole — the
+// takeover copies nothing, so the card keeps playing what it was playing.
+describe('the audio source — a borrowed set, or the homepage tracks', () => {
+  const T = (slug, over) => ({
+    id: `t-${slug}`, slug, filename: `${slug}.mp3`, title: slug.toUpperCase(),
+    duration: 30, added_at: '2026-09-01', ...over,
+  });
+  const REGISTRY = [
+    T('one', { featured: true, featured_order: 1 }),
+    T('two', { featured: true, featured_order: 2 }),
+    T('three'),
+    { id: 't-gone', slug: 'gone', retired: true },
+  ];
+  const SETS = [
+    { slug: 'dusk', name: 'Dusk mix', tracks: ['three', 'one'], added_at: '2026-09-05' },
+    { slug: 'empty', name: 'All retired', tracks: ['gone'], added_at: '2026-09-05' },
+    { slug: 'old', name: 'Retired set', tracks: ['one'], retired: true, added_at: '2026-09-05' },
+    { slug: 'solo', name: 'One only', tracks: ['three'], added_at: '2026-09-05' },
+  ];
+  const card = (over) => ({ id: 'c-a', order: 1, kind: 'audio', added_at: '2026-09-10', ...over });
+
+  beforeAll(async () => {
+    // The real load order: index.html loads audio-player BEFORE recent-index,
+    // because resolveSetTracks is the ONE answer to "what does this set play"
+    // and the engine calls it rather than keeping a second copy (chunk 4).
+    await import('../js/audio-player.js');
+  });
+
+  it('no set → the homepage tracks, in featured order, capped', () => {
+    expect(RI.composedTracks(card(), REGISTRY, SETS).map((t) => t.slug)).toEqual(['one', 'two']);
+  });
+
+  it('a set → its own tracks, in the set’s order, retired ones dropped', () => {
+    expect(RI.composedTracks(card({ set: 'dusk' }), REGISTRY, SETS).map((t) => t.slug))
+      .toEqual(['three', 'one']);
+    // A set whose every track retired plays nothing — and says so by being
+    // empty rather than by falling back to the homepage tracks, which would be
+    // a card quietly playing something the author never chose.
+    expect(RI.composedTracks(card({ set: 'empty' }), REGISTRY, SETS)).toEqual([]);
+    // A retired SET is a slug reservation, not a playlist.
+    expect(RI.composedTracks(card({ set: 'old' }), REGISTRY, SETS)).toEqual([]);
+    // A set that is not there at all.
+    expect(RI.composedTracks(card({ set: 'nope' }), REGISTRY, SETS)).toEqual([]);
+  });
+
+  it('the cap is applied on read too — a hand-edited file cannot publish a long card', () => {
+    const many = Array.from({ length: 9 }, (_, i) => T(`m${i}`));
+    const big = [{ slug: 'big', name: 'Big', tracks: many.map((t) => t.slug) }];
+    expect(RI.composedTracks(card({ set: 'big' }), many, big).length)
+      .toBe(RI.AUDIO_MAX_PLAYLIST);
+  });
+
+  it('more than one track is the playlist card, exactly one is the single card', () => {
+    const many = RI.buildCard(RI.composedItem(card(), REGISTRY, SETS));
+    expect(many.classList.contains('wk-audio-playlist')).toBe(true);
+    expect(many.querySelectorAll('.wk-pl-item').length).toBe(2);
+
+    const one = RI.buildCard(RI.composedItem(card({ set: 'solo' }), REGISTRY, SETS));
+    expect(one.classList.contains('wk-audio-playlist')).toBe(false);
+    expect(one.classList.contains('wk-audio')).toBe(true);
+  });
+
+  it('a borrowed set names the card and gives it the set’s own address', () => {
+    const node = RI.buildCard(RI.composedItem(card({ set: 'dusk' }), REGISTRY, SETS));
+    expect(node.querySelector('.wk-a-title').textContent).toBe('Dusk mix');
+    expect(node.querySelector('.wk-a-title a').getAttribute('href')).toBe('/listen/?set=dusk');
+    // In the set's order, not the registry's.
+    expect([...node.querySelectorAll('.wk-pl-name')].map((a) => a.textContent))
+      .toEqual(['THREE', 'ONE']);
+    // The single-card shape agrees — name and address are one decision.
+    const solo = RI.buildCard(RI.composedItem(card({ set: 'solo' }), REGISTRY, SETS));
+    expect(solo.querySelector('.wk-a-title').textContent).toBe('One only');
+    expect(solo.querySelector('.wk-a-title a').getAttribute('href')).toBe('/listen/?set=solo');
+  });
+
+  it('the author’s words are the caption, under the waveform — never the headline', () => {
+    const node = RI.buildCard(RI.composedItem(
+      card({ set: 'dusk', title: 'For the drive home', tease: 'Two takes, one evening.' }),
+      REGISTRY, SETS,
+    ));
+    expect(node.querySelector('.wk-a-title').textContent).toBe('Dusk mix');
+    expect(node.querySelector('.wk-body .wk-title').textContent).toBe('For the drive home');
+    expect(node.querySelector('.wk-body .wk-meta').textContent).toBe('Two takes, one evening.');
+    // UNDER THE WAVEFORM, and on the playlist card that means inside the head:
+    // after the transport, above the index's rule. Below the index it sat flush
+    // against the last track and read as a third row (found by opening the
+    // page, not by this suite).
+    const kids = [...node.children].map((n) => n.className);
+    expect(kids.indexOf('wk-body')).toBeGreaterThan(kids.findIndex((c) => c.startsWith('ap')));
+    expect(kids.indexOf('wk-body')).toBeLessThan(kids.indexOf('wk-pl-index'));
+    // No tier ladder and no drop cap on an audio card (§2.2).
+    expect(node.hasAttribute('data-tier')).toBe(true);   // the PLAYLIST ladder, by row count
+    expect(node.querySelector('.wk-dropcap')).toBeNull();
+    expect(node.querySelector('.wk-snip')).toBeNull();
+  });
+
+  it('an audio card earns its slot with no picture and no words — the tracks are the content', () => {
+    const picks = RI.pickRecent([], [], [], REGISTRY, null, [card()], SETS);
+    expect(picks.filter((p) => p.kind === 'audio').length).toBe(1);
+    expect(picks[0].over).toBeTruthy();
+    // …but one that plays nothing and says nothing is still dropped.
+    expect(RI.pickRecent([], [], [], [], null, [card()], SETS)
+      .filter((p) => p.over)).toEqual([]);
+  });
+
+  it('a composed audio card takes the audio slot — the automatic one steps aside', () => {
+    const withComposed = RI.pickRecent([ARCHIVE_ENTRY], [SHORT_POST], [], REGISTRY, null, [card({ set: 'dusk' })], SETS);
+    const audio = withComposed.filter((p) => p.kind === 'audio');
+    expect(audio.length).toBe(1);
+    expect(audio[0].over).toBeTruthy();
+    // Without one, the automatic audio card is exactly where it always was.
+    const auto = RI.pickRecent([ARCHIVE_ENTRY], [SHORT_POST], [], REGISTRY, null, [], SETS);
+    expect(auto.filter((p) => p.kind === 'audio').length).toBe(1);
+    expect(auto.filter((p) => p.kind === 'audio')[0].over).toBeUndefined();
+  });
+
+  it('a COMPOSED card of another kind leaves the audio slot alone', () => {
+    const picks = RI.pickRecent([ARCHIVE_ENTRY], [SHORT_POST], [], REGISTRY, null,
+      [{ id: 'c-p', order: 1, media: 'CARD.webp', title: 'A picture' }], SETS);
+    expect(picks.filter((p) => p.kind === 'audio').length).toBe(1);
+    expect(picks.filter((p) => p.kind === 'audio')[0].over).toBeUndefined();
   });
 });

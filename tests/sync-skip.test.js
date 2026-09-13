@@ -55,8 +55,19 @@ const { STATE, sessionTrash } = await import('../js/console-state.js');
 const { syncFromServer, _setLastImportedSha, _getLastImportedSha } =
   await import('../js/console-ui.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
-const FILES = SURFACES.map((s) => `data/${s}.json`);
+// Surface → its manifest path. A map rather than `data/${surface}.json`,
+// because the two stopped matching the moment a surface needed a hyphen
+// (audioSets → data/audio-sets.json, cards chunk 4): the derived spelling made
+// up a file nothing serves, and the marker test below then failed for a reason
+// that had nothing to do with what it tests.
+const MANIFEST = {
+  buffer: 'data/buffer.json', archive: 'data/archive.json', posts: 'data/posts.json',
+  wallpapers: 'data/wallpapers.json', barrel: 'data/barrel.json', friends: 'data/friends.json',
+  library: 'data/library.json', audio: 'data/audio.json',
+  audioSets: 'data/audio-sets.json', cards: 'data/cards.json',
+};
+const SURFACES = Object.keys(MANIFEST);
+const FILES = SURFACES.map((s) => MANIFEST[s]);
 
 // isLoggedIn() only parses the JWT payload for exp — no signature check client-side.
 function loginForTest() {
@@ -70,7 +81,7 @@ function loginForTest() {
 function syncResponse(headSha, { contentBySurface = {}, fail = [] } = {}) {
   const files = {};
   for (const s of SURFACES) {
-    files[`data/${s}.json`] = fail.includes(s)
+    files[MANIFEST[s]] = fail.includes(s)
       ? { ok: false, error: 'boom' }
       : { ok: true, content: contentBySurface[s] || [] };
   }

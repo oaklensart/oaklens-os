@@ -600,6 +600,28 @@ describe('the rendered controls', () => {
     expect(document.querySelector('.cards-chip--undo')).toBeNull();
   });
 
+  // THE LIVE GRID WAS ONE PUBLISH BEHIND (2026-09-12). /data/*.json is served
+  // with max-age=300 and a DAY of stale-while-revalidate, so a plain fetch let
+  // the browser answer from its copy and refresh in the background: publish,
+  // watch the site change, come back to LIVE, see the old grid. Every live read
+  // revalidates now, and the head carries a way to ask again after a build.
+  it('every LIVE read revalidates rather than trusting the browser\'s copy', async () => {
+    const seen = [];
+    globalThis.fetch = async (path, init) => { seen.push([path, init && init.cache]); return new Response('[]', { status: 200 }); };
+    await renderCards();
+    expect(seen.length).toBeGreaterThan(4);
+    for (const [path, mode] of seen) expect(mode, `${path} must revalidate`).toBe('no-cache');
+  });
+
+  it('↻ REFRESH LIVE re-reads the site from the view, and is wired to an export', async () => {
+    await renderCards();
+    expect(document.body.innerHTML).toContain('cardsRefreshLive()');
+    let reads = 0;
+    globalThis.fetch = async () => { reads += 1; return new Response('[]', { status: 200 }); };
+    await cards.cardsRefreshLive();
+    expect(reads).toBeGreaterThan(4);
+  });
+
   it('an action repaints the tiles without going back to the network', async () => {
     STATE.buffer = [frame('a1', '14'), frame('b2', '15')];
     await renderCards();
@@ -725,18 +747,31 @@ describe('the layout picker', () => {
     backToDefaults();
   });
 
-  // A picker that cannot pick is furniture. Today only `text` has a second
-  // layout, so every other kind must render no picker at all.
+  // A picker that cannot pick is furniture. `photo` gained `overlay` in chunk 3,
+  // so the single-layout kind this proves it with is `audio` — the waveform has
+  // one shape and nothing to choose between.
   it('renders no picker for a kind with a single registered layout', async () => {
+    STATE.audio = [track('t-one', { featured: true, featured_order: 1 })];
+    expect(await focusKind('audio')).toBeGreaterThan(-1);
+
+    expect(window.RecentIndex.cardLayouts.audio).toHaveLength(1);
+    expect(document.querySelectorAll('.layout-chip')).toHaveLength(0);
+    backToDefaults();
+  });
+
+  // The other half of the same rule: a picture-led kind now HAS a second layout,
+  // so its picker appears where there was none — the chip is the engine's
+  // registry surfacing, not a list in the console.
+  it('offers the overlay layout on a RAW frame, which has a picture by definition', async () => {
     STATE.buffer = [frame('a1', '14', { featured: true })];
     await renderCards();
-    const slots = _cardSlots(_stagedInputs());
-    const at = slots.findIndex((s) => s && s.kind === 'raw');
+    const at = _cardSlots(_stagedInputs()).findIndex((s) => s && s.kind === 'raw');
     expect(at).toBeGreaterThan(-1);
     cardsSelectSlot(at);
 
-    expect(window.RecentIndex.cardLayouts.photo).toHaveLength(1);
-    expect(document.querySelectorAll('.layout-chip')).toHaveLength(0);
+    const names = [...document.querySelectorAll('.layout-chip-name')].map((n) => n.textContent.trim());
+    expect(names).toEqual(['default', 'overlay']);
+    expect(document.querySelectorAll('.layout-chip.is-blocked')).toHaveLength(0);
     backToDefaults();
   });
 });

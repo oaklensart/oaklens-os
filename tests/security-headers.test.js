@@ -118,10 +118,12 @@ describe('the static header set reaches hand-built responses', () => {
     expect(worker, 'worker.js should stamp headers via securityHeaders(), not buildCsp()')
       .not.toContain("'Content-Security-Policy': buildCsp");
     expect(worker).not.toContain("headers.set('Content-Security-Policy', buildCsp");
-    // ...and it really does use the shared helper, in all four places. The
+    // ...and it really does use the shared helper, in all five places. The
     // count is pinned on purpose: adding a hand-built Response to the router
-    // should fail here until you have shown it carries the header set.
-    expect(worker.match(/securityHeaders\(url\.origin/g)?.length).toBe(4);
+    // should fail here until you have shown it carries the header set. The
+    // fifth is the 410 a retired card's address answers with (chunk 6) — a
+    // hand-built Response like the four before it, and it carries the set.
+    expect(worker.match(/securityHeaders\(url\.origin/g)?.length).toBe(5);
   });
 
   it('JSON API replies carry nosniff', async () => {

@@ -68,6 +68,13 @@ export const EXPORT_MANIFEST = {
     // per-track view is a query (?a=slug), which the page resolves client-side
     // from the data island, so no per-track export entry is needed.
     { route: '/listen', file: 'listen/index.html', aliases: ['/listen/'] },
+    // One composed card at its own address. The saved file is the page with no
+    // id in it; offline the id rides as `?id=<id>` (js/page-card.js resolves
+    // the path first and the query second), because file:// has no server to
+    // map /card/<id> onto a file. So the export carries the page once and
+    // every card is reachable from it, exactly the way /listen carries one file
+    // for every track.
+    { route: '/card/', file: 'card/index.html', aliases: ['/card'] },
     { route: '/about', file: 'about/index.html' },
     { route: '/support', file: 'support/index.html' },
     { route: '/archive/manifest.html', file: 'archive/manifest.html' },
@@ -100,6 +107,7 @@ export const EXPORT_MANIFEST = {
     // pressing play then reads the track file the imageRules below carry.
     'js/audio-player.js',
     'js/page-listen.js',
+    'js/page-card.js',
     'fonts/syne-latin-var.woff2',
     'fonts/syne-mono-latin.woff2',
     // Preset faces (starter template) — main.css declares all of them, so an
@@ -126,6 +134,7 @@ export const EXPORT_MANIFEST = {
     'data/friends.json',
     'data/library.json',
     'data/audio.json',
+    'data/audio-sets.json',
     'data/cards.json',
   ],
 

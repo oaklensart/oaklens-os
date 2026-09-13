@@ -21,7 +21,8 @@ import { handleAuth, handleLogout } from './src/api/console-auth.js';
 import { handleSubscribe, handleExport } from './src/api/subscribers.js';
 import { handleUpload, handleDeleteAssets, handleCdnProxy, handleOgCards } from './src/api/assets.js';
 import {
-  getPostMeta, getFrameOgData, getAudioOgData, injectOg, injectSiteChrome,
+  getPostMeta, getFrameOgData, getAudioOgData, getCardRecord, getCardOgData, _fnOgImage,
+  _validCardId, injectOg, injectSiteChrome,
   _frameImg, _ogImage, _navLinksHtml, HERO_PRELOAD_WIDTH,
 } from './src/edge/chrome.js';
 import {
@@ -249,6 +250,55 @@ export default {
       }
     }
 
+    // CARD PERMALINK — /card/<id> (docs/cards-core-complete.md chunk 6).
+    //
+    // A composed card is a content type and a content type has an address. The
+    // id lives in the PATH (a share link is read by people, and `?id=` reads
+    // like machinery), so nothing is on disk at that URL — this resolves the id
+    // and serves the one `card/index.html` document for it, the console-gate
+    // precedent for an alternate-asset fetch. The page then renders the card
+    // client-side from data/cards.json, the way /listen renders a track.
+    //
+    // A RETIRED id answers 410 here, before the page is served: the record is a
+    // tombstone reserving the address so a future card can never quietly answer
+    // someone's old link, and 410 is the honest thing to tell a crawler holding
+    // it (owner decision, 2026-09-11 — plan §7 Q2). An UNKNOWN id falls through
+    // to the page's own plain state, because "typed wrong" is the common case
+    // and it is not the visitor's fault.
+    //
+    // ⚠️ THIS ROUTE CLAIMS ONLY WHAT IS ACTUALLY AN ADDRESS. `/card/<id>` where
+    // <id> is one valid segment — nothing else. A path with a further slash in
+    // it is not a card address and falls through to the asset layer, which is
+    // what makes `/card/anything/else.css` a plain 404 instead of this page
+    // served as text/html. It matters because THIS PAGE IS SERVED AT TWO
+    // DEPTHS: `/card/<id>` and `/card/<id>/` are the same address, so any
+    // document-relative reference on the page resolves under /card/ for one of
+    // them (the page's own refs are root-relative for exactly that reason, and
+    // a stylesheet answered with text/html is refused by every browser).
+    let cardPageId = null;
+    let cardPageRecord = null;
+    if ((request.method === 'GET' || request.method === 'HEAD')
+      && url.pathname.startsWith('/card/') && !pageDisabled('/card')) {
+      let raw = url.pathname.slice('/card/'.length).replace(/\/+$/, '');
+      try { raw = decodeURIComponent(raw); } catch { /* keep the raw form */ }
+      if (_validCardId(raw)) {
+        const found = await getCardRecord(url.origin, env, raw);
+        if (found.state === 'retired') {
+          return new Response('This card has been retired. Its address stays reserved.', {
+            status: 410,
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Cache-Control': 'no-store',
+              ...securityHeaders(url.origin, true),
+            },
+          });
+        }
+        cardPageId = raw;
+        // Held for the OG branch below, so a live card is looked up ONCE.
+        cardPageRecord = found.state === 'live' ? found.card : null;
+      }
+    }
+
     // FIELD CONSOLE SHELL GATE — secure-by-default (opt out: site.config.js →
     // consoleShellPublic: true). The admin console *document* is served only
     // to a valid console-shell cookie — the same posture the portal already
@@ -289,7 +339,9 @@ export default {
     // --- Asset serving + HTML rewriting ---
     const response = isGatedPage
       ? await env.ASSETS.fetch(new Request(`${url.origin}/404.html`))
-      : await env.ASSETS.fetch(request);
+      : cardPageId !== null
+        ? await env.ASSETS.fetch(new Request(`${url.origin}/card/`))
+        : await env.ASSETS.fetch(request);
 
     const contentType = response.headers.get('Content-Type') || '';
     if (!contentType.includes('text/html')) {
@@ -331,17 +383,25 @@ export default {
       ogData = await getFrameOgData(url, env, 'buffer');
     } else if (isListenPage) {
       ogData = await getAudioOgData(url, env);
+    } else if (cardPageRecord) {
+      ogData = await getCardOgData(url, env, cardPageRecord);
     } else if (isPostPage) {
       const postMeta = await getPostMeta(url, env);
       if (postMeta) {
-        heroUrl = _frameImg(url.origin, postMeta.hero, HERO_PRELOAD_WIDTH);
+        // Only a note that HAS a hero preloads one.
+        if (postMeta.hero) heroUrl = _frameImg(url.origin, postMeta.hero, HERO_PRELOAD_WIDTH);
         const slug = url.searchParams.get('slug');
         ogData = {
           title: `${postMeta.title || 'Field Note'} — ${siteConfig.name.toUpperCase()}`,
           description: [postMeta.location, postMeta.date].filter(Boolean).join(' · ') || `Field notes from ${siteConfig.name}.`,
-          // Prefer the stamped 1200×630 card (meta/<base>-og.webp) when the console
-          // has published one; _ogImage falls back to the raw hero otherwise.
-          image: await _ogImage(env, url.origin, postMeta.hero),
+          // Prefer the stamped card when the console has published one; _ogImage
+          // falls back to the raw hero otherwise. A note with NO hero has no
+          // photograph to fall back to, so it asks for its own stem instead
+          // (meta/fn-<slug>-og.webp, the painter's words tile — chunk 7) and
+          // takes null until one is stamped, which injectOg skips.
+          image: postMeta.hero
+            ? await _ogImage(env, url.origin, postMeta.hero)
+            : await _fnOgImage(env, url.origin, slug),
           // Canonical post URL is the extensionless route (the .html form
           // 307s to it), so shares and feed entries converge on one URL.
           ogUrl: `${url.origin}/field-notes/post?slug=${encodeURIComponent(slug)}`,

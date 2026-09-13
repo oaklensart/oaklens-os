@@ -5,9 +5,10 @@
    no third party. Renders from data/audio.json (and therefore from the offline
    export's data island through its fetch shim).
 
-   Two views out of one page:
-     /listen            → the index: every track, newest first, as rows
-     /listen/?a=<slug>  → one track, full-size, with the rest listed beneath
+   Three views out of one page:
+     /listen             → the index: every track, newest first, as rows
+     /listen/?a=<slug>   → one track, full-size, with the rest listed beneath
+     /listen/?set=<slug> → a saved set, in its own order, played top to bottom
 
    The per-track view is what a share link points at, and what the worker
    resolves OG tags for at the edge (src/edge/chrome.js getAudioOgData) — so
@@ -47,12 +48,27 @@
     return found || null;
   }
 
-  // ?a= from a URL. Kept pure (takes a search string) so the routing is
+  // ?a= / ?set= from a URL. Kept pure (takes a search string) so the routing is
   // testable without a browser.
-  function slugFromSearch(search) {
-    var m = /[?&]a=([^&]*)/.exec(String(search || ''));
+  function paramFromSearch(search, key) {
+    var m = new RegExp('[?&]' + key + '=([^&]*)').exec(String(search || ''));
     if (!m) return '';
     try { return decodeURIComponent(m[1].replace(/\+/g, ' ')); } catch (e) { return ''; }
+  }
+  function slugFromSearch(search) { return paramFromSearch(search, 'a'); }
+  function setSlugFromSearch(search) { return paramFromSearch(search, 'set'); }
+
+  // A set is matched on slug alone — unlike a track, whose lookup also requires
+  // `filename` — because a set has no media of its own. What it must not match
+  // is a RETIRED set: that record is a reserved address and nothing else, so
+  // answering an old link with it would render an empty page under a name that
+  // used to mean something.
+  function findSet(sets, slug) {
+    if (!slug) return null;
+    var found = (Array.isArray(sets) ? sets : []).find(function (s) {
+      return s && s.slug === slug && !s.retired;
+    });
+    return found || null;
   }
 
   var g = (typeof globalThis !== 'undefined') ? globalThis
@@ -62,7 +78,9 @@
     sortTracks: sortTracks,
     hasEpisodes: hasEpisodes,
     findTrack: findTrack,
+    findSet: findSet,
     slugFromSearch: slugFromSearch,
+    setSlugFromSearch: setSlugFromSearch,
   };
 
   if (typeof document === 'undefined') return;
@@ -77,6 +95,10 @@
 
   function href(track) {
     return '/listen/?a=' + encodeURIComponent(track.slug || '');
+  }
+
+  function setHref(set) {
+    return '/listen/?set=' + encodeURIComponent((set && set.slug) || '');
   }
 
   var SHARE_SVG =
@@ -188,6 +210,42 @@
     });
   }
 
+  // ---- a saved set ----
+  //
+  // The set's own order, top to bottom, one row player each — so "play the
+  // whole thing" is a tap and a scroll, and nothing downloads until one of
+  // them is pressed, exactly as on the index.
+  function renderSet(host, set, tracks) {
+    var eyebrow = el('div', 'lt-eyebrow');
+    eyebrow.textContent = 'Set';
+
+    var title = el('h1', 'lt-title');
+    title.textContent = set.name || 'Untitled set';
+
+    host.appendChild(eyebrow);
+    host.appendChild(title);
+
+    var foot = el('div', 'lt-foot');
+    var m = el('div', 'lt-meta');
+    var total = tracks.reduce(function (n, t) { return n + (Number(t.duration) || 0); }, 0);
+    m.textContent = [
+      tracks.length + (tracks.length === 1 ? ' track' : ' tracks'),
+      AP && total ? AP.durationLabel(total) : '',
+    ].filter(Boolean).join(' · ');
+    foot.appendChild(m);
+
+    var share = el('button', 'lt-action');
+    share.type = 'button';
+    share.innerHTML = SHARE_SVG + '<span>Share</span>';
+    share.addEventListener('click', function () {
+      if (AP) AP.share(location.origin + setHref(set), set.name || '', share);
+    });
+    foot.appendChild(share);
+    host.appendChild(foot);
+
+    renderList(host, tracks, 'In this set');
+  }
+
   // ---- subscribe ----
   //
   // The feed is the whole point of marking a track as an EPISODE, and until now
@@ -235,16 +293,35 @@
     var host = document.getElementById('listen');
     if (!host) return;
 
-    fetch('/data/audio.json')
-      .then(function (r) { return r.ok ? r.json() : []; })
-      .catch(function () { return []; })
-      .then(function (data) {
+    // Two reads, one render. The sets file is OPTIONAL: a fork that has never
+    // made one has no data/audio-sets.json, and a 404 must leave the track
+    // views working exactly as before — so it resolves to [] rather than
+    // sinking the page.
+    Promise.all([
+      fetch('/data/audio.json')
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .catch(function () { return []; }),
+      fetch('/data/audio-sets.json')
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .catch(function () { return []; }),
+    ])
+      .then(function (both) {
+        var data = both[0];
+        var sets = Array.isArray(both[1]) ? both[1] : [];
         var tracks = sortTracks(data);
         var slug = slugFromSearch(location.search);
         var featured = findTrack(tracks, slug);
+        // A set is resolved against the WHOLE registry, not the sorted list:
+        // sortTracks is the index's newest-first ordering, and a set's own
+        // order is the only one that matters here.
+        var set = findSet(sets, setSlugFromSearch(location.search));
+        var setTracks = (set && AP && AP.resolveSetTracks) ? AP.resolveSetTracks(set, data) : [];
+        // A set whose every track has gone falls back to the index rather than
+        // rendering a title over nothing.
+        if (!setTracks.length) set = null;
 
         host.textContent = '';
-        host.setAttribute('data-view', featured ? 'track' : 'index');
+        host.setAttribute('data-view', set ? 'set' : featured ? 'track' : 'index');
 
         if (!tracks.length) {
           var empty = el('div', 'lt-empty');
@@ -253,7 +330,14 @@
           return;
         }
 
-        if (featured) {
+        if (set) {
+          renderSet(host, set, setTracks);
+          // Same title swap the track view makes, for the same reason: the
+          // served <title> is composed at the edge and is set-aware there, but
+          // a tab opened from an in-page link never went through the edge.
+          var setSuffix = /^Listen([\s\S]*)$/.exec(document.title);
+          if (set.name) document.title = set.name + (setSuffix ? setSuffix[1] : '');
+        } else if (featured) {
           renderFeature(host, featured);
           var rest = tracks.filter(function (t) { return t.slug !== featured.slug; });
           if (rest.length) renderList(host, rest, 'More');

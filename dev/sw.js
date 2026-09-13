@@ -16,7 +16,7 @@
 // Mutations (/api/* upload, publish, sync) always require the network and are
 // never intercepted or cached — this SW only serves the static shell.
 
-const CACHE = 'oaklens-console-v156';
+const CACHE = 'oaklens-console-v173';
 const SHELL = '/dev/field-console.html';
 // Same-origin shell assets. The js/ versions here must match the import map in
 // field-console.html exactly — that map is where a module's version is decided,
@@ -24,11 +24,11 @@ const SHELL = '/dev/field-console.html';
 // import map, so the duplication is unavoidable; tests/guards.test.js keeps the
 // two in step. CSS is a plain <link>, so its ?v= still lives on the tag.
 const SHELL_ASSETS = [
-  '/css/field-console.css?v=71',
-  '/js/console-state.js?v=15',
+  '/css/field-console.css?v=82',
+  '/js/console-state.js?v=16',
   '/js/console-api.js?v=11',
   '/js/markdown-engine.js?v=4',
-  '/js/console-ui.js?v=62',
+  '/js/console-ui.js?v=64',
   '/js/console/chrome.js?v=13',
   '/js/console/assets.js?v=4',
   '/js/console/utils.js?v=2',
@@ -36,30 +36,36 @@ const SHELL_ASSETS = [
   '/js/console/upload.js?v=4',
   '/js/console/more-views.js?v=5',
   '/js/console/archive.js?v=3',
-  '/js/console/buffer.js?v=3',
-  '/js/console/fn-editor.js?v=7',
-  '/js/console/focal.js?v=7',
+  '/js/console/buffer.js?v=4',
+  '/js/console/fn-editor.js?v=8',
+  '/js/console/card-paint.js?v=5',
+  '/js/console/focal.js?v=12',
+  '/js/console/share.js?v=3',
   '/js/console/asset-library.js?v=3',
-  '/js/console/audio.js?v=11',
-  '/js/console/cards.js?v=18',
-  '/js/console/publish.js?v=20',
+  '/js/console/audio.js?v=16',
+  '/js/console/cards.js?v=30',
+  '/js/console/publish.js?v=26',
   '/js/console/session.js?v=9',
   '/js/console/bench.js?v=1',
   '/js/pulse-packs.js?v=3',
   '/js/console/pulse.js?v=4',
-  '/js/console/init.js?v=10',
+  '/js/console/init.js?v=11',
   '/js/console-telemetry.js?v=2',
   // Not a console module and not loaded as one: the public homepage's grid
   // logic, which the shell pulls in as a classic <script> so the Cards view
   // previews with the real selection code. Precached like everything else so an
   // installed PWA keeps its preview offline.
-  '/js/recent-index.js?v=23',
+  '/js/recent-index.js?v=31',
+  // Same story, same reason: the shared audio module, pulled in as a classic
+  // <script> so the SETS shelf resolves a set through the code the public
+  // pages run instead of a second copy.
+  '/js/audio-player.js?v=9',
   '/js/raw-lens.js?v=5',
   '/js/jpeg-privacy.js?v=1',
   '/js/raw-extract.js?v=4',
   '/js/site-export.js?v=4',
   '/js/site-export-core.js?v=3',
-  '/js/export-manifest.js?v=15',
+  '/js/export-manifest.js?v=17',
   // Every preset's console faces, not just noir's. The console re-skins its
   // typography with `data-preset` now, so precaching only Syne would have left
   // an installed PWA on aperture or passe-partout dropping to system fonts the

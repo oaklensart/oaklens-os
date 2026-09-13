@@ -75,6 +75,90 @@ export async function _audioOgImage(env, origin, slug) {
   return (await _cardExists(env, origin, key)) ? `${cdnBase(origin)}/${key}` : null;
 }
 
+// And the same for a saved set. A separate key prefix, not a shared one: a set
+// and a track may legitimately carry the same slug (they answer different
+// parameters), so `meta/audio-<slug>` for both would have one stamp overwrite
+// the other. Null until something stamps it — chunk 7 of
+// docs/cards-core-complete.md is what will.
+export async function _setOgImage(env, origin, slug) {
+  if (!slug) return null;
+  const key = `meta/set-${slug}-og.webp`;
+  return (await _cardExists(env, origin, key)) ? `${cdnBase(origin)}/${key}` : null;
+}
+
+// And the same for a composed card (chunk 6). Its own key prefix again, for
+// the reason the set's has one: a card id and a track slug answer different
+// addresses, so a shared `meta/audio-<x>` would let one overwrite the other.
+// Null until something stamps it — chunk 7 of docs/cards-core-complete.md is
+// what will, so today a card link unfurls as the site rather than as a broken
+// image (injectOg skips a null).
+export async function _cardOgImage(env, origin, id) {
+  if (!id) return null;
+  const key = `meta/card-${id}-og.webp`;
+  return (await _cardExists(env, origin, key)) ? `${cdnBase(origin)}/${key}` : null;
+}
+
+// And the same for a FIELD NOTE, keyed by its public slug (`fn_id` — the one
+// thing that identifies a note at the edge, since `?slug=` is all the request
+// carries).
+//
+// This one exists for a case the frame key cannot cover: a note with NO HERO.
+// `_ogImage` keys off an image basename, so a note that leads with words rather
+// than a picture had no share image at all — it unfurled as a bare line of
+// text, which is the least any writing surface should do. The painter draws
+// that note's own words tile (chunk 7), and this is where it lands.
+//
+// A note WITH a hero keeps `meta/<base>-og.webp`, so nothing already stamped
+// re-stamps and old stamps keep serving.
+export async function _fnOgImage(env, origin, id) {
+  if (!id) return null;
+  const key = `meta/fn-${id}-og.webp`;
+  return (await _cardExists(env, origin, key)) ? `${cdnBase(origin)}/${key}` : null;
+}
+
+// An id in a URL path is untrusted input. Composed ids are minted as `c-<uid>`
+// and this is the one place the shape is enforced, deliberately loose about the
+// prefix (a later console may mint differently and a PERMANENT address must
+// keep resolving) and strict about the characters, so nothing reaches the asset
+// layer or a cache key that is not one safe segment.
+export function _validCardId(id) {
+  return typeof id === 'string' && id.length > 0 && id.length <= 64
+    && /^[A-Za-z0-9_-]+$/.test(id);
+}
+
+// What lives at /card/<id>, as one of three answers the route needs to tell
+// apart: the live record, the tombstone that reserves the id (→ 410), or
+// nothing (→ the page's own plain state). A read failure answers `missing`
+// rather than throwing — an unreadable registry must degrade to "no card
+// here", never to a 500 on a share link.
+export async function getCardRecord(origin, env, id) {
+  if (!_validCardId(id)) return { state: 'missing', card: null };
+  try {
+    const cards = await loadDataJson(origin, env, 'data/cards.json');
+    const c = Array.isArray(cards) && cards.find((x) => x && x.id === id);
+    if (!c) return { state: 'missing', card: null };
+    return c.retired ? { state: 'retired', card: c } : { state: 'live', card: c };
+  } catch (err) {
+    console.error('[card] registry read failed:', err.message);
+    return { state: 'missing', card: null };
+  }
+}
+
+// The OG block for a card page. A card carries the author's own words, so the
+// unfurl is those words and not a derived summary; a card with none (a picture
+// with no caption is a legitimate card) falls back to the site's own line
+// rather than to an empty tag.
+export async function getCardOgData(url, env, card) {
+  const name = String((card && card.title) || '').trim();
+  const tease = String((card && card.tease) || '').trim();
+  return {
+    title: `${name || 'Card'} — ${siteConfig.name.toUpperCase()}`,
+    description: tease || name || siteConfig.tagline || 'A card.',
+    image: await _cardOgImage(env, url.origin, (card && card.id) || ''),
+    ogUrl: `${url.origin}/card/${encodeURIComponent((card && card.id) || '')}`,
+  };
+}
+
 // Parse a field-notes post's frontmatter into a flat field map (or null).
 export async function getPostMeta(url, env) {
   const slug = url.searchParams.get('slug');
@@ -93,7 +177,13 @@ export async function getPostMeta(url, env) {
         fields[key] = line.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
       }
     }
-    return fields.hero ? fields : null;
+    // A HEROLESS NOTE IS STILL A NOTE. This used to return null without a
+    // hero, which meant a note that leads with words got no injected OG block
+    // at all — no title, no description, no image. The hero was load-bearing
+    // only because the image was keyed off it; since chunk 7 a note has its own
+    // stem (`meta/fn-<id>-og.webp`), so the frontmatter is returned either way
+    // and the caller picks the key.
+    return fields;
   } catch {
     return null;
   }
@@ -153,6 +243,41 @@ export async function getAudioOgData(url, env) {
     image: null,
     ogUrl: `${url.origin}/listen`,
   };
+  // A saved set answers a different parameter and is resolved FIRST: /listen/
+  // carrying both is a link someone hand-edited, and the set is the more
+  // specific claim. A retired set is skipped — that record reserves an address
+  // and holds nothing — so an old link unfurls as the index rather than as a
+  // title with no audio behind it.
+  const setSlug = url.searchParams.get('set');
+  if (setSlug && /^[a-z0-9-]+$/i.test(setSlug)) {
+    try {
+      const [sets, tracks] = await Promise.all([
+        loadDataJson(url.origin, env, 'data/audio-sets.json'),
+        loadDataJson(url.origin, env, 'data/audio.json'),
+      ]);
+      const s = Array.isArray(sets) && sets.find((x) => x && x.slug === setSlug && !x.retired);
+      if (s) {
+        // Counted the way the page counts them: a slug whose track is gone or
+        // retired is not something this set plays, so it must not be advertised
+        // in the unfurl either.
+        const live = new Set(
+          (Array.isArray(tracks) ? tracks : [])
+            .filter((t) => t && t.slug && t.filename && !t.retired)
+            .map((t) => t.slug)
+        );
+        const n = ((s.tracks) || []).filter((slug) => live.has(slug)).length;
+        if (n) return {
+          title: `${s.name || 'Set'} — ${siteConfig.name.toUpperCase()}`,
+          description: `${n} track${n === 1 ? '' : 's'}`,
+          image: await _setOgImage(env, url.origin, s.slug),
+          ogUrl: `${url.origin}/listen/?set=${encodeURIComponent(setSlug)}`,
+        };
+      }
+    } catch (err) {
+      console.error('[og] set resolve failed:', err.message);
+    }
+    return indexOg;
+  }
   if (!a || !/^[a-z0-9-]+$/i.test(a)) return indexOg;
   try {
     const data = await loadDataJson(url.origin, env, 'data/audio.json');

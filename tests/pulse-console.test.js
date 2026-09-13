@@ -40,18 +40,29 @@ describe('the packs are reachable from the console', () => {
     expect(packsSrc).not.toMatch(/globalThis\.(Mood|Pulse)Packs|window\.(Mood|Pulse)Packs/);
   });
 
-  it('loads exactly ONE same-origin classic script, and it is the homepage grid', () => {
+  it('loads same-origin classic scripts ONLY to run real public-page code', () => {
     // This read "no <script src> tags at all" until the Cards view landed, and
     // the rule it protected is unchanged: a console MODULE is reachable only
     // through the import map, so anything that hangs a global is a dead file.
-    // The one exception is deliberate and named here — js/recent-index.js is
-    // the public homepage's own classic script, loaded so the Cards view runs
-    // the real selection logic instead of a second copy of it. A new entry in
-    // this list is the old bug coming back, and whoever adds one has to say so
-    // here on purpose.
+    // The exceptions are deliberate and named here, and they are all the same
+    // exception — a PUBLIC page's own classic script, loaded so the console
+    // runs the real code instead of a second copy of it that drifts:
+    //
+    //   js/recent-index.js  the homepage grid, for the Cards view's preview
+    //   js/audio-player.js  the shared audio module, for the SETS shelf's
+    //                       AudioPlayer.resolveSetTracks (cards chunk 4)
+    //
+    // A new entry here that is NOT that — anything hanging a global purely for
+    // the console's own benefit — is the old bug coming back, and whoever adds
+    // one has to say so here on purpose.
     const sameOrigin = [...consoleHtml.matchAll(/<script\b[^>]*\ssrc=["'](\/[^"']+)["']/gi)]
       .map((m) => m[1].split('?')[0]);
-    expect(sameOrigin).toEqual(['/js/recent-index.js']);
+    expect(sameOrigin).toEqual(['/js/recent-index.js', '/js/audio-player.js']);
+    // Both must be files the public site actually serves to visitors, which is
+    // the whole justification for loading them here.
+    for (const src of sameOrigin) {
+      expect(read('index.html') + read('listen/index.html')).toContain(src);
+    }
   });
 
   it('every js/ file the pulse module imports is listed in the import map', () => {

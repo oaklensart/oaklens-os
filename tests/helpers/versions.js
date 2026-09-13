@@ -4,7 +4,10 @@ import { join, relative } from 'node:path';
 export const VERSION_RE = /['"(=]([./]*(?:js|css)\/[\w/-]+\.(?:js|css))\?v=(\d+)/g;
 export const RELATIVE_IMPORT_RE = /from\s+['"]\.\/([\w/-]+\.js)\?v=(\d+)['"]/g;
 
-const SKIP_DIRS = new Set(['node_modules', '.git', '.wrangler']);
+// `.claude` holds git worktrees (other sessions' checkouts, each with its own
+// `?v=` state) — walking into them reports another branch's versions as this
+// one's and fails the guard on a clean tree.
+const SKIP_DIRS = new Set(['node_modules', '.git', '.claude', '.wrangler']);
 
 function walk(dir, ext, root, out = []) {
   for (const name of readdirSync(dir)) {

@@ -278,3 +278,60 @@ describe('tier 2 — absent, and the absence IS the un-submittability', () => {
     expect(xml).not.toContain('[object Object]');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Sets never touch the feed.
+//
+// A set is a way of LISTENING on the site; an episode is a promise to every
+// subscriber's app. Those must stay unrelated, in both directions: putting an
+// episode into a set must not change the feed, and gathering tracks into a set
+// must never be a way to publish them to subscribers. The feed reads
+// data/audio.json and nothing else, and this is where that stays true.
+describe('sets are invisible to the feed', () => {
+  const envWithSets = (tracks, sets) => ({
+    ASSETS: {
+      async fetch(req) {
+        const p = new URL(req.url).pathname;
+        if (p === '/data/audio.json') return new Response(JSON.stringify(tracks), { status: 200 });
+        if (p === '/data/audio-sets.json') return new Response(JSON.stringify(sets), { status: 200 });
+        return new Response('not found', { status: 404 });
+      },
+    },
+    CDN: {},
+  });
+
+  const SETS = [
+    // One episode, one non-episode, in one set — the case that would break the
+    // feed in either direction if the two layers ever learned about each other.
+    { id: 's1', slug: 'late-mix', name: 'Late mix', tracks: ['ep-004', 'take-one'], added_at: '2026-09-10' },
+  ];
+
+  it('a set holding an episode changes nothing in the feed, byte for byte', async () => {
+    const withSets = await body(envWithSets(TRACKS, SETS));
+    const without = await body(envWith(TRACKS));
+    expect(withSets).toBe(without);
+  });
+
+  it('a set does not sneak a non-episode into a subscriber’s app', async () => {
+    const xml = await body(envWithSets(TRACKS, SETS));
+    expect(xml).not.toContain('Take One');
+    expect((xml.match(/<item>/g) || []).length).toBe(2);
+  });
+
+  it('the feed never reads the sets file at all', async () => {
+    const asked = [];
+    const env = {
+      ASSETS: {
+        async fetch(req) {
+          const p = new URL(req.url).pathname;
+          asked.push(p);
+          if (p === '/data/audio.json') return new Response(JSON.stringify(TRACKS), { status: 200 });
+          return new Response('not found', { status: 404 });
+        },
+      },
+      CDN: {},
+    };
+    await body(env);
+    expect(asked).not.toContain('/data/audio-sets.json');
+  });
+});

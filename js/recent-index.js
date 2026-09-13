@@ -18,10 +18,13 @@
    layout and lead with its picture — gated on the picture actually being
    there, so a missing hero falls back to the text tile. Audio cards carry a
    waveform player drawn from pre-measured peaks (js/audio-player.js) — no
-   audio is fetched until someone presses play. A MISSING data file (an un-seeded fork) falls back to
-   the bundled CC0 samples — the same split the archive/wall pages make
-   (missing → samples, empty → empty); audio has no samples and so treats both
-   the same.
+   audio is fetched until someone presses play. The owner's own COMPOSED cards
+   (data/cards.json) are overlaid on that row and drawn by the same renderers:
+   a composed card names a kind and overrides some of its fields, and there is
+   no fifth renderer (docs/cards-core-complete.md, chunk 1). A MISSING data
+   file (an un-seeded fork) falls back to the bundled CC0 samples — the same
+   split the archive/wall pages make (missing → samples, empty → empty); audio
+   has no samples and so treats both the same.
    ============================================================ */
 (function () {
   'use strict';
@@ -337,6 +340,17 @@
   // both. It is an OVERRIDE on the grid, never a replacement for it — the row
   // still fills itself and a composed card simply takes a place near the front.
   //
+  // AND IT IS NOT A KIND OF ITS OWN (docs/cards-core-complete.md chunk 1,
+  // 2026-09-10). A composed record names a kind — photo, text, audio — and
+  // overrides some of that kind's fields; the kind's own renderer draws it.
+  // One renderer per kind, so a composed words card IS the field-note tile
+  // (drop cap, caret and all) and a composed picture card IS the archive card,
+  // rather than a copy of each that drifts. The renderers read each
+  // overridable field through the record first and the entry second (the
+  // `overrides` helpers below the DOM bail); the one place that knows a card
+  // is composed is cardRoot, which stamps the marker attributes the
+  // stylesheet binds to.
+  //
   // ORDER, NOT A SLOT INDEX. Composed cards carry `order` (1, 2, …) and compact:
   // delete the first and the second moves up. Absolute slot indexes are the
   // mistake this project has already paid for once — three of them let a live
@@ -348,14 +362,140 @@
   // A card needs SOMETHING to show. One with neither a picture nor a line is a
   // draft the owner never finished, and rendering an empty tile would be worse
   // than leaving the slot to the automatic pick.
-  function composedPick(cards) {
+  function composedPick(cards, audio, audioSets) {
     return (cards || [])
       .filter(function (c) {
-        return c && (heroFilename({ hero: c.media }) || String(c.title || c.tease || '').trim());
+        if (!c) return false;
+        // A RETIRED card is a tombstone (chunk 6): its id stays reserved so the
+        // share link that pointed at it can never quietly answer with a
+        // different card, but it holds nothing and shows nothing. Dropped here
+        // rather than later so COMPOSED_MAX stays a budget of LIVE cards — two
+        // tombstones must not lock the grid into filling itself.
+        if (c.retired) return false;
+        if (heroFilename({ hero: c.media }) || String(c.title || c.tease || '').trim()) return true;
+        // An audio card shows a PLAYER, and the tracks are its content — so it
+        // is the one kind that earns a slot with no picture and no typed line.
+        // It is asked the only question that matters for it: does anything
+        // play? (docs/cards-core-complete.md chunk 5.)
+        return composedKind(c) === 'audio' && composedTracks(c, audio, audioSets).length > 0;
       })
       .sort(function (a, b) { return (Number(a.order) || 0) - (Number(b.order) || 0); })
       .slice(0, COMPOSED_MAX)
-      .map(function (c) { return { kind: 'composed', data: c, d: c.added_at || '' }; });
+      .map(function (c) { return composedItem(c, audio, audioSets); });
+  }
+
+  // ---- what a composed AUDIO card plays ----
+  // Two sources, and only two. A record naming a set (`set: '<slug>'`) borrows
+  // that set — resolved through AudioPlayer.resolveSetTracks, the ONE answer to
+  // "what does this set play" that the shelf and /listen/ also ask (chunk 4).
+  // A record naming none plays THE HOMEPAGE TRACKS: the same featured list the
+  // automatic audio card draws, read live off the registry rather than copied
+  // onto the record.
+  //
+  // That second rule is why taking the audio slot over cannot lose the player
+  // (the 2026-09-07 hole): a takeover copies no tracks, so there is nothing to
+  // fall out of step with the shelf, and the card keeps playing what it played.
+  //
+  // A retired set plays nothing — its slug is a reservation, not a playlist —
+  // and a retired TRACK drops out of a set silently (resolveSetTracks' rule).
+  // The cap is applied here as well as on write: a hand-edited data file must
+  // not be able to publish a twenty-row card.
+  function composedSet(card, audioSets) {
+    var slug = (card && typeof card.set === 'string') ? card.set : '';
+    if (!slug) return null;
+    var hit = (audioSets || []).filter(function (s) {
+      return s && s.slug === slug && !s.retired;
+    });
+    return hit.length ? hit[0] : null;
+  }
+
+  function composedTracks(card, audio, audioSets) {
+    var slug = (card && typeof card.set === 'string') ? card.set : '';
+    if (slug) {
+      var set = composedSet(card, audioSets);
+      var AP = g.AudioPlayer;
+      if (!set || !AP || typeof AP.resolveSetTracks !== 'function') return [];
+      return AP.resolveSetTracks(set, audio || []).slice(0, AUDIO_MAX_PLAYLIST);
+    }
+    return audioPick(audio, AUDIO_MAX_PLAYLIST);
+  }
+
+  // ---- the normalizer: which KIND a composed record renders as ----
+  // A record written since chunk 1 says so (`kind`). One written by the
+  // earlier console says nothing, and is read the way that console's renderer
+  // read it — the SHAPE decides: a usable picture that the layout does not
+  // push aside is the photo kind, anything else the text kind. That rule
+  // reproduces the old renderer byte for byte (tests/cards-legacy-fixtures.test.js),
+  // which is the whole contract: a fork merging this sees no change on its
+  // homepage. The old `plain` layout is therefore not a layout any more — it
+  // meant "the words, please", and the text kind is exactly that.
+  //
+  // A stated `photo` with no usable picture degrades to `text` the way `hero`
+  // gates to default: a picture card without a picture is a hole, not a card.
+  function composedKind(card) {
+    var kind = card && card.kind;
+    if (kind === 'text' || kind === 'audio') return kind;
+    if (kind === 'photo') return composedMedia(card) ? 'photo' : 'text';
+    return (composedMedia(card) && cardDescriptor(card).layout !== 'plain') ? 'photo' : 'text';
+  }
+
+  // One made item, in the shape buildCard takes for every card: the kind to
+  // dispatch on, the entry, and the record itself as the overrides. The entry
+  // is EMPTY on purpose — a composed record carries everything it shows (the
+  // console copies what it borrows at takeover, and `source` is provenance,
+  // not a pointer the renderer follows), so nothing of the entry it came from
+  // can leak into the bytes: the record froze them.
+  function composedItem(card, audio, audioSets) {
+    var kind = composedKind(card);
+    // ⚠️ THE AUDIO KIND IS THE ONE EXCEPTION TO THE EMPTY ENTRY, and it is an
+    // exception on purpose rather than a leak. Every other kind freezes what it
+    // shows onto the record; an audio card CANNOT — a track is a file, a
+    // duration and a waveform that live in the registry, and a copy of them on
+    // the card would be a second answer to "what plays here" the moment a track
+    // is renamed, re-peaked or retired. So the record names a source (a set, or
+    // nothing meaning the homepage tracks) and the registry answers. Nothing of
+    // a track's own prose reaches the card's words: the author's caption is
+    // read from `over` alone (audioCaption below).
+    if (kind === 'audio') {
+      var tracks = composedTracks(card, audio, audioSets);
+      // Mirrors pickAutomatic's own rule — more than one track is the playlist
+      // card, exactly one is the single card — so taking the audio slot over
+      // does not change the shape of the card that was already there.
+      var data = tracks.length > 1 ? { isPlaylist: true, tracks: tracks } : (tracks[0] || {});
+      return { kind: kind, data: data, over: card, set: composedSet(card, audioSets), d: card.added_at || '' };
+    }
+    return { kind: kind, data: {}, over: card, d: card.added_at || '' };
+  }
+
+  // Which of the stylesheet's surfaces a composed record paints — `picture`
+  // (the photo kind, or the text kind wearing hero) or `words` — the value the
+  // root carries as data-shape. Asked by the console so the composer's face
+  // and the live card can never disagree; tests/card-composer.test.js pins
+  // that this answer and the rendered attribute agree.
+  function composedShape(card) {
+    var kind = composedKind(card);
+    if (kind === 'photo') return 'picture';
+    // A note wearing hero OR overlay is picture-led — both are drawn by
+    // textHeroCard, which stamps 'picture' on the root. Asking for the layout
+    // rather than listing the two names would be shorter and wrong: 'default'
+    // is the words tile and any further layout has to say for itself.
+    if (kind === 'text') {
+      var l = layoutFor('text', {}, card);
+      return (l === 'hero' || l === 'overlay') ? 'picture' : 'words';
+    }
+    return kind;
+  }
+
+  // Only a same-origin path is honoured as a composed card's link. This is
+  // authored content that rides publish, so a bad value is an editing mistake
+  // rather than an attack — but a card that silently sent visitors off-site
+  // would be a bad surprise either way, and a plain <div> is the honest
+  // degradation (pulseCard already proves a card need not be an anchor).
+  function composedLink(card) {
+    var h = card && card.link;
+    if (typeof h !== 'string') return '';
+    h = h.trim();
+    return (h.charAt(0) === '/' && h.charAt(1) !== '/') ? h : '';
   }
 
   // The automatic row, with the owner's cards inserted after the pulse.
@@ -369,11 +509,20 @@
   // exactly as before. Composed cards are not pins — the pin budget still
   // governs only the automatic audio/RAW pair, and "card 3 is never an automatic
   // pin" stays true.
-  function pickRecent(archive, posts, rawFeatured, audioFeatured, pulse, composed) {
+  function pickRecent(archive, posts, rawFeatured, audioFeatured, pulse, composed, audioSets) {
     var row = pickAutomatic(archive, posts, rawFeatured, audioFeatured, pulse);
-    var made = composedPick(composed);
+    var made = composedPick(composed, audioFeatured, audioSets);
     if (!made.length) return row;
-    var usedMedia = made.map(function (m) { return composedMedia(m.data); }).filter(Boolean);
+    // A composed AUDIO card has taken the audio slot over, so the automatic
+    // audio item steps aside. Two players on a three-card homepage is not a
+    // richer grid — it is the same card twice, and usually the same tracks
+    // twice. Same rule as usedMedia below, asked at the granularity audio has:
+    // an audio card is identified by being one, not by a filename.
+    var madeAudio = made.some(function (m) { return m.kind === 'audio'; });
+    if (madeAudio) {
+      row = row.filter(function (item) { return !item || item.kind !== 'audio'; });
+    }
+    var usedMedia = made.map(function (m) { return composedMedia(m.over); }).filter(Boolean);
     if (usedMedia.length) {
       row = row.filter(function (item) {
         if (!item || !item.data) return true;
@@ -397,20 +546,23 @@
   // ladder already uses (data-tier), so a layout is a stylesheet concern the
   // moment it leaves this file.
   var CARD_LAYOUTS = {
-    photo: ['default'],
+    // 'overlay': the words sit ON the picture, in a band (see the overlay
+    // section below). Registered on both picture-capable kinds because it is a
+    // way of dressing A PICTURE, not a feature of one kind — gated on there
+    // being a picture to write on.
+    photo: ['default', 'overlay'],
     // 'hero': a field note leads with its hero picture instead of the
     // typographic tile. Opt-in per post (the FN composer writes
     // card: { layout: 'hero' }) and gated on the picture actually being
     // there — see CARD_GATES below.
-    text: ['default', 'hero'],
+    text: ['default', 'hero', 'overlay'],
     audio: ['default'],
     pulse: ['default'],
-    // A composed card is the owner's own: its 'default' is SMART — picture-led
-    // when it has a usable picture, the typographic tile when it does not — so
-    // the common case needs no choice at all. 'hero' and 'plain' are the escape
-    // hatch: force the picture, or force the words, when the automatic call is
-    // not the one you wanted.
-    composed: ['default', 'hero', 'plain'],
+    // No `composed` here. A composed card is one of the kinds above wearing
+    // that kind's layouts — composedKind decides which. (It was a fifth kind
+    // with its own `default | hero | plain` until 2026-09-10; `plain` is now
+    // the text kind, and a picture record that asked for `hero` is the photo
+    // kind, which has only its one shape and so nothing to name.)
   };
 
   // An unknown or unregistered layout resolves to 'default', never to a broken
@@ -480,24 +632,152 @@
   // live in a table rather than a branch in buildCard so the next picture-aware
   // layout (the image ladder, still future) lands as a rule here instead of a
   // special case in the dispatcher.
+  // A gate sees the composed overrides too (`over`, absent for an automatic
+  // card): a composed text card WITH a picture can wear hero, one without
+  // falls back to the words tile rather than rendering a hole.
+  // ONE GATE, THREE DOORS. Every picture-backed layout asks the same question —
+  // "is there a picture this card can actually paint?" — so it is asked once
+  // here and the table points three entries at it. The field name differs by
+  // kind (a note names its picture `hero`, a frame names it `filename`, a
+  // composed record names it `media`), which is the only reason the photo door
+  // is not literally the same closure.
+  function hasNotePicture(entry, over) {
+    return !!(composedMedia(over) || heroFilename(entry));
+  }
+  function hasFramePicture(entry, over) {
+    return !!(composedMedia(over) || heroFilename({ hero: entry && entry.filename }));
+  }
   var CARD_GATES = {
-    text: {
-      hero: function (entry) { return !!heroFilename(entry); },
+    photo: {
+      overlay: hasFramePicture,
     },
-    composed: {
-      // Forcing the picture forward needs a picture. Without one this falls back
-      // to 'default', which for a composed card is already the text tile — so a
-      // card that lost its image degrades quietly instead of rendering a hole.
-      hero: function (entry) { return !!composedMedia(entry); },
+    text: {
+      hero: hasNotePicture,
+      overlay: hasNotePicture,
     },
   };
 
   // Resolve the layout NAME, then let its gate veto it. 'default' has no gate
-  // and never gets one — it is what everything falls back to.
-  function layoutFor(kind, entry) {
-    var layout = resolveLayout(kind, cardDescriptor(entry).layout);
+  // and never gets one — it is what everything falls back to. A composed
+  // record's own descriptor wins when it carries one; the entry's answers
+  // otherwise — over.card ?? entry.card, the same rule as every other field.
+  function layoutFor(kind, entry, over) {
+    var want = (over && cardDescriptor(over).layout) || cardDescriptor(entry).layout;
+    var layout = resolveLayout(kind, want);
     var gate = CARD_GATES[kind] && CARD_GATES[kind][layout];
-    return (gate && !gate(entry)) ? 'default' : layout;
+    return (gate && !gate(entry, over)) ? 'default' : layout;
+  }
+
+  // ---- the overlay layout: the image ladder, v1 ----
+  // docs/cards-core-complete.md chunk 3. Writing on a picture is a legibility
+  // problem, and this engine FORBIDS runtime auto-fit — no measuring the DOM,
+  // no reading a canvas at render time (the offline export runs from file://
+  // with no network and no layout to measure, and a measured card would shift
+  // after paint). So the decision is split in two:
+  //
+  //   the AUTHOR picks   where the band sits and how it is treated — a closed
+  //                      set of chips in the console, never a slider, so a card
+  //                      can only ever be in a state the stylesheet describes
+  //   the ENGINE picks   the ink, from luminance MEASURED ONCE in the console
+  //                      at pick/crop time and stored on the record (`img.lum`)
+  //
+  // Nothing here computes a colour or a gradient: every answer leaves as a
+  // data-* attribute and css/main.css owns the rest.
+  var OVERLAY_PLACES = ['bottom', 'top', 'centre'];
+  var OVERLAY_TREATS = ['scrim', 'blur', 'none'];
+  var OVERLAY_BLURS = [1, 2, 3];
+  // The TITLE'S SCALE on the band — the museum-plate ladder (owner, 2026-09-11:
+  // "use typographic scale, don't be afraid to let the text be large in an
+  // intentional way"). Like the words tile's tier it is stamped from length,
+  // not authored: a two-word title is a statement and gets the room a
+  // statement needs; a forty-character one steps down until it fits its three
+  // lines. Same shape as the tease ladder for the same reason — one grid, one
+  // type system — but a title is a line, not a paragraph, so the steps are
+  // its own. The mark (below) is the plate's full stop, in the site's accent.
+  var OVERLAY_SCALES = ['statement', 'feature', 'standard', 'compact'];
+  function overlayScale(title) {
+    var n = tierLen(title);
+    if (n <= 12) return 'statement';
+    if (n <= 24) return 'feature';
+    if (n <= 40) return 'standard';
+    return 'compact';
+  }
+  // A full stop in the accent closes the title on the band — the one flourish
+  // the plate carries, and only where the author did not already end the line.
+  // Terminal punctuation, a closing quote or bracket, or an empty title get no
+  // mark: a second full stop is a typo the stylesheet made.
+  function overlayMark(title) {
+    var s = String(title == null ? '' : title).replace(/\s+$/, '');
+    if (!s) return '';
+    return /[.,!?:;…—\-"'”’)\]]$/.test(s) ? '' : 'dot';
+  }
+
+  // The record's three measured bands are named for the crop (top / mid /
+  // bottom); a PLACEMENT is named for where the band sits. They line up except
+  // in the middle, where 'centre' reads the 'mid' band — so the two
+  // vocabularies stay readable in their own contexts instead of one borrowing
+  // the other's word.
+  var OVERLAY_BAND = { top: 'top', centre: 'mid', bottom: 'bottom' };
+
+  // Read the record's overlay choices, with every unknown or absent value
+  // falling back to the safe default rather than to nothing: bottom, scrimmed,
+  // medium blur. A card published by a NEWER console — a placement this engine
+  // has never heard of — degrades to a legible card, the same contract
+  // resolveLayout makes for layout names.
+  function overlayOf(over) {
+    var o = (over && over.overlay) || {};
+    return {
+      place: OVERLAY_PLACES.indexOf(o.place) !== -1 ? o.place : 'bottom',
+      treat: OVERLAY_TREATS.indexOf(o.treat) !== -1 ? o.treat : 'scrim',
+      blur: OVERLAY_BLURS.indexOf(o.blur) !== -1 ? o.blur : 2,
+    };
+  }
+
+  // INK IS DERIVED, NEVER AUTHORED (docs/cards-core-complete.md §2.2). The band
+  // is asked what it is sitting on and the type takes the side that can be read.
+  // Pure, and exported, so the threshold is a pinned number rather than a
+  // sentence in a comment.
+  //
+  // 0.55 rather than 0.5: light type on a mid-grey band reads better than dark
+  // type does, so the tie goes to light and the swap to dark waits for a
+  // genuinely bright band.
+  //
+  // An UNMEASURED card answers 'light' — a card picked before this landed, a
+  // measurement that failed, a hand-edited record. Paired with the default
+  // scrim (which is dark under light ink) that is legible on any picture, which
+  // is exactly why scrim is the default treatment and not 'none'.
+  var INK_THRESHOLD = 0.55;
+  function overlayInk(over, place) {
+    var lum = over && over.img && over.img.lum;
+    var v = lum ? lum[OVERLAY_BAND[place] || 'bottom'] : null;
+    if (typeof v !== 'number' || !isFinite(v)) return 'light';
+    return v >= INK_THRESHOLD ? 'dark' : 'light';
+  }
+
+  // Hang the band on the picture. The NODES are the kind's own — same classes,
+  // same text, same order — and the only structural difference between an
+  // overlay card and its default is which element the body is appended to.
+  // That is what keeps this a layout rather than a fifth renderer: a kind that
+  // learns overlay learns one call, not a second copy of its markup.
+  function applyOverlay(root, img, body, over) {
+    var o = overlayOf(over);
+    root.setAttribute('data-place', o.place);
+    root.setAttribute('data-treat', o.treat);
+    // Only meaningful under the blur treatment, and absent otherwise — an
+    // attribute nothing reads is a value somebody will later believe in.
+    if (o.treat === 'blur') root.setAttribute('data-blur', String(o.blur));
+    root.setAttribute('data-ink', overlayInk(over, o.place));
+    // The plate's type: how large the title runs and whether it closes with the
+    // accent mark. Read off the headline the kind already built — the body's
+    // first node is the title in every renderer that reaches here — so the
+    // scale can never disagree with the words on the card. Both are
+    // attributes; css/main.css owns the sizes and the mark itself.
+    var headline = body.firstChild ? body.firstChild.textContent : '';
+    root.setAttribute('data-scale', overlayScale(headline));
+    var mark = overlayMark(headline);
+    if (mark) root.setAttribute('data-mark', mark);
+    root.appendChild(img);
+    img.appendChild(body);
   }
 
   // ---- sample fallback: a MISSING data file is an un-seeded fork ----
@@ -556,11 +836,22 @@
     yieldOlderPin: yieldOlderPin,
     pickAutomatic: pickAutomatic,
     composedPick: composedPick,
+    composedKind: composedKind,
+    composedItem: composedItem,
+    composedShape: composedShape,
+    // What a composed audio card plays, and the set it borrows (or null) — the
+    // studio asks both so the rail can never disagree with the card.
+    composedTracks: composedTracks,
+    composedSet: composedSet,
     composedMedia: composedMedia,
     composedFolder: composedFolder,
     composedLabel: composedLabel,
     composedLink: composedLink,
     COMPOSED_MAX: COMPOSED_MAX,
+    // The cap a set and the homepage card share, read by the studio's rail so
+    // the console never restates the number (tests/audio-playlist-card.test.js
+    // refuses a literal on either side).
+    AUDIO_MAX_PLAYLIST: AUDIO_MAX_PLAYLIST,
     pulseTier: pulseTier,
     playlistTier: playlistTier,
     cardFocus: cardFocus,
@@ -573,6 +864,19 @@
     cardGates: CARD_GATES,
     layoutFor: layoutFor,
     heroFilename: heroFilename,
+    // The overlay layout's vocabulary and its one derived value. The console
+    // draws its chips from these arrays rather than restating them, so a
+    // placement the engine cannot render can never be offered; overlayInk is
+    // exported because a threshold nobody can test is a guess.
+    overlayPlaces: OVERLAY_PLACES,
+    overlayTreats: OVERLAY_TREATS,
+    overlayBlurs: OVERLAY_BLURS,
+    overlayScales: OVERLAY_SCALES,
+    overlayOf: overlayOf,
+    overlayInk: overlayInk,
+    overlayScale: overlayScale,
+    overlayMark: overlayMark,
+    INK_THRESHOLD: INK_THRESHOLD,
     sampleFrames: sampleFrames,
     sampleNote: sampleNote,
     withSampleFallback: withSampleFallback,
@@ -620,55 +924,156 @@
     if (kind === 'archive') return '/archive/?f=' + encodeURIComponent(e.slug || '');
     if (kind === 'text') return '/field-notes/post?slug=' + encodeURIComponent(e.fn_id || '');
     if (kind === 'audio') return listenHref(e);
+    // A SAVED SET (chunk 4). Its own parameter, not the track's: a set and a
+    // track may legitimately carry the same slug, and `?a=` and `?set=` answer
+    // different things. Empty for a set with no slug, which every caller below
+    // reads as "fall back to what this card would otherwise point at".
+    if (kind === 'set') return (e && e.slug) ? '/listen/?set=' + encodeURIComponent(e.slug) : '';
+    // A COMPOSED CARD'S OWN ADDRESS (chunk 6). Not a visitor kind like the four
+    // above — a composed record is drawn by one of them — but it is a content
+    // type, and a content type has a permanent URL. This is the address the
+    // studio's LINK block copies and the share sheet points at; it is NOT where
+    // the card on the grid goes (that is composedLink, the record's own `link`),
+    // because a card spawned from an archive photo should still open the photo.
+    // Spelled here so the console, the sitemap and the page can never disagree.
+    if (kind === 'composed') return e.id ? '/card/' + encodeURIComponent(e.id) : '';
     return '';
   }
 
-  function photoCard(entry, isRaw) {
-    var a = el('a', 'wk-card');
+  // ---- overrides: how a composed record reaches a kind's renderer ----
+  // Each renderer takes the entry it has always taken plus `over`, the composed
+  // record (null for an automatic card), and reads every field it can override
+  // through these. The rule is over.field ?? entry.field; the helpers exist
+  // because three fields have a composed DEFAULT of their own — a link only
+  // where the record says, a chip that reads "Featured" when blank, and a
+  // caption that is the typed tease or nothing — and spelling that rule once
+  // keeps four renderers agreeing on it.
+
+  // over.field ?? entry.field, as text.
+  function textOf(over, entry, name) {
+    var v = (over && over[name] != null) ? over[name] : (entry ? entry[name] : '');
+    return v == null ? '' : String(v);
+  }
+
+  // Where the card goes. An automatic card goes to its entry's canonical
+  // address; a composed card only where its record says (composedLink —
+  // same-origin or nothing).
+  function hrefOf(kind, entry, over) {
+    return over ? composedLink(over) : entryHref(kind, entry);
+  }
+
+  // The on-media chip / the kicker: a composed card's label, "Featured" when it
+  // has none; the kind's own word otherwise.
+  function labelOf(over, fallback) {
+    return over ? composedLabel(over) : fallback;
+  }
+
+  // The same question on a card whose kicker already SAYS something — the audio
+  // card's "Audio" and "Audio // Multi-track". There the kind's word is the
+  // better default than "Featured": a tile with a waveform on it labelled
+  // Featured tells a cold reader less than the one it replaced. So the author's
+  // badge still wins; its absence falls back to the kind rather than to the
+  // generic word. (chunk 5 — the picture and words shapes keep "Featured",
+  // which their fixtures pin.)
+  function badgeOf(over, kindWord) {
+    var s = over && typeof over.label === 'string' ? over.label.trim() : '';
+    return s || kindWord;
+  }
+
+  // The picture-shape caption line. An automatic card always has one (the
+  // kind's own text — empty at worst, and the tile keeps the line). A composed
+  // card's is the tease it was typed with, and WITHOUT one there is no line at
+  // all (null): the legacy fixtures froze it that way, and a blank line under a
+  // headline the author wrote reads as a gap, not a caption.
+  function captionOf(over, entryText) {
+    if (!over) return entryText;
+    return over.tease ? String(over.tease) : null;
+  }
+
+  // ---- the card root ----
+  // Every card starts here. An automatic card is an anchor to its entry's
+  // canonical address (or a plain div for the kinds that go nowhere). A
+  // COMPOSED card links only where its record says — and this is the ONE place
+  // that knows a card is composed: it stamps `wk-composed`, `data-shape` and
+  // `data-state`, the three hooks the palette CSS and the console bind to, and
+  // nothing downstream branches on it again.
+  //
+  // The composed root sets href before class, the automatic root the other way
+  // round: both orders are frozen by fixtures (the legacy composed shapes and
+  // the pre-engine automatic grids), and attribute order is bytes.
+  function cardRoot(kindCls, href, over, shape) {
+    var cls = 'wk-card' + (over ? ' wk-composed' : '') + (kindCls ? ' ' + kindCls : '');
+    if (!over) {
+      var a = el(href ? 'a' : 'div', cls);
+      if (href) a.href = href;
+      return a;
+    }
+    var root = el(href ? 'a' : 'div');
+    if (href) root.href = href;
+    root.className = cls;
+    root.setAttribute('data-shape', shape);
+    if (over.palette && over.palette !== 'default') root.setAttribute('data-state', over.palette);
+    return root;
+  }
+
+  function photoCard(entry, isRaw, over, layout) {
+    var o = over || null;
     // RAW cards deep-link to the buffer frame (by id — always exact); archive
     // cards to the curated frame (by slug). One builder, entryHref.
-    a.href = entryHref(isRaw ? 'raw' : 'archive', entry);
+    var a = cardRoot('', hrefOf(isRaw ? 'raw' : 'archive', entry, o), o, 'picture');
     var img = el('div', 'wk-img');
-    img.style.backgroundImage = "url('" + frameSrc(entry.filename, 1024) + "')";
-    var cardPos = cardFocus(entry);
+    img.style.backgroundImage = "url('"
+      + frameSrc(composedMedia(o) || entry.filename, 1024, composedFolder(o)) + "')";
+    var cardPos = cardFocus(o) || cardFocus(entry);
     if (cardPos) img.style.backgroundPosition = cardPos;
     var tag = el('span', 'wk-tag');
-    tag.textContent = isRaw ? 'RAW' : 'Archive';
+    tag.textContent = labelOf(o, isRaw ? 'RAW' : 'Archive');
     img.appendChild(tag);
     var body = el('div', 'wk-body');
+    // The picture card's caption grammar (.wk-title / .wk-meta) for a composed
+    // card too — NOT the words-tile headline: a composed card with a photo has
+    // to read like the archive card beside it, or its title looms over the row
+    // and competes with the picture. (owner, 2026-09-07)
     var title = el('div', 'wk-title');
     // A buffer frame has no title — its identity IS the permanent frame number.
-    title.textContent = isRaw ? frameTag(entry.num) : (entry.title || '');
-    var meta = el('div', 'wk-meta');
-    meta.textContent = isRaw
-      ? String(entry.captured_at || '').slice(0, 4)
-      : [entry.camera, yearOf(entry)].filter(Boolean).join(' · ');
+    title.textContent = isRaw ? frameTag(entry.num) : textOf(o, entry, 'title');
     body.appendChild(title);
-    body.appendChild(meta);
-    a.appendChild(img);
-    a.appendChild(body);
+    var metaText = captionOf(o, isRaw
+      ? String(entry.captured_at || '').slice(0, 4)
+      : [entry.camera, yearOf(entry)].filter(Boolean).join(' · '));
+    if (metaText != null) {
+      var meta = el('div', 'wk-meta');
+      meta.textContent = metaText;
+      body.appendChild(meta);
+    }
+    if (layout === 'overlay') applyOverlay(a, img, body, o);
+    else { a.appendChild(img); a.appendChild(body); }
     return a;
   }
 
-  function textCard(post) {
-    var excerpt = recentTruncate(recentStrip(post.body), TEASE_MAX);
+  function textCard(post, over) {
+    var o = over || null;
+    // The words: the tease typed onto a composed card, else the note's body —
+    // measured by the same ladder either way, so one grid never carries two
+    // type systems.
+    var words = (o && o.tease != null) ? o.tease : post.body;
+    var excerpt = recentTruncate(recentStrip(words), TEASE_MAX);
     // Grapheme-counted, like the pulse card: a tease in Japanese or one carrying
     // emoji used to over-count and tier a step too small.
     var tier = recentTier(tierLen(excerpt));
     var initial = recentInitial(excerpt);
 
-    var a = el('a', 'wk-card wk-text');
-    a.href = entryHref('text', post);
+    var a = cardRoot('wk-text', hrefOf('text', post, o), o, 'words');
     a.setAttribute('data-tier', tier);
 
     var kicker = el('span', 'wk-kicker');
     var dot = el('span', 'wk-dot');
     dot.setAttribute('aria-hidden', 'true');
     kicker.appendChild(dot);
-    kicker.appendChild(document.createTextNode('Field Note'));
+    kicker.appendChild(document.createTextNode(labelOf(o, 'Field Note')));
 
     var title = el('div', 'wk-t-title');
-    title.textContent = post.title || '';
+    title.textContent = textOf(o, post, 'title');
 
     var snip = el('div', 'wk-snip');
     if (excerpt) {
@@ -688,13 +1093,17 @@
     caret.setAttribute('aria-hidden', 'true');
     snip.appendChild(caret);
 
-    var meta = el('div', 'wk-t-meta');
-    meta.textContent = [post.location, yearOf(post)].filter(Boolean).join(' · ');
-
     a.appendChild(kicker);
     a.appendChild(title);
     a.appendChild(snip);
-    a.appendChild(meta);
+    // The place-and-year line belongs to a note. A composed card has neither —
+    // every word on it was typed — so it carries no line rather than an empty
+    // one (its tease is the snip above, not a caption).
+    if (!o) {
+      var meta = el('div', 'wk-t-meta');
+      meta.textContent = [post.location, yearOf(post)].filter(Boolean).join(' · ');
+      a.appendChild(meta);
+    }
     return a;
   }
 
@@ -716,119 +1125,38 @@
   //
   // Only reachable through the gate above: by the time this runs the entry has
   // a usable hero filename.
-  function textHeroCard(post) {
-    var a = el('a', 'wk-card wk-text');
-    a.href = entryHref('text', post);
+  function textHeroCard(post, over, layout) {
+    var o = over || null;
+    var a = cardRoot('wk-text', hrefOf('text', post, o), o, 'picture');
 
     var img = el('div', 'wk-img');
-    img.style.backgroundImage = "url('" + frameSrc(heroFilename(post), 1024) + "')";
-    var cardPos = cardFocus(post);
+    img.style.backgroundImage = "url('"
+      + frameSrc(composedMedia(o) || heroFilename(post), 1024, composedFolder(o)) + "')";
+    var cardPos = cardFocus(o) || cardFocus(post);
     if (cardPos) img.style.backgroundPosition = cardPos;
     var tag = el('span', 'wk-tag');
-    tag.textContent = 'Field Note';
+    tag.textContent = labelOf(o, 'Field Note');
     img.appendChild(tag);
 
     var body = el('div', 'wk-body');
     var title = el('div', 'wk-t-title');
-    title.textContent = post.title || '';
-    var meta = el('div', 'wk-meta');
-    meta.textContent = [post.location, yearOf(post)].filter(Boolean).join(' · ');
+    title.textContent = textOf(o, post, 'title');
     body.appendChild(title);
-    body.appendChild(meta);
+    var metaText = captionOf(o, [post.location, yearOf(post)].filter(Boolean).join(' · '));
+    if (metaText != null) {
+      var meta = el('div', 'wk-meta');
+      meta.textContent = metaText;
+      body.appendChild(meta);
+    }
 
-    a.appendChild(img);
-    a.appendChild(body);
+    if (layout === 'overlay') applyOverlay(a, img, body, o);
+    else { a.appendChild(img); a.appendChild(body); }
     return a;
   }
 
-  // ---- the composed card ----
-  //
-  // The owner's own card: a picture chosen from anywhere on the site (or none),
-  // words typed onto the card itself (or none), and a link back to whatever it
-  // came from (or none — a free-form card points nowhere, the way a pulse does).
-  //
-  // Deliberately NOT a new visual language. Picture-led is photoCard's shape;
-  // text-led is textCard's, tier ladder included. A composed card should look
-  // like it belongs on the grid, because it does.
-  //
-  // Only a same-origin path is honoured as a link. This is authored content that
-  // rides publish, so a bad value is an editing mistake rather than an attack —
-  // but a card that silently sent visitors off-site would be a bad surprise
-  // either way, and a plain <div> is the honest degradation (pulseCard already
-  // proves a card need not be an anchor).
-  function composedLink(card) {
-    var h = card && card.link;
-    if (typeof h !== 'string') return '';
-    h = h.trim();
-    return (h.charAt(0) === '/' && h.charAt(1) !== '/') ? h : '';
-  }
-
-  function composedCard(card, layout) {
-    var media = composedMedia(card);
-    var picture = !!media && layout !== 'plain';
-    var href = composedLink(card);
-    var root = href ? el('a', '') : el('div', '');
-    if (href) root.href = href;
-    root.className = 'wk-card wk-composed' + (picture ? '' : ' wk-text');
-    // data-shape is what the palette's picture-card tint binds to: without it the
-    // atmospheric ground paints the root, which the full-bleed image and body
-    // cover, so a palette on a picture card showed NOTHING on the live grid (and
-    // in the console grid, which renders through here). The words shape reads the
-    // ground on the root directly, but stamping both keeps one rule for the CSS.
-    root.setAttribute('data-shape', picture ? 'picture' : 'words');
-    if (card.palette && card.palette !== 'default') {
-      root.setAttribute('data-state', card.palette);
-    }
-
-    if (picture) {
-      var img = el('div', 'wk-img');
-      img.style.backgroundImage = "url('"
-        + frameSrc(media, 1024, composedFolder(card)) + "')";
-      var pos = cardFocus(card);
-      if (pos) img.style.backgroundPosition = pos;
-      var tag = el('span', 'wk-tag');
-      tag.textContent = composedLabel(card);
-      img.appendChild(tag);
-
-      var body = el('div', 'wk-body');
-      // The picture card's caption, NOT the words-tile headline: a composed card
-      // with a photo has to read like the archive card beside it (same .wk-title
-      // scale and weight), or its title looms over the row and competes with the
-      // picture. The big .wk-t-title is for the words shape, where the type IS the
-      // card. (owner, 2026-09-07)
-      var title = el('div', 'wk-title');
-      title.textContent = card.title || '';
-      body.appendChild(title);
-      if (card.tease) {
-        var meta = el('div', 'wk-meta');
-        meta.textContent = card.tease;
-        body.appendChild(meta);
-      }
-      root.appendChild(img);
-      root.appendChild(body);
-      return root;
-    }
-
-    // No picture (or 'plain'): the typographic tile, measured by the same ladder
-    // the field-note card uses, so one grid never carries two type systems.
-    var kicker = el('div', 'wk-kicker');
-    kicker.appendChild(el('span', 'wk-dot'));
-    kicker.appendChild(document.createTextNode(composedLabel(card)));
-
-    var tTitle = el('div', 'wk-t-title');
-    tTitle.textContent = card.title || '';
-
-    var tease = recentTruncate(recentStrip(card.tease || ''), TEASE_MAX);
-    root.setAttribute('data-tier', recentTier(tierLen(tease)));
-
-    var snip = el('div', 'wk-snip');
-    if (tease) snip.appendChild(document.createTextNode(tease));
-
-    root.appendChild(kicker);
-    root.appendChild(tTitle);
-    root.appendChild(snip);
-    return root;
-  }
+  // (There is no composedCard(). A composed card is a photo, text or audio card
+  // with overrides — see the `overrides` helpers and cardRoot above, and
+  // composedKind for how a record chooses. docs/cards-core-complete.md chunk 1.)
 
   // ---- audio card ----
   // Built from a registry entry, so every value on it was typed by the author
@@ -853,6 +1181,35 @@
     + '<path d="M8 0.9 11.25 4.15 9.95 5.45 8.9 4.4 8.9 10.5 7.1 10.5 7.1 4.4 6.05 5.45 4.75 4.15Z"/>'
     + '<path d="M2.6 6.8h2.3v6.5h6.2V6.8h2.3v8.3H2.6z"/></svg>';
 
+  // ---- the author's caption on an audio card ----
+  // The picture card's footer grammar (.wk-title / .wk-meta), sitting UNDER the
+  // waveform. Deliberately not the card's headline: the headline names what is
+  // PLAYING — the set, the soundboard, the track — and that is the registry's
+  // to write, not the author's. §2.2 of docs/cards-core-complete.md is the
+  // rule: words on an audio card are a caption, never a statement, because the
+  // waveform is the hero. No tier ladder, no drop cap, no display face.
+  //
+  // Absent entirely when the author typed neither, for captionOf's reason: a
+  // blank line under a waveform reads as a gap, not as a caption.
+  function audioCaption(over) {
+    if (!over) return null;
+    var title = String(over.title || '').trim();
+    var tease = String(over.tease || '').trim();
+    if (!title && !tease) return null;
+    var body = el('div', 'wk-body');
+    if (title) {
+      var t = el('div', 'wk-title');
+      t.textContent = title;
+      body.appendChild(t);
+    }
+    if (tease) {
+      var m = el('div', 'wk-meta');
+      m.textContent = tease;
+      body.appendChild(m);
+    }
+    return body;
+  }
+
   // ---- playlist tier: HOW MANY tracks → roomy | balanced | dense. The same
   //      idea as recentTier, measured in rows instead of graphemes: the index
   //      always fills the tile and stays optically centred, so two tracks get
@@ -868,8 +1225,12 @@
     return 'dense';
   }
 
-  function audioPlaylistCard(tracks) {
-    var card = el('div', 'wk-card wk-audio wk-audio-playlist');
+  // `over` and `set` are a COMPOSED card's record and the set it borrows (both
+  // null for the automatic card, which is why its bytes are untouched). The set
+  // supplies the card's name and its address; the record supplies the caption.
+  function audioPlaylistCard(tracks, over, set) {
+    var o = over || null;
+    var card = cardRoot('wk-audio wk-audio-playlist', '', o, 'audio');
     var list = tracks || [];
     // Drives the .wk-audio-playlist[data-tier] rules, exactly as the text card
     // is driven by its own data-tier. data-tracks is the raw count, so a theme
@@ -886,12 +1247,20 @@
     // a score, a field recording, an episode, a voice memo, a loop. The kicker
     // carries the kind and the title carries the name, so neither repeats the
     // other.
-    kicker.appendChild(document.createTextNode('Audio // Multi-track'));
+    kicker.appendChild(document.createTextNode(badgeOf(o, 'Audio // Multi-track')));
+
+    // WHAT IS PLAYING, not what the author wrote — a borrowed set is named by
+    // the set, and its address is the set's own (chunk 4's /listen/?set=), so
+    // the card and the page it opens can never be about different things.
+    var setName = set ? (set.name || set.slug || '') : '';
+    var setHref = entryHref('set', set);
+    var boardName = setName || 'Soundboard';
+    var boardHref = setHref || (o ? (composedLink(o) || '/listen/') : '/listen/');
 
     var title = el('div', 'wk-a-title');
     var link = el('a');
-    link.href = '/listen/';
-    link.textContent = 'Soundboard';
+    link.href = boardHref;
+    link.textContent = boardName;
     title.appendChild(link);
 
     var totalSec = list.reduce(function (sum, t) { return sum + (Number(t.duration) || 0); }, 0);
@@ -970,6 +1339,14 @@
       card.appendChild(player.root);
     }
 
+    // UNDER THE WAVEFORM, which on this card means inside the HEAD — above the
+    // index's rule, not below it. Placed after the index instead, the caption
+    // sat flush against the last track and read as a third row rather than as
+    // the author's line about the set (found by opening the page). The card is
+    // a title block over a tracklist; the caption belongs to the title block.
+    var caption = audioCaption(o);
+    if (caption) card.appendChild(caption);
+
     var listWrap = el('div', 'wk-pl-index');
     list.forEach(function (track, i) {
       var row = el('div', 'wk-pl-item' + (i === 0 ? ' is-active' : ''));
@@ -1036,12 +1413,12 @@
 
     var share = el('button', 'wk-a-share');
     share.type = 'button';
-    share.setAttribute('aria-label', 'Share this soundboard');
+    share.setAttribute('aria-label', set ? 'Share this set' : 'Share this soundboard');
     share.innerHTML = SHARE_SVG;
     share.addEventListener('click', function (ev) {
       ev.preventDefault();
       ev.stopPropagation();
-      if (hasPlayer) AP.share(location.origin + '/listen/', 'Soundboard', share);
+      if (hasPlayer) AP.share(location.origin + boardHref, boardName, share);
     });
     foot.appendChild(share);
 
@@ -1054,26 +1431,43 @@
   // Harmless in the browser — same posture as worker.js's test re-exports.
   g.RecentIndex.audioPlaylistCard = audioPlaylistCard;
 
-  function audioCard(entry) {
+  // A composed audio card names a SOURCE and the registry answers — see
+  // composedItem. `set` is the set it borrows, or null (chunk 5).
+  function audioCard(entry, over, set) {
     if (entry && entry.isPlaylist && Array.isArray(entry.tracks)) {
-      return audioPlaylistCard(entry.tracks);
+      return audioPlaylistCard(entry.tracks, over, set);
     }
-    var card = el('div', 'wk-card wk-audio');
+    var o = over || null;
+    var card = cardRoot('wk-audio', '', o, 'audio');
+    // The TRACK's title, never the override: on an audio card the author's
+    // words are the caption underneath (audioCaption), and a headline taken
+    // from the record would leave the thing actually playing unnamed.
+    var name = (set && (set.name || set.slug)) || String((entry && entry.title) || '');
 
     var kicker = el('span', 'wk-kicker');
     var led = el('span', 'wk-p-led');
     led.setAttribute('aria-hidden', 'true');
     kicker.appendChild(led);
-    kicker.appendChild(document.createTextNode('Audio'));
+    kicker.appendChild(document.createTextNode(badgeOf(o, 'Audio')));
 
-    var title = el('div', 'wk-a-title');
-    var link = el('a');
-    link.href = listenHref(entry);
-    link.textContent = entry.title || '';
-    title.appendChild(link);
+    // Name and address agree: a card titled with a set's name opens that set.
+    var href = entryHref('set', set) || listenHref(entry);
 
     card.appendChild(kicker);
-    card.appendChild(title);
+    var title = null;
+    // NO NAME, NO LINE. An empty headline leaves a blank band above the
+    // transport that reads as a rendering fault — captionOf's argument, applied
+    // to the card's own title. Newly reachable on a composed card whose set was
+    // deleted out from under it (its words still show, and the rail says why);
+    // an automatic card always has a track to name.
+    if (name) {
+      title = el('div', 'wk-a-title');
+      var link = el('a');
+      link.href = href;
+      link.textContent = name;
+      title.appendChild(link);
+      card.appendChild(title);
+    }
 
     if (entry.sub) {
       var sub = el('div', 'wk-a-sub');
@@ -1085,21 +1479,29 @@
     // the card still reads and still links to the permalink, rather than
     // rendering as a broken tile.
     var AP = g.AudioPlayer;
-    var hasPlayer = AP && typeof AP.create === 'function';
+    // A composed card whose source resolves to nothing (an emptied homepage
+    // card, a set whose every track retired) still renders — it has words, or
+    // composedPick would have dropped it — but it must not mount a transport
+    // over a track that is not there. An automatic card always has a filename
+    // (audioPick gates on it), so its bytes do not move.
+    var hasPlayer = AP && typeof AP.create === 'function' && !!entry.filename;
     if (hasPlayer) {
       var player = AP.create({
         src: entry.filename,
         peaks: AP.peaksFromString(entry.peaks),
         duration: entry.duration,
         variant: 'card',
-        title: entry.title || '',
+        title: name,
         // The card owns its own playing state so the title can scroll while
         // the track runs — the player tells it rather than the CSS reaching in.
         onstate: function (playing) { card.classList.toggle('is-playing', playing); },
       });
       card.appendChild(player.root);
-      AP.marquee(title);
+      if (title) AP.marquee(title);
     }
+
+    var caption = audioCaption(o);
+    if (caption) card.appendChild(caption);
 
     var foot = el('div', 'wk-a-foot');
     var meta = el('div', 'wk-a-meta');
@@ -1119,7 +1521,7 @@
       // Sits over the stretched card link — a press here shares, never navigates.
       ev.preventDefault();
       ev.stopPropagation();
-      if (hasPlayer) AP.share(location.origin + listenHref(entry), entry.title || '', share);
+      if (hasPlayer) AP.share(location.origin + href, name, share);
     });
     foot.appendChild(share);
 
@@ -1204,20 +1606,174 @@
   // entry, and (3) a branch on the layout argument here or a data-layout rule
   // in css/main.css — never a new kind. A renderer that has only one layout
   // ignores the argument. An unknown kind falls through to the text renderer,
-  // exactly as the old ternary chain did.
+  // exactly as the old ternary chain did. `item.over` is a composed record's
+  // overrides (composedItem); an automatic item carries none.
   var CARD_KINDS = {
     pulse: function (item) { return pulseCard(item.data); },
-    audio: function (item) { return audioCard(item.data); },
-    photo: function (item) { return photoCard(item.data, item.raw); },
+    audio: function (item) { return audioCard(item.data, item.over, item.set); },
+    photo: function (item, layout) { return photoCard(item.data, item.raw, item.over, layout); },
+    // 'overlay' on a note is the HERO card with its words moved onto the
+    // picture — one picture-led builder, two layouts, rather than a second
+    // picture branch in the typographic tile.
     text: function (item, layout) {
-      return layout === 'hero' ? textHeroCard(item.data) : textCard(item.data);
+      return (layout === 'hero' || layout === 'overlay')
+        ? textHeroCard(item.data, item.over, layout)
+        : textCard(item.data, item.over);
     },
-    composed: function (item, layout) { return composedCard(item.data, layout); },
   };
+
+  // ---- THE COMPOSITION: what a card is MADE OF, without any markup ----
+  //
+  // docs/cards-core-complete.md chunk 7. The share image is the card, and a
+  // canvas cannot be handed a DOM node — so something has to answer "which
+  // title, which caption, which label, which picture, which crop, which band"
+  // for a painter that draws the same card with shapes instead of elements.
+  //
+  // That is a SECOND RENDERER, and the only thing that keeps a second renderer
+  // honest is that it never decides anything for itself. So every value below
+  // comes out of the SAME helper the kind's own renderer calls — textOf,
+  // captionOf, labelOf/badgeOf, composedMedia/composedFolder, cardFocus,
+  // frameSrc, layoutFor, overlayOf, overlayInk, recentTier — and this function
+  // adds no rule of its own.
+  //
+  // ⚠️ IT NEEDS A DOM, and it sits below this file's `typeof document` bail for
+  // that reason: `media.src` comes from frameSrc(), which reads the cdn-base
+  // meta tag. An earlier version of this comment claimed the opposite — "runs
+  // in a test and in the offline export alike" — which a code review caught. In
+  // a pure Node context RecentIndex.cardComposition is simply not attached, and
+  // paintCard's "card engine not loaded" is what a caller sees. Do not move it
+  // above the bail without giving frameSrc a DOM-free path.
+  //
+  // tests/card-paint.test.js asserts every field against the card buildCard
+  // actually renders. When a renderer moves and this does not, that test is
+  // what goes red — which is the whole reason to describe a card in one place
+  // rather than to eyeball two.
+  function cardComposition(item) {
+    var it = item || {};
+    var kind = CARD_KINDS[it.kind] ? it.kind : 'text';
+    var entry = it.data || {};
+    var o = it.over || null;
+    var layout = layoutFor(kind, entry, o);
+    var c = {
+      kind: kind,
+      layout: layout,
+      composed: !!o,
+      // The palette the card wears, as cardRoot stamps it: 'default' is the
+      // absence of a choice and reaches the markup as no attribute at all.
+      palette: (o && o.palette && o.palette !== 'default') ? o.palette : '',
+      shape: '',        // picture | words | audio | pulse — cardRoot's word
+      href: '',
+      label: '',        // the on-media chip, or the kicker's word
+      title: '',
+      meta: null,       // the second line, or null where the card draws none
+      media: null,      // { filename, folder, src, focus } or null
+      overlay: null,    // { place, treat, blur, ink, scale, mark } — only under that layout
+      tier: '',         // the words ladder, or the playlist ladder
+      words: '',        // the excerpt the words tile prints
+      initial: '',      // its drop cap, '' where the tier carries none
+      tracks: [],       // what an audio card plays
+      caption: null,    // an audio card's typed words — { title, tease }
+      pulse: null,      // the pulse card's own cells
+    };
+
+    if (kind === 'pulse') {
+      c.shape = 'pulse';
+      c.label = PULSE_LABEL;
+      c.tier = pulseTier(entry);
+      c.pulse = {
+        state: entry.state || 'signal',
+        localTime: entry.localTime || '',
+        glyphs: (entry.glyphs || '').trim(),
+        text: (entry.text || '').trim(),
+        footLeft: (entry.footLeft || '').trim(),
+        footRight: (entry.footRight || '').trim(),
+      };
+      c.title = c.pulse.text;
+      c.palette = c.pulse.state;   // pulseCard stamps state as data-state
+      return c;
+    }
+
+    if (kind === 'audio') {
+      c.shape = 'audio';
+      var set = it.set || null;
+      var playlist = !!(entry && entry.isPlaylist && Array.isArray(entry.tracks));
+      c.tracks = playlist ? entry.tracks.slice() : (entry && entry.filename ? [entry] : []);
+      c.label = badgeOf(o, playlist ? 'Audio // Multi-track' : 'Audio');
+      var setName = set ? (set.name || set.slug || '') : '';
+      if (playlist) {
+        c.title = setName || 'Soundboard';
+        c.href = entryHref('set', set)
+          || (o ? (composedLink(o) || '/listen/') : '/listen/');
+        c.tier = playlistTier(c.tracks.length);
+      } else {
+        c.title = setName || String((entry && entry.title) || '');
+        c.href = entryHref('set', set) || listenHref(entry);
+        c.meta = entry.sub ? String(entry.sub) : null;
+      }
+      // The author's words on an audio card are a CAPTION under the waveform
+      // (§2.2), never the headline — audioCaption's rule, read the same way.
+      var capTitle = o ? String(o.title || '').trim() : '';
+      var capTease = o ? String(o.tease || '').trim() : '';
+      if (capTitle || capTease) c.caption = { title: capTitle, tease: capTease };
+      return c;
+    }
+
+    var isRaw = !!it.raw;
+    var picture = (kind === 'photo') || layout === 'hero' || layout === 'overlay';
+    if (picture) {
+      c.shape = 'picture';
+      var filename = composedMedia(o)
+        || (kind === 'photo' ? entry.filename : heroFilename(entry));
+      var folder = composedFolder(o);
+      c.media = {
+        filename: filename || '',
+        folder: folder,
+        src: frameSrc(filename, 1024, folder),
+        focus: cardFocus(o) || cardFocus(entry),
+      };
+      if (kind === 'photo') {
+        c.href = hrefOf(isRaw ? 'raw' : 'archive', entry, o);
+        c.label = labelOf(o, isRaw ? 'RAW' : 'Archive');
+        c.title = isRaw ? frameTag(entry.num) : textOf(o, entry, 'title');
+        c.meta = captionOf(o, isRaw
+          ? String(entry.captured_at || '').slice(0, 4)
+          : [entry.camera, yearOf(entry)].filter(Boolean).join(' · '));
+      } else {
+        c.href = hrefOf('text', entry, o);
+        c.label = labelOf(o, 'Field Note');
+        c.title = textOf(o, entry, 'title');
+        c.meta = captionOf(o, [entry.location, yearOf(entry)].filter(Boolean).join(' · '));
+      }
+      if (layout === 'overlay') {
+        var ov = overlayOf(o);
+        c.overlay = {
+          place: ov.place, treat: ov.treat, blur: ov.blur, ink: overlayInk(o, ov.place),
+          // The plate's type, off the same headline the card stamps them from.
+          scale: overlayScale(c.title), mark: overlayMark(c.title),
+        };
+      }
+      return c;
+    }
+
+    // The words tile.
+    c.shape = 'words';
+    c.href = hrefOf('text', entry, o);
+    c.label = labelOf(o, 'Field Note');
+    c.title = textOf(o, entry, 'title');
+    var words = (o && o.tease != null) ? o.tease : entry.body;
+    c.words = recentTruncate(recentStrip(words), TEASE_MAX);
+    c.tier = recentTier(tierLen(c.words));
+    var ini = recentInitial(c.words);
+    c.initial = (ini && c.tier !== 'statement') ? ini : '';
+    // A composed card carries no place-and-year line — every word on it was
+    // typed (textCard's rule), so the line is absent rather than empty.
+    c.meta = o ? null : [entry.location, yearOf(entry)].filter(Boolean).join(' · ');
+    return c;
+  }
 
   function buildCard(item) {
     var renderKind = CARD_KINDS[item.kind] || CARD_KINDS.text;
-    var layout = layoutFor(item.kind, item.data);
+    var layout = layoutFor(item.kind, item.data, item.over);
     var node = renderKind(item, layout);
     // 'default' must add nothing (the byte-identity contract, see the engine
     // seam comment above) — only a real choice reaches the markup.
@@ -1225,6 +1781,9 @@
     return node;
   }
   g.RecentIndex.buildCard = buildCard;
+  // What a card is made of, for the painter (chunk 7) and for anything else
+  // that has to reason about a card without rendering one.
+  g.RecentIndex.cardComposition = cardComposition;
   // Exposed for the console: it seeds a spawned composed card's `link` from the
   // SAME builder the grid renders with, so the two can never disagree.
   g.RecentIndex.entryHref = entryHref;
@@ -1263,6 +1822,10 @@
       // "the grid fills itself" — which is the default this whole feature is an
       // override on top of.
       getJson('/data/cards.json'),
+      // The saved sets (chunk 4). Only a composed audio card that borrows one
+      // reads this, and missing and empty mean the same thing — a fork with no
+      // sets has no card that could name one.
+      getJson('/data/audio-sets.json'),
     ])
       .then(function (res) {
         var archive = withSampleFallback(res[0], sampleFrames());
@@ -1272,7 +1835,8 @@
         var audio = Array.isArray(res[3]) ? res[3] : [];
         var pulse = (res[4] && !Array.isArray(res[4])) ? res[4] : null;
         var composed = Array.isArray(res[5]) ? res[5] : [];
-        var picks = pickRecent(archive, posts, rawFeatured, audio, pulse, composed);
+        var audioSets = Array.isArray(res[6]) ? res[6] : [];
+        var picks = pickRecent(archive, posts, rawFeatured, audio, pulse, composed, audioSets);
         var section = host.closest ? host.closest('.cl-work') : null;
         if (!picks.length) {
           if (section) section.hidden = true;

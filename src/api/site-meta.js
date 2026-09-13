@@ -263,7 +263,46 @@ export async function handleSitemap(request, env) {
       if (Array.isArray(audio) && audio.some((t) => t && t.episode && t.filename && t.slug)) {
         xml += `\n  <url><loc>${HOST}/podcast.xml</loc></url>`;
       }
+      // Saved sets, on the same terms: a set is a page-worth destination with
+      // its own address, so it is listed — but only once it PLAYS something.
+      // An empty set, or one whose tracks have all been retired, is the same
+      // thin content the /listen gate above exists to keep out, and a retired
+      // set is an address reservation with nothing behind it at all.
+      const sets = await loadDataJson(HOST, env, 'data/audio-sets.json');
+      if (Array.isArray(sets) && Array.isArray(audio)) {
+        const live = new Set(
+          audio.filter((t) => t && t.slug && t.filename && !t.retired).map((t) => t.slug)
+        );
+        for (const s of sets) {
+          if (!s || !s.slug || s.retired) continue;
+          if (!((s.tracks) || []).some((slug) => live.has(slug))) continue;
+          xml += `\n  <url><loc>${HOST}/listen/?set=${encodeURIComponent(s.slug)}</loc></url>`;
+        }
+      }
     } catch { /* no registry, no listing */ }
+  }
+  // Composed cards, each at its own permanent address (chunk 6). Listed on the
+  // same terms as everything above — a card earns its line by being something
+  // the engine would actually render. `composedPick`'s rule in one place it
+  // cannot import (this is the Worker, that is a classic browser script), so
+  // it is deliberately the WEAKER half of it: a retired tombstone is excluded,
+  // and a card with neither a picture nor a word is a draft, not a page. What
+  // it does not try to re-derive is the audio kind's "does anything play" —
+  // that needs the player's resolver, and a card wrongly listed is thin
+  // content while a card wrongly omitted is a lost address.
+  if (!pageDisabled('/card')) {
+    try {
+      const cards = await loadDataJson(HOST, env, 'data/cards.json');
+      for (const c of (Array.isArray(cards) ? cards : [])) {
+        if (!c || !c.id || c.retired) continue;
+        const hasSomething = c.media
+          || String(c.title || '').trim()
+          || String(c.tease || '').trim()
+          || c.set;
+        if (!hasSomething) continue;
+        xml += `\n  <url><loc>${HOST}/card/${encodeURIComponent(c.id)}</loc></url>`;
+      }
+    } catch { /* no cards, no listing */ }
   }
   xml += '\n</urlset>';
 

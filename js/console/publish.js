@@ -328,6 +328,30 @@ export function buildBundle() {
       ...(a.card ? { card: a.card } : {}),
       };
     }), null, 2),
+    // Saved audio sets — a named, ordered list of tracks with its own address
+    // (/listen/?set=<slug>). Tracks are referenced BY SLUG and resolved at
+    // render, so nothing here duplicates the registry and a track retired
+    // tomorrow simply drops out of the set.
+    "data/audio-sets.json": JSON.stringify((STATE.audioSets || []).map(s => {
+      // ⚠️ The tombstone's own branch — the third one in this file, for the
+      // third time for the same reason (dark frames, retired tracks, now
+      // retired sets). Running a tombstone through the live whitelist below
+      // would drop `retired` and republish it as a live set with an empty
+      // track list: a retire that silently un-retires on the next publish, and
+      // an address quietly freed for the next set to take. A set owns no media,
+      // so there is no R2 delete to pair with it — the reservation IS the
+      // whole point of the record.
+      if (s.retired) return {
+        id: s.id, slug: s.slug, retired: true, retired_at: s.retired_at,
+      };
+      return {
+        id: s.id,
+        slug: s.slug,
+        name: s.name || "",
+        tracks: Array.isArray(s.tracks) ? s.tracks : [],
+        added_at: s.added_at || null,
+      };
+    }), null, 2),
     // Composed homepage cards — the owner's own, overlaid on the automatic grid
     // (js/recent-index.js `composedPick`). Every field is optional except id and
     // order, because a card may be a picture with no words, words with no
@@ -336,15 +360,34 @@ export function buildBundle() {
     // empty tile, so an unfinished draft is harmless here.
     //
     // `order` is a RANK, not a slot index, and it compacts — see composedPick.
-    "data/cards.json":     JSON.stringify((STATE.cards || []).map(c => ({
+    "data/cards.json":     JSON.stringify((STATE.cards || []).map(c => {
+      // ⚠️ The tombstone's own branch — the FOURTH in this file, for the fourth
+      // time for the same reason (dark frames, retired tracks, retired sets,
+      // now retired cards). A composed card's id is its permanent address at
+      // /card/<id> the moment it is published; running a tombstone through the
+      // live whitelist below would drop `retired` and republish it as a live
+      // card with no words and no picture — a retire that silently un-retires
+      // on the next publish, and an address freed for the next card to take.
+      // A card owns no media of its own (its picture is the archive's), so
+      // there is no R2 delete to pair with it: the reservation IS the record.
+      if (c.retired) return {
+        id: c.id, order: Number(c.order) || 0, retired: true, retired_at: c.retired_at,
+      };
+      return {
       id: c.id,
       order: Number(c.order) || 0,
       added_at: c.added_at || null,
+      // Which of the real kinds draws it — photo, text or audio (chunk 2,
+      // docs/cards-core-complete.md). Absent means Automatic: the engine reads
+      // the shape, which is also how every record written before chunk 2 is
+      // read, so an untouched card publishes exactly as it did.
+      ...(c.kind ? { kind: c.kind } : {}),
       ...(c.source ? { source: c.source } : {}),
       ...(c.media ? { media: c.media } : {}),
       ...(c.folder ? { folder: c.folder } : {}),
-      ...(c.focus ? { focus: c.focus } : {}),
       // cardFocus: object-position for the tall 4:5 card, same as everywhere.
+      // (A `focus` twin sat beside it until 2026-09-10 — whitelisted, never
+      // written by the console: the same shape as the `img` entry below.)
       ...(c.cardFocus ? { cardFocus: c.cardFocus } : {}),
       ...(c.title ? { title: c.title } : {}),
       ...(c.tease ? { tease: c.tease } : {}),
@@ -355,14 +398,27 @@ export function buildBundle() {
       // way to the live grid, so a card tinted in the studio published grey.
       ...(c.palette ? { palette: c.palette } : {}),
       ...(c.card ? { card: c.card } : {}),
-      // No `img` here. A measured-picture field for the image ladder was
-      // serialized from the day composed cards landed, but the ladder itself was
-      // handed off and nothing ever wrote or read it — a whitelist entry for a
-      // field with no producer, describing a mechanism that does not exist.
-      // Removed 2026-09-08. The ladder is still tracked (docs/ideas/index.md,
-      // "The homepage card engine"); when it lands it adds its field back here
-      // in the same breath as the code that fills it.
-    })), null, 2),
+      // Which SET an audio card borrows (chunk 5). A slug, never a copy of the
+      // tracks: the set is the one answer to what it plays, and a list frozen
+      // onto the card would be a second one the moment the shelf reorders it.
+      // Absent means the homepage tracks — so a card that never borrowed a set
+      // publishes exactly the bytes it always did.
+      ...(c.set ? { set: c.set } : {}),
+      // The overlay band's three choices — where it sits, what is behind it, how
+      // hard the frost — written by cardsSetOverlay and read by buildCard as
+      // data-place / data-treat / data-blur.
+      ...(c.overlay ? { overlay: c.overlay } : {}),
+      // `img` IS SERIALIZED AGAIN, AND THIS TIME SOMETHING WRITES IT. A
+      // measured-picture field sat in this whitelist from the day composed cards
+      // landed with no producer anywhere — an entry describing a mechanism that
+      // did not exist — and was removed on 2026-09-08 for exactly that reason.
+      // Chunk 3 built the producer: js/console/focal.js measureCardBands samples
+      // the three band luminances of the 4:5 crop at pick/crop time, and
+      // overlayInk turns `img.lum` into the card's ink. The field comes back in
+      // the same breath as the code that fills it, which was the condition.
+      ...(c.img ? { img: c.img } : {}),
+      };
+    }), null, 2),
   };
   // Posts as individual markdown files
   STATE.posts.forEach(p => {
@@ -395,6 +451,7 @@ CONTENTS:
   data/friends.json    ${STATE.friends.length} nodes
   data/library.json    ${STATE.library.length} entries
   data/audio.json      ${(STATE.audio || []).length} tracks
+  data/audio-sets.json ${(STATE.audioSets || []).length} sets
   data/cards.json      ${(STATE.cards || []).length} composed cards
   posts/*.md           ${STATE.posts.length} markdown files
 
@@ -577,7 +634,7 @@ const SURFACE_MANIFEST = {
   posts: 'data/posts.json', wallpapers: 'data/wallpapers.json',
   barrel: 'data/barrel.json', friends: 'data/friends.json',
   library: 'data/library.json', audio: 'data/audio.json',
-  cards: 'data/cards.json',
+  audioSets: 'data/audio-sets.json', cards: 'data/cards.json',
 };
 export function _vouchedEmptyManifests() {
   return Object.entries(SURFACE_MANIFEST)
@@ -618,7 +675,7 @@ export function importIntoSurface(surface, data) {
 }
 
 export function clearImported() {
-  ["buffer", "archive", "posts", "wallpapers", "barrel", "friends", "library", "audio", "cards"].forEach(surface => {
+  ["buffer", "archive", "posts", "wallpapers", "barrel", "friends", "library", "audio", "audioSets", "cards"].forEach(surface => {
     // Same dirty-entry protection as importIntoSurface: "clear imported data"
     // means "drop what main can give back", and main cannot give back an
     // unpublished local edit.
@@ -670,7 +727,7 @@ export function _resumeAfterReconnect() {
 // Summarize exactly what's about to hit main (per-surface staged counts + any
 // queued R2 cleanup) before the atomic commit fires. Returns false to abort.
 export function confirmPublish() {
-  const labels = { buffer: 'Buffer', archive: 'Archive', posts: 'Field Notes', wallpapers: 'Wallpapers', barrel: 'Barrel', friends: 'Network', audio: 'Audio' };
+  const labels = { buffer: 'Buffer', archive: 'Archive', posts: 'Field Notes', wallpapers: 'Wallpapers', barrel: 'Barrel', friends: 'Network', audio: 'Audio', audioSets: 'Audio sets', cards: 'Cards' };
   const lines = Object.entries(STATE.staged)
     .filter(([surface, n]) => surface !== 'library' && n > 0)
     .map(([surface, n]) => `  · ${labels[surface] || surface}: ${n} change${n !== 1 ? 's' : ''}`);
@@ -761,6 +818,7 @@ export async function syncFromServer() {
     { file: 'data/friends.json',    surface: 'friends' },
     { file: 'data/library.json',    surface: 'library' },
     { file: 'data/audio.json',      surface: 'audio' },
+    { file: 'data/audio-sets.json', surface: 'audioSets' },
     { file: 'data/cards.json',      surface: 'cards' },
   ];
 

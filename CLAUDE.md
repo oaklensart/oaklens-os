@@ -146,10 +146,10 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   (D1), `CDN` (R2) — the resource *names* behind them are instance config and
   live in `wrangler.jsonc`, never here. Daily cron `0 11 * * *`.
 - **Identity is edge-injected**, never hardcoded (see engine vs. instance).
-- **The console is eighteen layered modules.** `js/console-ui.js` is a thin
+- **The console is twenty layered modules.** `js/console-ui.js` is a thin
   barrel — `export *` from `js/console/*` in layer order — and holds no logic.
   A module may import only ones *below* it in that order; when lower code needs
-  something above, the thing above **registers** with it (four seams, all wired
+  something above, the thing above **registers** with it (six seams, all wired
   in `js/console/init.js`). `tests/console-modules.test.js` enforces the
   layering against the real imports — read it for the layer order.
 - **~2,000 tests** (`vitest`, Node env). CI runs `npm test` + a `wrangler deploy
@@ -218,10 +218,28 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   carrying it, and the episode's `<guid>` in `/podcast.xml` — so a published
   track retires to a `retired: true` tombstone that reserves the slug forever.
   Freeing it means the old link plays *different audio* and the new episode is
-  invisible to everyone already subscribed. ⚠️ Both tombstones need their **own
-  branch in `buildBundle()`**: the live whitelist drops the tombstone flag and
-  republishes the entry as live, pointing at media that was just deleted.
-  (manual §4.7, `tests/audio-retire.test.js`)
+  invisible to everyone already subscribed. **A saved audio set is the third**
+  (2026-09-10, manual §3.9.1): its slug is its address at `/listen/?set=<slug>`,
+  so a published set retires the same way — it owns no media, and the
+  reservation *is* the record. ⚠️ All three tombstones need their **own branch
+  in `buildBundle()`**: the live whitelist drops the tombstone flag and
+  republishes the entry as live, pointing at media that was just deleted — or,
+  for a set, at an address quietly freed for the next one to take.
+  (manual §4.7 / §4.7.1, `tests/audio-retire.test.js`)
+- **Cards — one renderer per kind, and the constants are fenced.** A homepage
+  card is a *kind* (`photo`, `text`, `audio`, `pulse`) wearing a *layout*; each
+  kind has exactly one renderer in `js/recent-index.js`. A composed card (the
+  owner's own, `data/cards.json`) is `kind + overrides` drawn by the kind's
+  renderer — never a second implementation of a kind's markup, and nothing may
+  branch on "is this composed" except to apply the overrides. `pickAutomatic`
+  is the automatic row and **does not change**: a site with no composed cards
+  publishes the same bytes it always did, pinned by fixtures
+  (`tests/card-engine.test.js`, `tests/cards-legacy-fixtures.test.js`) that are
+  **never regenerated to make a test pass**. `RAW_MAX`, `GRID_SIZE`,
+  `VISIBLE_PINS`, `AUDIO_MAX_PLAYLIST`, `COMPOSED_MAX` and slot order are
+  owner-decided and test-pinned. In the studio, reversibility is the three
+  layers above and nothing more: a picker whose `default` is always on screen
+  needs no undo chip.
 - **Publish is an all-or-nothing snapshot.** `buildBundle()` serializes *every*
   `data/*.json` from full in-memory state and commits atomically to GitHub. Two
   guards protect it: the **empty-overwrite guard** (refuses to blank a non-empty

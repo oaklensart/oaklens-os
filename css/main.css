@@ -814,10 +814,15 @@ html {
 }
 
 .wk-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 1px;
   background: var(--accent);
+  border: 1px solid var(--led-bezel, rgba(0, 0, 0, 0.9));
+  box-shadow:
+    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.55)),
+    0 0 6px rgba(var(--accent-rgb), 0.45);
 }
 
 .wk-t-title {
@@ -925,7 +930,12 @@ html {
    centred, --surface-2 shell resets to .wk-card's own ground and .wk-img
    supplies the 4:5 crop. Every value here is a theme token, so all five
    presets and both modes come out right without a colour being named. */
-.wk-text[data-layout="hero"] {
+/* `overlay` is the same shell reset for the same reason — it is the hero card
+   with its words moved onto the picture (js/recent-index.js: both layouts are
+   drawn by textHeroCard), so the typographic tile's padded --surface-2 shell has
+   to get out of the way in both. */
+.wk-text[data-layout="hero"],
+.wk-text[data-layout="overlay"] {
   padding: 0;
   gap: 0;
   background: var(--surface);
@@ -935,10 +945,261 @@ html {
 /* The one thing kept from the text tile: a note's title is prose where a
    frame's is a label, so it keeps the display face instead of taking
    .wk-title's uppercase meta voice — at caption scale under the picture. */
-.wk-text[data-layout="hero"] .wk-t-title {
+.wk-text[data-layout="hero"] .wk-t-title,
+.wk-text[data-layout="overlay"] .wk-t-title {
   font-size: 0.92rem;
   line-height: 1.16;
   letter-spacing: -0.005em;
+}
+
+/* ---- OVERLAY layout (data-layout="overlay") — writing ON a picture ----
+   docs/cards-core-complete.md chunk 3. The image ladder, v1: the same nodes the
+   picture-led card already draws, with the body moved inside the 4:5 well and
+   turned into a band.
+
+   THE DIVISION OF LABOUR. js/recent-index.js decides and stamps four
+   attributes; every colour, gradient, blur and position below is this
+   stylesheet's, and there is not one value here the engine knows about:
+
+     data-place   bottom | top | centre    — the author's choice, where it sits
+     data-treat   scrim  | blur | none     — the author's choice, what's under it
+     data-blur    1 | 2 | 3                — only under the blur treatment
+     data-ink     light | dark             — DERIVED from measured luminance
+
+   ⚠️ THE BAND'S GROUND FOLLOWS THE INK, NOT THE THEME — and that is a departure
+   from the brief, which asked for a scrim "derived from the theme ground (the
+   pulse recipe)". It cannot be: the pulse card's veil is right because a pulse
+   card IS the page's surface, deepened. This band sits on a PHOTOGRAPH, and its
+   only job is to make one specific piece of type readable against one specific
+   picture. A theme-derived veil would go pale in Daylight while the ink over it
+   stayed light — destroying the exact legibility the layout exists to
+   guarantee. So the veil is the OPPOSITE of the ink, always, in both themes and
+   all five presets, which is the same argument .wk-tag's fixed rgba() already
+   makes one rule up: over a photo, contrast is a luminance decision, not a
+   theme decision. No hex here either way — the polarity is one token pair. */
+.wk-card[data-layout="overlay"] {
+  /* Light ink is the default because unmeasured answers 'light' (overlayInk). */
+  --ov-ink: rgba(255, 255, 255, 0.97);
+  --ov-ink-2: rgba(255, 255, 255, 0.78);
+  --ov-veil: 0, 0, 0;
+  --ov-blur: 10px;
+}
+.wk-card[data-layout="overlay"][data-ink="dark"] {
+  --ov-ink: rgba(0, 0, 0, 0.94);
+  --ov-ink-2: rgba(0, 0, 0, 0.7);
+  --ov-veil: 255, 255, 255;
+}
+
+/* THE PICTURE IS THE CARD. With the words on it there is no footer, so the well
+   GROWS to the card's floor instead of holding 4:5 and leaving the card's own
+   ground showing beneath it as a bare strip — which is what the equal-height
+   grid row produced next to a taller neighbour (owner, 2026-09-11: "the footer
+   goes blank and is just a bare shape"). 4:5 is still the basis: the well never
+   gets shorter than the crop, it only fills what the row gives it, and
+   background-size: cover keeps the picture whole. The console restates this.
+
+   ⚠️ `width: 100%` IS LOAD-BEARING, and it is the whole fix for a bug the first
+   version shipped with (owner, 2026-09-12: the ARCHIVE / RAW chip "gets cut
+   off"). `aspect-ratio` and `flex-grow` on the same box disagree across engines
+   the moment the box actually grows: Chromium keeps the stretched width and
+   only the height grows, while WebKit lets the RATIO compute the width from the
+   new height — so a 560px card whose row stretched it to 788 got a 630px well.
+   The well is clipped by the card's `overflow: hidden`, so the visible damage
+   lands on whatever sits against its right edge: the chip (positioned `right:
+   8px` INSIDE the well) was pushed 70px out and read "AR"; the band and the
+   photograph's own crop went with it. An explicit width is definite in every
+   engine, and a box with a definite width and a definite height ignores the
+   ratio — so there is nothing left to disagree about. The composer's own well
+   rule has paired them this way since chunk 2 for the same reason. */
+.wk-card[data-layout="overlay"] .wk-img {
+  flex: 1 0 auto;
+  width: 100%;
+}
+
+/* The band. Absolute inside the picture well, full width, and NOT a flex row of
+   the card any more — so .wk-body's `flex: 1 1 auto` (which exists to absorb an
+   equal-height row's slack) must be neutralised or the band stretches to the
+   whole frame. */
+.wk-card[data-layout="overlay"] .wk-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  flex: 0 0 auto;
+  gap: 3px;
+  z-index: 1;
+}
+.wk-card[data-layout="overlay"][data-place="bottom"] .wk-body {
+  bottom: 0;
+  padding: 48px 16px 16px;
+}
+.wk-card[data-layout="overlay"][data-place="top"] .wk-body {
+  top: 0;
+  padding: 16px 16px 48px;
+}
+/* Mid-height is the one placement where left-aligned type reads as an accident
+   rather than a choice — nothing anchors it. So centre centres, and the plate's
+   rule (below) centres with it. */
+.wk-card[data-layout="overlay"][data-place="centre"] .wk-body {
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 22px 18px;
+  text-align: center;
+  align-items: center;
+}
+
+/* THE CHIP AND THE BAND CANNOT SHARE A CORNER. The kicker stays where the kind
+   puts it — top-right on the picture — and at `top` placement the band lands on
+   top of it: the chip was half-covered and reading "…URED". So at that one
+   placement the chip crosses to the empty end of the picture instead of being
+   clipped or dropped, which keeps the card's identity cue and costs a rule.
+   The z-index is the belt: at `centre` a tall band on a short card could reach
+   it, and a chip behind a scrim is the same defect in a different corner. */
+.wk-card[data-layout="overlay"] .wk-tag { z-index: 2; }
+.wk-card[data-layout="overlay"][data-place="top"] .wk-tag {
+  top: auto;
+  bottom: 8px;
+}
+
+/* SCRIM: the veil, fading away from the edge the band is anchored to, so the
+   picture is only darkened where the words actually are. The centre plate is
+   flat — a gradient with no edge to fade from is just a smudge. */
+.wk-card[data-layout="overlay"][data-treat="scrim"][data-place="bottom"] .wk-body {
+  background: linear-gradient(to top,
+    rgba(var(--ov-veil), 0.8) 0%, rgba(var(--ov-veil), 0.46) 52%, rgba(var(--ov-veil), 0) 100%);
+}
+.wk-card[data-layout="overlay"][data-treat="scrim"][data-place="top"] .wk-body {
+  background: linear-gradient(to bottom,
+    rgba(var(--ov-veil), 0.8) 0%, rgba(var(--ov-veil), 0.46) 52%, rgba(var(--ov-veil), 0) 100%);
+}
+.wk-card[data-layout="overlay"][data-treat="scrim"][data-place="centre"] .wk-body {
+  background: rgba(var(--ov-veil), 0.52);
+}
+
+/* BLUR: the picture itself is the ground, softened. A thin veil rides with it —
+   blur alone removes detail but not brightness, and mid-grey mush is the one
+   thing type cannot sit on. Strength is the author's, in three steps. */
+.wk-card[data-layout="overlay"][data-treat="blur"] .wk-body {
+  background: rgba(var(--ov-veil), 0.24);
+  backdrop-filter: blur(var(--ov-blur)) saturate(105%);
+  -webkit-backdrop-filter: blur(var(--ov-blur)) saturate(105%);
+}
+.wk-card[data-layout="overlay"][data-blur="1"] { --ov-blur: 5px; }
+.wk-card[data-layout="overlay"][data-blur="2"] { --ov-blur: 10px; }
+.wk-card[data-layout="overlay"][data-blur="3"] { --ov-blur: 18px; }
+
+/* No backdrop-filter (older Firefox, and any engine with it disabled) falls back
+   to the scrim rather than to bare type on a photograph. The degradation is a
+   different look, never an unreadable card. */
+@supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+  .wk-card[data-layout="overlay"][data-treat="blur"][data-place="bottom"] .wk-body {
+    background: linear-gradient(to top,
+      rgba(var(--ov-veil), 0.8) 0%, rgba(var(--ov-veil), 0.46) 52%, rgba(var(--ov-veil), 0) 100%);
+  }
+  .wk-card[data-layout="overlay"][data-treat="blur"][data-place="top"] .wk-body {
+    background: linear-gradient(to bottom,
+      rgba(var(--ov-veil), 0.8) 0%, rgba(var(--ov-veil), 0.46) 52%, rgba(var(--ov-veil), 0) 100%);
+  }
+  .wk-card[data-layout="overlay"][data-treat="blur"][data-place="centre"] .wk-body {
+    background: rgba(var(--ov-veil), 0.52);
+  }
+}
+
+/* NONE: the author has decided the picture can carry the words unaided. The ink
+   is still derived, and it still gets the one aid that costs the photograph
+   nothing — a shadow in the veil's polarity, which is what separates type from
+   a busy area without laying anything over the image. */
+.wk-card[data-layout="overlay"][data-treat="none"] .wk-body {
+  background: none;
+  text-shadow: 0 1px 3px rgba(var(--ov-veil), 0.55);
+}
+
+/* ---- THE PLATE: the band's type is a museum label, not a caption ----
+   (owner, 2026-09-11: "generic template, not inspiring — museum grade,
+   typographic scale, let the text be large in an intentional way.")
+
+   Both headline classes, because a frame's is .wk-title and a note's is
+   .wk-t-title — but on the band the kinds give up their footer voices and take
+   the plate's: the display face, SENTENCE CASE (the label's uppercase is a
+   caption-strip convention and shouts at this size), tight leading, negative
+   tracking that tightens as the size climbs. The size is the ladder the engine
+   stamps as data-scale from the title's length — the same move as the words
+   tile's data-tier: a two-word title is a statement, a forty-character one
+   steps down until its three lines fit. Nothing here measures anything. */
+.wk-card[data-layout="overlay"] .wk-title,
+.wk-card[data-layout="overlay"] .wk-t-title {
+  color: var(--ov-ink);
+  font-family: var(--font-display);
+  text-transform: none;
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  /* Three lines, not the footer's two — the band has the height, and the
+     ladder below is sized so the longest title lands inside them. */
+  -webkit-line-clamp: 3;
+}
+.wk-card[data-layout="overlay"][data-scale="statement"] .wk-title,
+.wk-card[data-layout="overlay"][data-scale="statement"] .wk-t-title {
+  font-size: clamp(2.4rem, 1.5rem + 3vw, 3.4rem);
+  line-height: 0.98;
+  letter-spacing: -0.035em;
+}
+.wk-card[data-layout="overlay"][data-scale="feature"] .wk-title,
+.wk-card[data-layout="overlay"][data-scale="feature"] .wk-t-title {
+  font-size: clamp(1.9rem, 1.2rem + 2.2vw, 2.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+.wk-card[data-layout="overlay"][data-scale="standard"] .wk-title,
+.wk-card[data-layout="overlay"][data-scale="standard"] .wk-t-title {
+  font-size: 1.5rem;
+}
+.wk-card[data-layout="overlay"][data-scale="compact"] .wk-title,
+.wk-card[data-layout="overlay"][data-scale="compact"] .wk-t-title {
+  font-size: 1.18rem;
+  line-height: 1.14;
+  letter-spacing: -0.015em;
+}
+
+/* The full stop, in the accent. The one flourish the plate carries: the title
+   closes on the site's own colour, the way the words tile opens on it with the
+   drop cap. Stamped as data-mark only where the author did not already end the
+   line (js/recent-index.js overlayMark) — a second full stop is a typo. Drawn
+   by the stylesheet so it is never in the card's text: a screen reader, a
+   share sheet and the address bar all read the title as typed. */
+.wk-card[data-layout="overlay"][data-mark="dot"] .wk-title::after,
+.wk-card[data-layout="overlay"][data-mark="dot"] .wk-t-title::after {
+  content: '.';
+  color: var(--accent);
+}
+
+/* The caption becomes the plate's second line: the meta face, small, tracked,
+   uppercase, set off from the headline by a short RULE in the accent — the
+   same 2px the kicker's LED is, and the detail that makes a label read as
+   set rather than typed. It wraps: there is no footer below it to protect,
+   and a line clipped mid-word over a photograph looks like a bug, not a
+   bound. */
+.wk-card[data-layout="overlay"] .wk-meta {
+  color: var(--ov-ink-2);
+  white-space: normal;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  margin-top: 6px;
+}
+.wk-card[data-layout="overlay"] .wk-meta::before {
+  content: '';
+  display: block;
+  width: 22px;
+  height: 2px;
+  margin-bottom: 9px;
+  background: var(--accent);
+}
+.wk-card[data-layout="overlay"][data-place="centre"] .wk-meta::before {
+  margin-left: auto;
+  margin-right: auto;
 }
 
 @media (max-width: 900px) {
@@ -1238,6 +1499,24 @@ html {
   .wk-a-share:hover { color: var(--accent); }
 }
 .wk-a-share:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* ---- the author's caption on a COMPOSED audio card (chunk 5) ----
+   A composed audio card can carry two lines of the owner's own, and they use
+   the picture card's caption grammar — .wk-title / .wk-meta — because that is
+   what they ARE. §2.2 of docs/cards-core-complete.md: words on an audio card
+   are a caption, never a statement, so nothing here reaches for the display
+   face, the drop cap or the tier ladder. The waveform is the hero.
+
+   .wk-body arrives carrying the PICTURE card's rules — its own padding, and
+   `flex: 1 1 auto` to fill a stretched tile — and both are wrong inside a card
+   that already has 16px of padding and centres its own column: the padding
+   double-indents the caption and the flex pushes the transport upward. The
+   audio card resets them here rather than the shared rule growing a branch. */
+.wk-audio .wk-body {
+  padding: 0;
+  flex: 0 0 auto;
+  gap: 3px;
+}
 
 /* Playlist variation on single card — lean ultra-lux typographic layout.
    Background is inherited from .wk-audio above; it does NOT get its own.
@@ -3257,8 +3536,20 @@ html {
 .wk-pulse[data-state="velvet"], .wk-composed[data-state="velvet"] { --pulse-rgb: 138, 104, 214; }
 .wk-pulse[data-state="tide"],   .wk-composed[data-state="tide"]   { --pulse-rgb: 58, 134, 176; }
 .wk-composed[data-state="signal"] { --pulse-rgb: var(--accent-rgb); }
+.wk-composed[data-state]:not([data-state="default"]) .wk-dot {
+  background: rgb(var(--pulse-rgb));
+  box-shadow:
+    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.55)),
+    0 0 6px rgba(var(--pulse-rgb), 0.55);
+}
 
-.wk-composed[data-shape="picture"][data-state]:not([data-state="default"]) .wk-body {
+/* ⚠️ NOT on an overlay card. A palette tints a card's GROUND, and an overlay
+   card has none — the 4:5 picture IS the whole card, and the body is a band on
+   top of it. Washing that band in the palette hue would fight the treatment
+   underneath it and the derived ink over it, both of which exist to guarantee
+   one thing this gradient knows nothing about: that the words can be read. The
+   tinted border still carries the palette. */
+.wk-composed[data-shape="picture"][data-state]:not([data-state="default"]):not([data-layout="overlay"]) .wk-body {
   background: linear-gradient(180deg, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.12) 0%, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.04) 100%);
 }
 .wk-composed[data-shape="picture"][data-state]:not([data-state="default"]) {

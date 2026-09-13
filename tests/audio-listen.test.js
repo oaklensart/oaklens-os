@@ -43,12 +43,19 @@ const TRACKS = [
   { id: '3', slug: 'room-tone', filename: 'room-tone.wav', title: 'Room Tone', added_at: '2026-08-01' },
 ];
 
-// Serves data/audio.json out of ASSETS the way the real edge loader reads it.
-const envWith = (tracks) => ({
+// Serves data/audio.json — and, when given, data/audio-sets.json — out of
+// ASSETS the way the real edge loader reads it. Sets are OPTIONAL by default:
+// omitting them is a fork that has never made one, and every track assertion
+// below has to keep passing through that 404.
+const envWith = (tracks, sets) => ({
   ASSETS: {
     async fetch(req) {
-      if (new URL(req.url).pathname === '/data/audio.json') {
+      const p = new URL(req.url).pathname;
+      if (p === '/data/audio.json') {
         return new Response(JSON.stringify(tracks), { status: 200 });
+      }
+      if (p === '/data/audio-sets.json' && sets) {
+        return new Response(JSON.stringify(sets), { status: 200 });
       }
       return new Response('not found', { status: 404 });
     },
@@ -163,5 +170,120 @@ describe('sitemap — /listen earns its listing from the data', () => {
     const res = await sitemap(env);
     expect(res.status).toBe(200);
     expect(await res.text()).not.toContain('/listen');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// /listen/?set= — a saved set is a third view out of the same page.
+//
+// Same argument as ?a=: the body renders client-side, so if the edge did not
+// resolve ?set= into real og: tags, every shared set would unfurl as the bare
+// site. The extra care here is that a set has no media of its own — what it
+// advertises has to be counted the way the page counts it, or the unfurl
+// promises tracks the page will not play.
+
+const SETS = [
+  { id: 's1', slug: 'late-mix', name: 'Late mix', tracks: ['take-one', 'ep-004'], added_at: '2026-09-10' },
+  { id: 's2', slug: 'empty-mix', name: 'Empty mix', tracks: [], added_at: '2026-09-10' },
+  { id: 's3', slug: 'gone-mix', slugOnly: true, retired: true, retired_at: '2026-09-10T00:00:00.000Z' },
+];
+
+describe('setSlugFromSearch / findSet — a share link resolves to one set', () => {
+  const { setSlugFromSearch, findSet } = globalThis.PageListen;
+
+  it.each([
+    ['?set=late-mix', 'late-mix'],
+    ['?a=take-one&set=late-mix', 'late-mix'],
+    ['?set=a%20b', 'a b'],
+    ['?a=take-one', ''],
+    ['', ''],
+  ])('%s → %s', (search, expected) => {
+    expect(setSlugFromSearch(search)).toBe(expected);
+  });
+
+  it('never confuses the two parameters', () => {
+    expect(setSlugFromSearch('?a=late-mix')).toBe('');
+    expect(globalThis.PageListen.slugFromSearch('?set=take-one')).toBe('');
+  });
+
+  it('refuses a retired set — a reserved address with nothing behind it', () => {
+    expect(findSet(SETS, 'gone-mix')).toBeNull();
+    expect(findSet(SETS, 'late-mix')).toMatchObject({ name: 'Late mix' });
+    expect(findSet(SETS, 'nope')).toBeNull();
+  });
+});
+
+describe('edge OG — a shared set unfurls as itself', () => {
+  const url = (search) => new URL(`https://example.com/listen/${search}`);
+
+  it('resolves the set’s name and how many tracks it actually plays', async () => {
+    const og = await getAudioOgData(url('?set=late-mix'), envWith(TRACKS, SETS));
+    expect(og.title).toContain('Late mix');
+    expect(og.description).toBe('2 tracks');
+    expect(og.ogUrl).toBe('https://example.com/listen/?set=late-mix');
+  });
+
+  it('counts only tracks that still play — a retired one is not advertised', async () => {
+    const thinned = [TRACKS[0], { id: '2', slug: 'ep-004', retired: true }];
+    const og = await getAudioOgData(url('?set=late-mix'), envWith(thinned, SETS));
+    expect(og.description).toBe('1 track');
+  });
+
+  it('falls back to the index for an empty set, a retired one, and an unknown one', async () => {
+    const env = envWith(TRACKS, SETS);
+    for (const s of ['empty-mix', 'gone-mix', 'never-existed']) {
+      const og = await getAudioOgData(url(`?set=${s}`), env);
+      expect(og.ogUrl, s).toBe('https://example.com/listen');
+    }
+  });
+
+  it('carries no image until something stamps one', async () => {
+    const og = await getAudioOgData(url('?set=late-mix'), envWith(TRACKS, SETS));
+    expect(og.image).toBeNull();
+  });
+
+  it('keys its stamp apart from a track’s, so a shared slug cannot collide', async () => {
+    const asked = [];
+    const env = {
+      ...envWith(TRACKS, [{ id: 's9', slug: 'take-one', name: 'Same name', tracks: ['take-one'] }]),
+      CDN: { async head(key) { asked.push(key); return null; } },
+    };
+    await getAudioOgData(url('?set=take-one'), env);
+    await getAudioOgData(url('?a=take-one'), env);
+    expect(asked).toEqual(['meta/set-take-one-og.webp', 'meta/audio-take-one-og.webp']);
+  });
+
+  it('a missing sets file leaves every track view working (an un-seeded fork)', async () => {
+    const og = await getAudioOgData(url('?a=take-one'), envWith(TRACKS));
+    expect(og.title).toContain('Take One');
+    expect((await getAudioOgData(url('?set=late-mix'), envWith(TRACKS))).ogUrl)
+      .toBe('https://example.com/listen');
+  });
+});
+
+describe('sitemap — a set earns its listing the same way /listen does', () => {
+  const sitemap = (env) => worker.fetch(new Request('https://example.com/sitemap.xml'), env, { waitUntil() {} });
+
+  it('lists a set that plays something', async () => {
+    const res = await sitemap(envWith(TRACKS, SETS));
+    expect(await res.text()).toContain('<loc>https://example.com/listen/?set=late-mix</loc>');
+  });
+
+  it('omits an empty set and a retired one — thin content and a dead address', async () => {
+    const xml = await (await sitemap(envWith(TRACKS, SETS))).text();
+    expect(xml).not.toContain('empty-mix');
+    expect(xml).not.toContain('gone-mix');
+  });
+
+  it('omits a set whose every track has been retired', async () => {
+    const thinned = [{ id: '1', slug: 'take-one', retired: true }, { id: '2', slug: 'ep-004', retired: true }];
+    const xml = await (await sitemap(envWith(thinned, SETS))).text();
+    expect(xml).not.toContain('late-mix');
+  });
+
+  it('still lists /listen on a fork with no sets file at all', async () => {
+    const xml = await (await sitemap(envWith(TRACKS))).text();
+    expect(xml).toContain('<loc>https://example.com/listen</loc>');
+    expect(xml).not.toContain('?set=');
   });
 });

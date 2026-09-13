@@ -196,16 +196,27 @@ export function bufferPromote(id) {
   toast("✓ promoted to archive — fill in metadata", "success");
 }
 
-// Basenames of frames that already have a live OG card on R2
-// (meta/<base>-og.webp) — renderBuffer draws the ▣ badge from this. Owned here
-// because the renderer is the consumer; the producers sit ABOVE this module
-// (loadOgCards fetches the index, the focal modal's card publish adds one) and
-// write through the setters, because an imported binding cannot be assigned.
+// Which cards already have a live share stamp on R2 — the MARKER, which is the
+// R2 key with `meta/` and `-og.webp` taken off it. renderBuffer draws the ▣
+// badge from this. Owned here because the renderer is the consumer; the
+// producers sit ABOVE this module (loadOgCards fetches the index, the focal
+// modal and the share block add one) and write through the setters, because an
+// imported binding cannot be assigned.
 // The extraction guard caught this one as a ReferenceError in the suite — the
 // same dangling-const class as CDN_BASE, stopped by the test this time.
+//
+// ⚠️ NOT ONLY FRAMES SINCE CHUNK 8. A frame's marker is its image basename, but
+// /api/og-cards lists every stem under `meta/` — so the set also holds
+// `fn-<slug>`, `audio-<slug>`, `set-<slug>` and `card-<id>`. The buffer looks up
+// bare basenames and simply never asks about those, which is why one set can
+// serve both readers.
 let OG_CARD_SET = new Set();
 export function _setOgCardSet(bases) { OG_CARD_SET = new Set(bases); }
 export function _addOgCard(base) { OG_CARD_SET.add(base); }
+// The reader, for js/console/share.js — the share block says "stamped" or "not
+// stamped yet" off the same set the buffer's badge reads, so the two can never
+// disagree about what is on R2.
+export function _hasOgCard(base) { return OG_CARD_SET.has(base); }
 
 export function renderBuffer() {
   const display = document.getElementById("buffer-display");

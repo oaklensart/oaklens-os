@@ -88,7 +88,23 @@ const PLAN = [
     'FN// MARKDOWN', 'FN// v0.7 ENHANCEMENTS', 'FN// PORTRAIT PANES (WRITE / PREVIEW)',
     'PHASE 4: FRAME BROWSER', 'PHASE 4: BUFFER DATES PICKER', 'CLOUD DRAFTS (D1-backed)',
   ]],
+  // The card painter (chunk 7). Like `cards`, it has no callgraph sections —
+  // it was written as a module — and it is a leaf: assets for the wordmark,
+  // and the card engine through the window bridge, which imposes no import
+  // edge. It sits BELOW focal because focal's card mode is now one of its
+  // callers, and below `cards` for the same reason chunk 8's share block will
+  // be.
+  ['card-paint', []],
   ['focal', ['FOCAL POINT PICKER']],
+  // The share block (chunk 8) — the four gestures over one card, and the only
+  // thing that ever asks the painter for a `native` or a `story`. Written as a
+  // module, so no callgraph sections. It sits ABOVE card-paint (it paints),
+  // above buffer (it writes the stamped marker into the set the buffer's badge
+  // reads) and above fn-editor (it reads the open note, which cannot hand a
+  // target upward — hence the _registerFnShare seam); BELOW audio and cards,
+  // which build their own targets and hand them over, the same shape focal's
+  // per-surface entry points have.
+  ['share', []],
   ['asset-library', ['ASSET LIBRARY']],
   // Above fn-editor because attaching a track from the editor inserts its
   // shortcode (fnInsertAtCursor) — same direction asset-library already runs.

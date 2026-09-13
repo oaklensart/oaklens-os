@@ -2,8 +2,9 @@
 //
 // The composition root, and the only module that knows every other one. It
 // exists so nothing else has to: registerSurfaces() hands chrome its view
-// renderers, its leave-cleanups and its long-press menus, and hands sync the
-// upload probe — the four seams, all wired in one place. init() then boots
+// renderers, its leave-cleanups and its long-press menus, hands sync the upload
+// probe, and hands the FN menu and the share block each other — the six seams,
+// all wired in one place. init() then boots
 // state, chrome, dropzones, the resume-sync listeners and the service worker,
 // and registers itself on DOMContentLoaded.
 //
@@ -23,9 +24,11 @@ import { _libraryUploadsPending } from './upload.js';
 import { renderWall, renderBarrel, renderNetwork, renderLibrary, wallIngest, libraryIngest } from './more-views.js';
 import { renderArchive, archiveIngestPhoto, archiveUpdatePreview, restoreGearMemory, setGearRemember } from './archive.js';
 import { renderBuffer, bufferIngest, bufferPromote, bufferRemove, burstLinkMode, burstToggleFrame, enterBurstLinkMode, exitBurstLinkMode } from './buffer.js';
-import { renderFN, fnHeroIngest, fnHeroClear, fnSetupEnhancements, fnCloseDrawer } from './fn-editor.js';
+import { renderFN, fnHeroIngest, fnHeroClear, fnSetupEnhancements, fnCloseDrawer, _registerFnShare } from './fn-editor.js';
 import { FocalModal, bufferFocal, loadOgCards } from './focal.js';
 import { closeAssetLibrary } from './asset-library.js';
+import { registerShareRepaint, shareNote, shareCloseSheet } from './share.js';
+import { cardsRepaint } from './cards.js';
 import { renderAudio, audioAddFiles } from './audio.js';
 import { _pulseCloseLog, _pulseCloseTray } from './pulse.js';
 import { renderPublish, syncFromServer } from './publish.js';
@@ -65,6 +68,13 @@ export function registerSurfaces() {
   // are in flight, and the queue lives above it — hand sync the probe here,
   // where both sides are visible, like every other registration below.
   _registerLibraryUploadProbe(_libraryUploadsPending);
+
+  // Fifth and sixth seams, both about the share block (chunk 8). The FN editor's
+  // ⋯ menu offers "Share this note" but sits four layers below the painter, so
+  // it gets the action registered rather than imported; and a stamp finishes
+  // inside share.js, which cannot repaint the studio rail that drew the button.
+  _registerFnShare(shareNote);
+  registerShareRepaint(cardsRepaint);
 
   registerView("buffer", {
     render: renderBuffer,
@@ -133,6 +143,7 @@ export function init() {
   _wireSheetDrag("more-sheet", closeMoreSheet);
   _wireSheetDrag("pulse-log-sheet", _pulseCloseLog);
   _wireSheetDrag("fn-drawer", fnCloseDrawer);
+  _wireSheetDrag("share-sheet", shareCloseSheet);
 
   let _lastFocusSync = 0;
   checkAuth();

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title data-site-title>Card</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preload" as="font" type="font/woff2" href="/fonts/syne-latin-var.woff2" crossorigin data-font-preload>
+<script>
+/* Pre-paint mode resolution: visitor override -> config default -> OS.
+   Runs before the stylesheet so there is no flash of the wrong mode. The
+   worker stamps data-theme-default on <html> and HTMLRewriter streams the
+   document top-down, so the attribute is present by the time this runs. */
+(function () {
+  var d = document.documentElement, s = null;
+  try { s = localStorage.getItem('ol-theme'); } catch (e) {}
+  var def = d.getAttribute('data-theme-default') || 'midnight';
+  var light = s ? s === 'light'
+    : def === 'auto' ? matchMedia('(prefers-color-scheme: light)').matches
+    : def === 'daylight';
+  if (light) d.setAttribute('data-theme', 'light');
+})();
+</script>
+<!-- ROOT-RELATIVE, unlike every other page's `../css/main.css`. This is the
+     only page whose served path VARIES in depth — /card/<id> and /card/<id>/
+     are the same address — so a document-relative href is correct for exactly
+     one of them and resolves to /card/css/main.css for the other. Root-relative
+     is right for both, and the exporter rewrites it for file:// the way it
+     already does for 404.html. -->
+<link rel="stylesheet" href="/css/main.css?v=40">
+<script src="/js/mode-toggle.js?v=1" defer></script>
+<link rel="sitemap" type="application/xml" href="/sitemap.xml">
+<!-- No static og:/twitter: block here on purpose, same reasoning as /listen:
+     the worker resolves the card from the path and injects exactly one block
+     (see getCardOgData). A static set would duplicate og:title, and crawlers
+     take the first tag they find. -->
+<style>
+/* ============================================
+   CARD — one composed card at its own address
+   The share target for a card the owner composed. The card itself is drawn by
+   js/recent-index.js, exactly as the homepage draws it — this file only lays
+   out the page around it, at the card's native 4:5 and nothing else.
+   ============================================ */
+
+.cardp-wrap {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 64px 26px 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* The card at its native proportion. The homepage sizes it by grid column;
+   here there is no grid, so the width is capped and centred and the 4:5 comes
+   from .wk-img as it does everywhere else. */
+.cardp-card {
+  width: 100%;
+  max-width: 380px;
+}
+
+/* A card on the homepage sits in a row of three and is read at a glance. On
+   its own page it is the whole point, so the pointer affordance only makes
+   sense when it actually goes somewhere. */
+.cardp-card .wk-card:not(a) {
+  cursor: default;
+}
+
+/* The link-through, when the card has one. Below the card rather than on it:
+   the card may already be an anchor, and a second target inside the first is
+   a trap on touch. */
+.cardp-through {
+  margin-top: 22px;
+  font-family: var(--font-meta);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 3px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.cardp-through:hover {
+  color: var(--fg-strong);
+  border-color: var(--accent);
+}
+
+/* Nothing at this address. Not an error page — a card that was never composed,
+   or a link typed wrong. Says so plainly and points home. */
+.cardp-empty {
+  font-family: var(--font-meta);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  text-align: center;
+  padding: 60px 0;
+  line-height: 1.9;
+}
+.cardp-empty a {
+  color: var(--accent-text);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 640px) {
+  .cardp-wrap { padding: 40px 20px 110px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="nav">
+  <a href="/" class="nav-logo" data-site-wordmark="dot-art">SITE<span class="dot-art">.NAME</span></a>
+  <div class="nav-links">
+    <a href="/" class="nav-link">Home</a>
+    <a href="/archive" class="nav-link">theArchive</a>
+    <a href="/field-notes" class="nav-link">FN//Blog</a>
+    <a href="/wall" class="nav-link">theWall</a>
+    <a href="/about" class="nav-link">About</a>
+    <a href="/dev" class="nav-link terminal">&gt;Dev</a>
+    <a href="mailto:you@example.com" class="nav-mail" title="Contact">&#9993;</a>
+  </div>
+  <button class="nav-hamburger" id="nav-toggle" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<div class="nav-mobile" id="nav-mobile">
+  <a href="/">Home</a>
+  <a href="/archive">theArchive</a>
+  <a href="/field-notes">FN//Blog</a>
+  <a href="/wall">theWall</a>
+  <a href="/about">About</a>
+  <a href="/dev">&gt;Dev</a>
+  <a href="mailto:you@example.com">&#9993; Contact</a>
+</div>
+
+<!-- ============ CONTENT ============ -->
+<!-- Rendered by js/page-card.js from data/cards.json, through the homepage's
+     own buildCard — one renderer per kind, here too. -->
+<main class="cardp-wrap" id="card-page"></main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div class="footer-left"><span data-site-wordmark="accent">SITE<span class="accent">.NAME</span></span> · <span data-site-location>YOUR CITY</span> · <span class="wx-telemetry"><span class="wx-label">WX</span> <span class="wx-sep">//</span> <span class="wx-data" id="wx-temp">--°</span></span> · <a href="/archive/manifest.html" class="footer-manifest">MANIFEST</a></div>
+  <div class="footer-right">WE OBSERVE. WE DO NOT CONSUME.</div>
+</footer>
+
+<script src="/js/site-common.js?v=2"></script>
+<!-- Loaded before recent-index so an audio card can build its player, exactly
+     as the homepage loads them (index.html) — both are classic scripts and
+     order is the only thing wiring them together. -->
+<script src="/js/audio-player.js?v=9" defer></script>
+<script src="/js/recent-index.js?v=31" defer></script>
+<script src="/js/page-card.js?v=3" defer></script>
+
+</body>
+</html>

@@ -735,11 +735,19 @@ export function fnToggleMenu(force) {
   document.getElementById("fn-menu-btn")?.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
+// FIFTH SEAM. Sharing a note means painting its card, and the painter lives
+// several layers up — so the ⋯ menu keeps its one handler and the thing above
+// registers with it, the same way sync gets its upload probe. Wired in
+// js/console/init.js; unset, the menu item simply is not offered.
+let _shareNote = null;
+export function _registerFnShare(fn) { _shareNote = fn; }
+
 export function fnMenuRun(action) {
   fnToggleMenu(false);
   if (action === "focus") fnToggleFocus();
   else if (action === "realpreview") fnPreview();
   else if (action === "tabbar") toggleFnBar();
+  else if (action === "share") _shareNote?.();
   else if (action === "delete") fnDeletePost();
 }
 

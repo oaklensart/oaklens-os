@@ -1,7 +1,7 @@
 // OAKLENS // FIELD CONSOLE — the barrel.
 //
 // This file used to be the console: ~5,600 lines of every surface, modal and
-// handler. It is now the seam between the console's eighteen modules and the
+// handler. It is now the seam between the console's twenty modules and the
 // page that loads them, and holds no logic of its own.
 //
 // Two jobs:
@@ -54,8 +54,12 @@ export * from './console/archive.js';
 export * from './console/buffer.js';
 // the Field Notes editor, cloud drafts, pickers, frame browser
 export * from './console/fn-editor.js';
+// the share painter: one renderer for every card, at three ratios
+export * from './console/card-paint.js';
 // the framing modal, per-surface focal entry points, OG cards
 export * from './console/focal.js';
+// the share block: copy the link, stamp three ratios, download two
+export * from './console/share.js';
 // the media picker + per-surface selection callbacks
 export * from './console/asset-library.js';
 // the audio shelf: one registry, waveform measured at attach, promote-to-card
