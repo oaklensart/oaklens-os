@@ -2,7 +2,7 @@
 id: fn-sample
 title: Learning to See Again
 location: Sample City
-date: 2026-01-01
+date: 2026-01-03
 hero: sample-03.webp
 ---
 

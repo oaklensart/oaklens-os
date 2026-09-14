@@ -2010,6 +2010,20 @@ export function _cardRetire(id) {
     + `↩ UNDO RETIRE puts it back until you leave this tab.`
   )) return;
 
+  _lastCardRemoval = { retired: [_retireInPlace(card)] };
+  _recompact();
+  save();
+  toast('◼ retired — the address stays reserved', 'success');
+  _focusComposed(null);
+  _repaint();
+}
+
+// The retire MECHANICS, without the confirm, the toast or the repaint: swap the
+// card for its tombstone and stage the deletion. Pulled out so ⌫ ALL SLOTS
+// AUTOMATIC below retires by exactly this path instead of a second copy of it —
+// a tombstone written two ways is how an address quietly stops being reserved.
+function _retireInPlace(card) {
+  const named = (card.title || '').trim();
   const ledgerRow = ledgerRowFor('cards', card.id);
   const tombstone = {
     id: card.id,
@@ -2020,29 +2034,33 @@ export function _cardRetire(id) {
   if (card._imported) tombstone._imported = true;
   const index = _cards().indexOf(card);
   _cards()[index] = tombstone;
-
-  _lastCardRetire = { id: card.id, card, index, ledgerRow };
   stageChange('cards', {
     id: card.id,
     label: `${named || 'Untitled card'} — homepage card retired`,
     kind: 'remove',
   });
-  _recompact();
-  save();
-  toast('◼ retired — the address stays reserved', 'success');
-  _focusComposed(null);
-  _repaint();
+  return { id: card.id, card, index, ledgerRow };
 }
 
-let _lastCardRetire = null;
+// ONE GESTURE, not a history (vision §2.4, layer 2). The record holds what the
+// LAST removing gesture retired — one card from ◼ RETIRE, or up to COMPOSED_MAX
+// from ⌫ ALL SLOTS AUTOMATIC. It is still one chip either way: pressing it
+// reverses that one gesture whole, and there is nothing behind it.
+let _lastCardRemoval = null;
 
 // Resolved against state as it is NOW, never against the memory — the chip must
 // not be able to name a card that has since come back by another route (vision
 // §2.4, layer 2: one chip, not a history).
 export function _cardRetireUndoTarget() {
-  if (!_lastCardRetire) return null;
-  const current = _cardById(_lastCardRetire.id);
-  if (!current || !current.retired) return null;
+  const entries = (_lastCardRemoval && _lastCardRemoval.retired) || [];
+  if (!entries.length) return null;
+  // EVERY card the gesture retired has to still be retired. A partial restore
+  // would be a history rather than a reversal, and the chip would be telling
+  // the truth about only some of what it offers to undo.
+  if (entries.some((e) => {
+    const current = _cardById(e.id);
+    return !current || !current.retired;
+  })) return null;
   // ...and there has to be somewhere to put it back. Retiring frees a place, so
   // the owner can compose into it before undoing — and restoring on top of that
   // would put a third card in a two-card budget, where the third is invisible
@@ -2050,21 +2068,87 @@ export function _cardRetireUndoTarget() {
   // is resolved against state AS IT IS NOW precisely so it can be withdrawn
   // rather than become a button that has to refuse; _repinTarget takes the same
   // posture for the same reason.
-  if (_composedCards().length >= COMPOSED_MAX) return null;
-  return _lastCardRetire;
+  if (_composedCards().length + entries.length > COMPOSED_MAX) return null;
+  return _lastCardRemoval;
 }
 
 export function _cardUndoRetire() {
   const target = _cardRetireUndoTarget();
   if (!target) return;
-  const i = _cards().findIndex((c) => c && c.id === target.id);
-  if (i < 0) return;
-  _cards()[i] = target.card;
-  unstageChange('cards', target.id, target.ledgerRow);
-  _lastCardRetire = null;
+  for (const e of target.retired) {
+    const i = _cards().findIndex((c) => c && c.id === e.id);
+    if (i < 0) continue;
+    _cards()[i] = e.card;
+    unstageChange('cards', e.id, e.ledgerRow);
+  }
+  const n = target.retired.length;
+  _lastCardRemoval = null;
   _recompact();
   save();
-  toast('✓ Retire undone — the card is back', 'success');
+  toast(`✓ Retire undone — the card${n === 1 ? ' is' : 's are'} back`, 'success');
+  _repaint();
+}
+
+// ---- ⌫ ALL SLOTS AUTOMATIC — one gesture back to the default layer ----
+//
+// Owner report 2026-09-13. Having pulled composed cards off the homepage one at
+// a time, there was no way to be SURE the grid was automatic again — and it was
+// not: a card composed later the same day was still holding slot 1, and the
+// owner read the grid as the automatic row and reported the automatic row as
+// broken. Per-slot ↩ RESET TO AUTOMATIC is the right control for "not this
+// card". It is the wrong one for "the campaign is over, give the homepage
+// back", which is a different intention and had no control at all.
+//
+// It routes each card through the SAME decision the per-slot control makes —
+// published retires to a tombstone (the address stays reserved forever), staged
+// goes to the session trash — because a card that skipped its tombstone here
+// would free an address that a published link still points at.
+//
+// Reversibility, all three layers and no new machinery (vision §2.4): the
+// confirm names every card by title before anything moves (a bulk clear with no
+// confirm is the violation the rule names outright); the retired ones come back
+// on the one ↩ UNDO RETIRE chip, which now reverses the gesture whole; the
+// staged ones come back on ↩ RESTORE in the publish view; and nothing was live
+// in the first place until you publish.
+export function cardsResetAllToAuto() {
+  const live = _composedCards();
+  if (!live.length) return;
+  const published = live.filter((c) => c._imported);
+  const staged = live.filter((c) => !c._imported);
+  const one = (n, a, b) => (n === 1 ? a : b);
+  const names = live
+    .map((c) => `  · ${(c.title || '').trim() || 'Untitled card'}`)
+    .join('\n');
+
+  if (!confirm(
+    `Hand the whole homepage back to automatic?\n\n`
+    + `${live.length} composed card${one(live.length, '', 's')} come${one(live.length, 's', '')} off the grid:\n${names}\n\n`
+    + (published.length
+      ? `${published.length} ${one(published.length, 'is', 'are')} published, so `
+        + `${one(published.length, 'its address stays', 'their addresses stay')} reserved forever — `
+        + `an old link can never quietly show a different card. `
+        + `↩ UNDO RETIRE puts ${one(published.length, 'it', 'them')} back until you leave this tab.\n\n`
+      : '')
+    + (staged.length
+      ? `${staged.length} ${one(staged.length, 'was', 'were')} never published, so `
+        + `${one(staged.length, 'it goes', 'they go')} to the session trash — `
+        + `↩ RESTORE in the publish view brings ${one(staged.length, 'it', 'them')} back.\n\n`
+      : '')
+    + `Every slot goes back to filling itself from what you publish. The photos, notes and `
+    + `tracks the cards were built from are untouched, and nothing is live until you publish.`
+  )) return;
+
+  const retired = published.map((c) => _retireInPlace(c));
+  for (const c of staged) trashItem('cards', c.id);
+
+  // Only the retired half is chip-reversible; the trashed half lives in the
+  // publish view's trash. Leaving the record null when nothing retired keeps the
+  // chip from appearing over a gesture it cannot actually undo.
+  _lastCardRemoval = retired.length ? { retired } : null;
+  _recompact();
+  save();
+  toast(`✓ Homepage back to automatic — ${live.length} card${one(live.length, '', 's')} off the grid`, 'success');
+  _focusComposed(null);
   _repaint();
 }
 
@@ -3036,6 +3120,43 @@ function reuseShelfHtml() {
   </footer>`;
 }
 
+// ---- the danger zone ----
+//
+// The bulk reset's home, in the SETTINGS view's own grammar (.danger-zone /
+// -title / -row / -hint) rather than a fourth vocabulary invented here: a
+// console with two ways to say "this one is serious" has neither.
+//
+// Deliberately at the foot of the view and deliberately not in the head. The
+// head carries ＋ COMPOSE A CARD, and a control that empties the grid does not
+// belong a thumb's width from the one that fills it. It is also derived, not
+// decorative: no composed cards means no footer, so the studio of someone who
+// never composed one never grows a red button explaining what they could undo.
+//
+// Hidden while composing — nothing about "hand the whole homepage back" is a
+// sentence you want mid-edit, and the card on the stage would vanish under the
+// cursor.
+function dangerZoneHtml() {
+  if (_composing) return '';
+  const live = _composedCards();
+  if (!live.length) return '';
+  const n = live.length;
+  // The title rides INSIDE the row, not above it. Same words and the same
+  // grammar as the Settings view's block, one row instead of two — this view is
+  // bounded and every row it spends comes off the cards (css: .cards-danger).
+  return `<footer class="cards-danger danger-zone" aria-label="Danger zone">
+    <div class="danger-zone-row">
+      <span class="danger-zone-title">DANGER ZONE_</span>
+      <button class="btn btn-sm btn-danger" onclick="cardsResetAllToAuto()"
+        title="Take every composed card off the homepage and let the grid fill itself again">
+        ⌫ ALL SLOTS AUTOMATIC</button>
+      <span class="danger-zone-hint">
+        ${n} composed card${n === 1 ? '' : 's'} ${n === 1 ? 'is' : 'are'} holding a slot.
+        Hand the homepage back to what you publish — the work they were built from is untouched.
+      </span>
+    </div>
+  </footer>`;
+}
+
 // The degraded state that must never be a throw: recent-index.js is a separate
 // <script> tag, and a stale service-worker copy or a blocked request means the
 // engine simply is not there. Say so plainly — the console is still fully
@@ -3165,7 +3286,8 @@ function _paint(host, live) {
     ${warn ? `<div class="cards-warn">${escapeHTML(warn)}</div>` : ''}
     <div class="cards-note">${escapeHTML(note)}</div>
     ${body}
-    ${actionable ? reuseShelfHtml() : ''}`;
+    ${actionable ? reuseShelfHtml() : ''}
+    ${actionable ? dangerZoneHtml() : ''}`;
 
   for (const [sel, top] of kept) {
     const n = host.querySelector(sel);

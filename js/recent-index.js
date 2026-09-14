@@ -322,14 +322,27 @@
 
     picks.sort(function (a, b) { return String(b.d).localeCompare(String(a.d)); });
 
-    // Evaluation adjustment: if the only text card is in the 4th slot,
-    // swap it with the 3rd slot so it displays in 3-card (desktop/mobile) views.
-    if (picks.length === 4 && picks[3].kind === 'text' && !picks.slice(0, 3).some(function (i) { return i.kind === 'text'; })) {
-      var temp = picks[2];
-      picks[2] = picks[3];
-      picks[3] = temp;
-    }
-
+    // NOTHING REORDERS THE ROW AFTER THIS SORT. Publish order is the whole
+    // promise of the automatic grid: what went up most recently leads, and the
+    // owner can predict the homepage from the console without running this
+    // function in their head.
+    //
+    // A swap lived here from 2026-07-22 to 2026-09-13 ("Evaluation adjustment":
+    // if the only text card landed in slot 4, trade it with slot 3 so a note
+    // showed in the visible 3-up row). It was written when the site held barely
+    // more than a grid's worth of frames, and it aged into a lie: publish three
+    // photographs after your newest note and the note jumps the queue anyway,
+    // pushing a freshly published photograph into the tablet-only slot almost
+    // nobody sees. Owner report 2026-09-13 —
+    // docs/maintenance/2026-09-13-cards-automatic-publish-order.md.
+    //
+    // The row still mixes: ensure('text') above trades the OLDEST of the four
+    // picks for the newest note, so a full grid is never single-type. That rule
+    // acts on the GRID, which is where a mixing rule belongs; escalating it to
+    // the visible three was the part that overrode recency. A fresh fork keeps
+    // its mixed visible row because the bundled samples carry dates that
+    // interleave (sampleFrames/sampleNote below) — earned by publish order like
+    // everything else, not by a special case here.
     return picks;
   }
 
@@ -792,10 +805,24 @@
   // frames in the archive lightbox. The note mirrors posts/fn-sample.md
   // (which also ships in a fork, so the card's link renders a real post);
   // its body must stay in sync with that file — the test suite compares
-  // them. Everything is dateless on purpose: with three photos ahead of one
-  // note, pickRecent keeps concat order and its slot-3 swap lands the row as
-  // photo · photo · note in the 3-up view — the fresh-fork target.
+  // them.
+  //
+  // The sample frames and the sample note carry DATES, and the dates are the
+  // reason a brand-new fork's visible 3-up row reads photo · photo · note
+  // rather than three photographs. pickAutomatic sorts newest-first and nothing
+  // reorders it afterwards, so the only way to put writing in a fork's opening
+  // row is for the sample note to have been "published" between two of the
+  // sample frames — which is exactly what these dates say. Undated samples all
+  // tie at '' and sort by insertion order, which is how the row ended up
+  // single-type and earned the reorder hack pickAutomatic used to carry.
+  //
+  // sampleNote's date mirrors posts/fn-sample.md and js/page-fn-list.js; the
+  // three must agree (tests/recent-index.test.js pins it). The frames' dates
+  // are homepage-only — js/page-archive.js renders its twelve samples in array
+  // order and never sorts — and they stay inside 2026 so nothing contradicts
+  // the 'Sample City, 2026' the card and the archive both show.
   function sampleFrames() {
+    var dates = ['2026-01-05', '2026-01-04', '2026-01-02'];
     return ['First Shadow', 'In Flight', 'Golden Ray'].map(function (title, i) {
       return {
         slug: 'sample-' + String(i).padStart(2, '0'),
@@ -803,6 +830,7 @@
         title: title,
         location: 'Sample City, 2026',
         camera: 'Mirrorless',
+        date: dates[i],
       };
     });
   }
@@ -811,6 +839,7 @@
       fn_id: 'fn-sample',
       title: 'Learning to See Again',
       location: 'Sample City',
+      date: '2026-01-03',
       body: 'The first walk with a new camera is never about the pictures — it is about learning to see again. Every block becomes an audition: the light on a wall you have passed a hundred times, the geometry of a stairwell that turns out to have rhythm.\n\nNothing from the first day survives the edit. That is fine. The frames were never the point — the point was recalibrating, walking slower, letting the eye catch on things the errand-brain filters out. A camera is just a reason to look.\n\nThis is a sample field note. It ships with the engine so a brand-new site has something on its Field Notes page and its homepage from the first minute — a stand-in, not a seed. Publish your first real note from the Field Console and this one steps aside.',
     };
   }

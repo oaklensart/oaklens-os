@@ -269,17 +269,25 @@ describe('the Cards view stylesheet matches its markup', () => {
     // The well holds still AND answers the card's sizing — `container-type` is
     // what makes `cqh` mean anything, and `overflow: hidden` is what "locked"
     // means. They ship together or the card is measuring a box that can grow.
-    const stage = block.match(/\.studio-stage,\s*\n\s*\.cards-studio\.is-composing \.studio-stage\s*\{([^}]*)\}/);
-    expect(stage, 'the tablet stage must declare its own overflow').not.toBeNull();
-    expect(stage[1], 'the well is locked').toMatch(/overflow:\s*hidden/);
-    expect(stage[1], 'and it is the card\'s query container').toMatch(/container-type:\s*size/);
+    //
+    // ⚠️ Both now come from the BASE rules, not from this band. They were the
+    // band's own until 2026-09-13, when the well stopped scrolling on every
+    // screen rather than only on a tablet; the band's copies were deleted so one
+    // formula could not drift into two. The invariant is unchanged and is
+    // asserted against the whole block — what this band must still carry, and
+    // the only thing that legitimately differs here, is its RESERVE.
+    expect(BLOCK, 'the well is locked').toMatch(/\n\.studio-stage \{[^}]*overflow:\s*hidden/);
+    expect(BLOCK, 'and it is the card\'s query container')
+      .toMatch(/\n\.studio-stage \{[^}]*container-type:\s*size/);
+    expect(block, 'the band restates its own reserve')
+      .toMatch(/\.cards-studio \{\s*--card-rsv:\s*\d+px;?\s*\}/);
 
     // The card is sized to the well rather than the well to the card, and the
     // sum keeps its 300px cap through `min()` — which is also the fallback for a
     // browser with no container query units.
-    expect(block, 'the card sum is declared once, on the studio')
+    expect(BLOCK, 'the card sum is declared once, on the studio')
       .toMatch(/--card-w:\s*min\(300px,\s*calc\(\(100cqh\s*-\s*var\(--card-rsv\)\)\s*\*\s*0\.8\)\)/);
-    expect(block, 'and the card reads it').toMatch(/\.studio-stage \.card-face \.wk-card\s*\{[^}]*max-width:\s*var\(--card-w\)/);
+    expect(BLOCK, 'and the card reads it').toMatch(/\.studio-stage \.card-face \.wk-card\s*\{[^}]*max-width:\s*var\(--card-w\)/);
     // ⚠️ THREE CLASSES, NEVER FOUR. At four it outranks WRITE MODE's
     // `body.kb-open .card-face .wk-card` and sizes the card against a well the
     // keyboard has already taken — a 113px card, seen on the way in. State goes
@@ -330,6 +338,143 @@ describe('the Cards view stylesheet matches its markup', () => {
     // sum spends is restated here rather than inherited from the column one.
     expect(sideways, 'the sideways reserve is restated for the layout it uses')
       .toMatch(/\.cards-studio\s*\{\s*--card-rsv:\s*\d+px/);
+    // The danger zone is a shortcut, not structure, and at 744px its row is
+    // ~30px of photograph on all four cards. It shipped without this and was
+    // the only row in the band that had not been earned (2026-09-13).
+    expect(sideways, 'the danger zone steps aside sideways too')
+      .toMatch(/\.cards-danger\s*\{\s*display:\s*none/);
+  });
+
+  // ---- the grid fits the view (2026-09-13) ----
+  //
+  // The owner's report was "the grid is no longer static — you have to scroll";
+  // the cause was that the row took its height from the tallest card and the
+  // view had just gained a footer. A row sized to the SPACE cannot do that. The
+  // pieces are load-bearing together and each one has a way of quietly going
+  // missing, so each is named here.
+  it('sizes the grid row to the space, and the cards to the row', () => {
+    const grid = BLOCK.match(/\n\.cards-grid \{\n([\s\S]*?)\n\}/)[1];
+    expect(grid, 'one row, taking what the bounded shell has left')
+      .toMatch(/grid-template-rows:\s*minmax\(0,\s*1fr\)/);
+    expect(grid, 'the row is the query container the cards measure against')
+      .toMatch(/container-type:\s*size/);
+    expect(grid, 'and the reserve the sum spends is named, not inlined')
+      .toMatch(/--cell-rsv:\s*\d+px/);
+
+    const cap = BLOCK.match(/\.cards-grid > \.grid-cell \{\n([\s\S]*?)\n\}/)[1];
+    // `0.8` is `1 / 1.25` — a card is a 4:5 picture over a footer, so its
+    // height runs ~1.25 × its width and this goes back the other way. The same
+    // sum sizes the card in the tablet studio; if one moves, both should.
+    expect(cap, 'the cell is capped from the row height, via the reserve')
+      .toMatch(/max-width:\s*min\(100%,\s*calc\(\(100cqh - var\(--cell-rsv\)\) \* 0\.8\)\)/);
+  });
+
+  it('stops the fit rule at two columns rather than shrinking to nothing', () => {
+    // Two rows halve the height each card gets: held upright an iPad mini
+    // leaves ~600px, and a card that still fits in half of that is 119px wide,
+    // which is a preview of nothing. Below 900px the cap comes off and the grid
+    // scrolls with the cards at full size — which is what it always did.
+    const two = BLOCK.match(/@media \(max-width: 900px\) \{\n([\s\S]*?)\n\}\n/)[1];
+    expect(two, 'the rows go back to natural height').toMatch(/grid-auto-rows:\s*auto/);
+    expect(two, 'the grid stops being a size container').toMatch(/container-type:\s*normal/);
+    expect(two, 'and the cap comes off the cell').toMatch(/max-width:\s*none/);
+  });
+
+  it('clips a squeezed tease instead of letting it paint over the caption', () => {
+    // The card's children are `flex: 0 1 auto`, so a short row shrinks the
+    // tease's box while its text keeps its height — and `overflow: visible` ran
+    // the sentence straight through `San Francisco · 2026` and out of the card.
+    expect(BLOCK, 'the tease clips in the studio grid')
+      .toMatch(/\.grid-cell \.wk-text \.wk-snip\s*\{\s*overflow:\s*hidden/);
+  });
+
+  // ---- the well never scrolls either (2026-09-13) ----
+  //
+  // Same contract as the grid above, on the surface next door, and the owner
+  // named it that way: "static in all views". The card is sized to the WELL,
+  // which is the one move that neither clips the card nor changes its ratio.
+  it('holds the studio well still and makes it the card\'s query container', () => {
+    const stage = BLOCK.match(/\n\.studio-stage \{\n([\s\S]*?)\n\}/)[1];
+    expect(stage, 'the well is not a scroller').toMatch(/overflow:\s*hidden/);
+    expect(stage, 'and it is what the card measures itself against')
+      .toMatch(/container-type:\s*size/);
+    expect(stage, 'a scrollbar width here would mean it is still expected to scroll')
+      .not.toMatch(/scrollbar-width/);
+  });
+
+  it('sizes the card to the well in EVERY view, not only on a tablet', () => {
+    // The sum lived in the tablet band alone until a desktop was found carrying
+    // a permanent 7px scrollbar: `min-height: 420px` + a 300px card + the
+    // button came to 4px more than a 1440x900 well.
+    // ONE `.cards-studio` rule, not two — the tokens live with it. A second
+    // block of the same selector sixty lines away is how two reserves end up
+    // disagreeing, and this assertion is what found it.
+    const studios = [...BLOCK.matchAll(/\n\.cards-studio \{\n([\s\S]*?)\n\}/g)];
+    expect(studios, 'the studio is declared once at the top level').toHaveLength(1);
+    const studio = studios[0][1];
+    expect(studio, 'the base reserve is named').toMatch(/--card-rsv:\s*\d+px/);
+    expect(studio, 'and the base sum is the one every band inherits')
+      .toMatch(/--card-w:\s*min\(300px,\s*calc\(\(100cqh - var\(--card-rsv\)\) \* 0\.8\)\)/);
+    expect(BLOCK, 'composing holds more around the card, so it restates the reserve')
+      .toMatch(/\.cards-studio\.is-composing \{\s*--card-rsv:\s*\d+px;?\s*\}/);
+
+    const card = BLOCK.match(/\n\.studio-stage \.card-face \.wk-card \{\n([\s\S]*?)\n\}/)[1];
+    expect(card, 'the card is capped from the well').toMatch(/max-width:\s*var\(--card-w\)/);
+    // The 420px floor is what forced the overflow on a short well, and a 4:5
+    // picture at the 300px cap already stands 375px tall without it.
+    expect(card, 'and carries no floor to fight the cap').toMatch(/min-height:\s*0/);
+    expect(card, 'the 420px floor must not come back').not.toMatch(/min-height:\s*420px/);
+  });
+
+  it('exempts a words-only tile, where narrower is TALLER', () => {
+    // The cap trades width for height, which only works while the height it
+    // buys back belongs to a picture. All type and no picture: narrowing it
+    // reflows the tease onto more lines and makes the card bigger. Measured at
+    // 1280x800 — capped to 197px it overflowed by 22px; at full width it fits.
+    expect(BLOCK, 'a text card with no layout keeps its full width')
+      .toMatch(/\.studio-stage \.card-face \.wk-card\.wk-text:not\(\[data-layout\]\)\s*\{\s*max-width:\s*300px/);
+  });
+
+  it('lets the composer be bounded by the well too', () => {
+    // The 2026-09-12 pass took a scrolling well as "the cheaper wrong" against
+    // a CRUSHED picture. Capping the width changes no ratio at all, so the
+    // trade is gone and `max-height: none` with it.
+    const composed = BLOCK.match(
+      /\.cards-studio\.is-composing \.studio-stage \.card-face\.is-editing \.wk-card \{\n([\s\S]*?)\n\}/)[1];
+    expect(composed, 'the composer card is bounded by the well').toMatch(/max-height:\s*100%/);
+    expect(composed, 'and must not opt back out of it').not.toMatch(/max-height:\s*none/);
+    // The picture stays rigid at 4:5 — that rule is what makes "smaller" not
+    // mean "crushed", and it is the whole reason the trade above is gone.
+    expect(BLOCK, 'the composer picture keeps its ratio')
+      .toMatch(/\.wk-card\[data-shape="picture"\] \.wk-img \{[^}]*aspect-ratio:\s*4 \/ 5/);
+  });
+
+  it('keeps ONE copy of the card sum — the tablet band restates only its reserve', () => {
+    // Two copies of one formula is one copy and a bug waiting: the band carried
+    // its own `--card-w`, `container-type` and card cap until the base gained
+    // them. What legitimately differs there is the reserve, and only that.
+    const band = BLOCK.match(/@media \(min-width: 700px\) and \(max-width: 1180px\) \{\n([\s\S]*?)\n\}/)[1];
+    expect(band, 'the band sets its own reserve').toMatch(/\.cards-studio \{\s*--card-rsv:\s*\d+px;?\s*\}/);
+    expect(band, 'and does NOT restate the sum').not.toMatch(/--card-w:/);
+    expect(band, 'nor the cap').not.toMatch(/max-width:\s*var\(--card-w\)/);
+  });
+
+  it('sizes the overlay plate to the card in the grid, not to the window', () => {
+    // The plate's ladder is authored in `vw`, which is right in the composer
+    // (window and card grow together) and wrong in the grid (the card is sized
+    // to the row). A 171px card on a 1280px window asked for 41.6px type and
+    // ran "Amigos." off the photograph. Same numbers against the card instead.
+    expect(BLOCK, 'the card-face is the inline-size container')
+      .toMatch(/\.grid-cell \.card-face\s*\{\s*container-type:\s*inline-size/);
+    for (const [scale, ceiling] of [['statement', '3.4rem'], ['feature', '2.6rem']]) {
+      const rule = BLOCK.match(
+        new RegExp(`\\.grid-cell \\.card-face [^{]*data-scale="${scale}"[^{]*\\{\\n([^}]*)\\n\\}`));
+      expect(rule, `the grid's ${scale} step went missing`).not.toBeNull();
+      expect(rule[1], `${scale} tracks the card's own width`).toMatch(/cqw/);
+      // The ceiling is the public ladder's, so nothing is bigger than it is
+      // today — only a card narrower than the 300px reference scales down.
+      expect(rule[1], `${scale} must not raise the public ceiling`).toContain(ceiling);
+    }
   });
 });
 

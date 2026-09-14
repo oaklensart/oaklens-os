@@ -73,7 +73,8 @@ describe('a site with no composed cards is untouched', () => {
 
   it('holds on the unpinned path too', () => {
     // No pulse, no audio, no RAW — pickRecent's second return, which is where
-    // the mixed-row guarantee and the slot-3 swap live.
+    // the mixed-row guarantee lives (and, until 2026-09-13, the slot-3 reorder
+    // that overrode publish order; it is gone, the guarantee is not).
     const auto = RI.pickAutomatic(ARCHIVE, POSTS, [], [], null);
     expect(RI.pickRecent(ARCHIVE, POSTS, [], [], null, [])).toEqual(auto);
   });

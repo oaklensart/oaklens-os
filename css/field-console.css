@@ -6400,6 +6400,12 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 
 /* ---- studio: one slot, and everything that acts on it ---- */
 .cards-studio {
+  /* The card's size lives here as tokens rather than on the card, so a state
+     (composing, keys up) can change it without adding a class to the card's own
+     selector — see "THE CARD IS SIZED TO THE WELL" below for the sum and for
+     what that rule costs when someone forgets. */
+  --card-rsv: 106px;
+  --card-w: min(300px, calc((100cqh - var(--card-rsv)) * 0.8));
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
@@ -6415,8 +6421,12 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  /* THE WELL HOLDS STILL — it is not a scroller, and `container-type: size`
+     makes it the container the card measures itself against. Safe here for the
+     one reason it is safe anywhere: the well's height comes from the studio
+     grid row, never from its contents. */
+  overflow: hidden;
+  container-type: size;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6430,10 +6440,58 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
     radial-gradient(ellipse at 50% 38%, var(--surface-2) 0%, var(--surface-0) 78%);
   box-shadow: inset 0 0 32px rgba(0, 0, 0, 0.4);
 }
+/* ---- THE CARD IS SIZED TO THE WELL, IN EVERY VIEW ----
+   The well never scrolls. A card is a 4:5 picture over a footer, so its height
+   runs ~1.25 × its width: cap the WIDTH against the well's height and the card
+   scales down at TRUE proportions instead of being clipped, crushed, or handed
+   a scrollbar. `--card-rsv` is everything the well holds besides the card's
+   PICTURE: the gap, ✎ EDIT THIS CARD, and the card's own footer of words (plus,
+   composing, the status bar and any undo chip, which is why `.is-composing`
+   restates it).
+   ⚠️ `100cqh` is the container's CONTENT box, so the well's own 16px padding is
+   already out of it and must NOT be counted again here. Counting it twice is a
+   card ~30px narrower than it should be — which looks like nothing and is the
+   kind of nothing nobody finds later.
+   ⚠️ The reserve is set against the TALLEST footer, not an average one. An
+   automatic archive card carries two lines under the picture (its title and
+   `LUMIX G85 · 2026`) where a composed one often carries one — measured at 56px
+   against 42px, and a reserve tuned to the composed card left the automatic one
+   scrolling 9px. Slot 3 is the one to check after touching this.
+
+   This sum already existed; it was scoped to the tablet band alone, where a
+   744px screen made the problem impossible to miss. A desktop had it too, just
+   quietly: `min-height: 420px` + a 300px card + the button came to 4px more
+   than a 1440×900 well, so the stage carried a permanent 7px scrollbar and the
+   card sat a few pixels short of where it should (owner, 2026-09-13, "the card
+   canvas also scrolls which breaks the contract"). The floor went with it — it
+   was doing nothing a 300px-wide 4:5 picture was not already doing, and on a
+   short well it was the thing forcing the overflow.
+
+   ⚠️ Never drop the `min()`. It carries its own fallback — a browser without
+   container query units drops the declaration and inherits the plain 300px cap,
+   which is the right answer there.
+   ⚠️ Never add a class to the `.wk-card` rule. At three it loses to WRITE
+   MODE's `body.kb-open .card-face .wk-card`, which has to win while the keys
+   are up; the STATE belongs in `--card-rsv`. (The tablet band learned this one
+   the hard way — a fourth class there once sized the card against a well the
+   keyboard had already taken, down to 113px.) */
+.cards-studio.is-composing { --card-rsv: 172px; }
 .studio-stage .card-face .wk-card {
+  max-width: var(--card-w);
   max-height: 100%;
-  min-height: 420px;
+  min-height: 0;
 }
+/* ⚠️ EXCEPT A WORDS-ONLY TILE, WHERE NARROWER IS TALLER. The cap works by
+   trading width for height, which only holds while the height it is buying back
+   belongs to a PICTURE. A card that is all type has no picture to shrink: narrow
+   it and the tease reflows onto more lines, so the cap makes the very thing it
+   is trying to fit bigger. Measured: at 1280×800 the field-note tile capped to
+   197px overflowed the well by 22px, and at its full width it fits with room.
+   The test is "has a picture", and for these cards that is "wears a layout" —
+   `hero` and `overlay` both put one on a text card; a text card with no layout
+   is words and nothing else. (`data-shape` cannot be used here: the engine only
+   stamps it on COMPOSED cards, so an automatic tile has none.) */
+.studio-stage .card-face .wk-card.wk-text:not([data-layout]) { max-width: 300px; }
 
 /* ---- the composer well holds the card at its OWN proportions ----
    Editing is one card with no row to align, so it is the card exactly as the
@@ -6441,13 +6499,17 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
    it sits centred in the well. It used to be sized to the well instead: the
    picture flexed to whatever height was left and the footer, with `margin-top:
    auto` pushing the caption to the floor, ate two thirds of the card. That was
-   the "crushed picture" the owner saw (2026-09-12). A tall viewport now shows
-   the card with room around it; a short one scrolls the well, which is the
-   cheaper wrong. */
-.cards-studio.is-composing .studio-stage {
-  overflow-y: auto;
-  overflow-x: hidden;
-}
+   the "crushed picture" the owner saw (2026-09-12).
+
+   ⚠️ That fix accepted a scrolling well on a short screen as "the cheaper
+   wrong". It is not the wrong we have to take any more, and the distinction is
+   worth keeping straight: CRUSHING was the picture changing RATIO, and it came
+   from letting `.wk-img` flex. Capping the card's WIDTH (`--card-w`, above)
+   changes no ratio at all — the picture stays rigid at 4:5 by the rule below,
+   and the whole card simply gets smaller. So the well holds still here too, and
+   the proportions the 2026-09-12 pass was protecting are protected by
+   construction rather than by a scrollbar (owner, 2026-09-13: static in all
+   views). */
 .cards-studio.is-composing .studio-stage .card-face.is-editing {
   flex: 0 1 auto;
   min-height: 0;
@@ -6456,7 +6518,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 }
 .cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card {
   height: auto;
-  max-height: none;
+  max-height: 100%;
 }
 .cards-studio.is-composing .studio-stage .card-face.is-editing .wk-card[data-shape="picture"] .wk-img {
   flex: 0 0 auto;
@@ -7725,6 +7787,45 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
    bring the canyon back); and `align-items: stretch` so every cell rises to that
    track. The tallest card sits at natural height (footer compact), the pulse and
    any shorter card stretch up to match and centre their content. */
+/* ---- THE GRID FITS THE VIEW WHILE IT IS ONE ROW ----
+   Four across is one row, and a row can be sized to the space that is left:
+   `grid-template-rows: minmax(0, 1fr)` takes the height the bounded shell has,
+   and the cards are sized to THAT rather than the row being sized to the
+   tallest card. Same bargain the tablet studio already strikes with
+   `--card-rsv` (§ TABLET, below), same arithmetic.
+
+   Before this the row was `grid-auto-rows: auto` with `overflow-y: auto` as the
+   escape hatch, which fits only while nothing else is asking for height. It
+   held until the danger zone landed under the re-feature strip (2026-09-13) and
+   took 71px: at 1440×900 the row had 453px and the cards wanted 473, so the
+   grid scrolled 20px and clipped ✎ EDIT THIS CARD on all four — an overview you
+   have to scroll is not an overview (owner, same day). An iPad mini in
+   landscape was worse and had been for longer: 93px over, before the danger
+   zone existed. Sizing the cards to the row fixes the class rather than the
+   instance — the next block anyone adds costs a few pixels of card, not the
+   shape of the surface.
+
+   A card is a 4:5 picture over a footer of words, so its height runs about
+   1.25 × its width — hence `× 0.8` to go back, exactly as the studio's
+   `--card-w` does. `--cell-rsv` is everything in the cell that is NOT the
+   picture: 20px padding + 22px slot head + 16px gaps + 27px edit button + ~60px
+   of card footer. The cap goes on the CELL, not the card, so the picture, the
+   footer and the button scale together and the cell's border stays around what
+   it holds.
+
+   ⚠️ THIS IS A ONE-ROW RULE AND IT STOPS AT TWO COLUMNS. Two rows halve the
+   height each card gets, and the honest answer there is not a smaller card —
+   it is a scroll. Held upright an iPad mini gives the grid ~600px; split in
+   two, a card that still fits is 119px wide, which is not a preview of
+   anything. So below 900px the cap comes off, the rows go back to natural
+   height and the grid scrolls with the cards at full size — which is what it
+   always did, and is right for a shape that was never going to fit.
+   ⚠️ Never drop the `min(100%, …)`. It carries the fallback: a browser with no
+   container query units drops the whole declaration and inherits the plain
+   track width, which is the old behaviour and the right answer there.
+   ⚠️ `container-type: size` is safe HERE for the one reason it is safe on the
+   studio well — this grid's height comes from the flex row above it, never from
+   its contents. Do not copy it onto a box that sizes itself. */
 .cards-grid {
   flex: 1 1 auto;
   min-height: 0;
@@ -7732,15 +7833,68 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   scrollbar-width: thin;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: auto;
+  grid-template-rows: minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
-  align-content: start;
+  align-content: stretch;
+  justify-items: center;
+  container-type: size;
+  --cell-rsv: 145px;
 }
+.cards-grid > .grid-cell {
+  width: 100%;
+  max-width: min(100%, calc((100cqh - var(--cell-rsv)) * 0.8));
+}
+/* A TEXT CARD SQUEEZED BY THE ROW CLIPS ITS TEASE; IT DOES NOT PAINT OVER THE
+   CAPTION. The card's children are `flex: 0 1 auto`, so a short row shrinks the
+   tease's BOX while its text keeps its own height — and with `overflow: visible`
+   the sentence ran straight through `San Francisco · 2026` and out of the card
+   (found on an iPad mini, 2026-09-13). The card itself already clips; the tease
+   had to as well. A tease cut short reads as a tease cut short, which is honest;
+   two lines of type on top of each other does not. Studio-grid only — the
+   homepage sizes its own row and never squeezes one. */
+.grid-cell .wk-text .wk-snip { overflow: hidden; }
+
+/* THE PLATE SIZES ITSELF TO THE CARD IN THE GRID, NOT TO THE WINDOW. The
+   overlay title's ladder is `clamp(…, 1.2rem + 2.2vw, …)` — viewport units, set
+   when the card was only ever drawn at ~300px in the composer, where the window
+   and the card grow together. In the grid they do not: the card is sized to the
+   ROW, so on a 1280px window a 171px card still asked for 41.6px type and
+   "Amigos." ran off the edge of the photograph (2026-09-13). Same numbers,
+   measured against the card instead: `cqw` on the card-face, calibrated so a
+   300px card — the composer's width, the reference the plate was designed at —
+   lands on exactly the rem values above (3.4rem ÷ 300 ≈ 18.1cqw,
+   2.6rem ÷ 300 ≈ 13.9cqw). The rem ceilings stay, so nothing gets bigger than
+   it does today; only a card narrower than the reference scales its words down
+   with it.
+   `standard` and `compact` are left alone — 1.5rem and 1.18rem clear the
+   narrowest cell the grid can produce, and a fixed size that fits is one fewer
+   moving part. */
+.grid-cell .card-face { container-type: inline-size; }
+.grid-cell .card-face .wk-card[data-layout="overlay"][data-scale="statement"] .wk-title,
+.grid-cell .card-face .wk-card[data-layout="overlay"][data-scale="statement"] .wk-t-title {
+  font-size: clamp(1.05rem, 18.1cqw, 3.4rem);
+}
+.grid-cell .card-face .wk-card[data-layout="overlay"][data-scale="feature"] .wk-title,
+.grid-cell .card-face .wk-card[data-layout="overlay"][data-scale="feature"] .wk-t-title {
+  font-size: clamp(0.95rem, 13.9cqw, 2.6rem);
+}
+
 /* Four across for as long as a card stays a sensible size. Dropping to two
    early makes each card enormous — a 4:5 picture in a 568px column is 710px
-   tall — which is its own kind of wrong even though the heights match. */
-@media (max-width: 900px) { .cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+   tall — which is its own kind of wrong even though the heights match.
+   Two columns is also where the one-row rule above stops: the cap comes off,
+   the rows go back to natural height, and the grid scrolls. */
+@media (max-width: 900px) {
+  .cards-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+    align-content: start;
+    container-type: normal;
+  }
+  .cards-grid > .grid-cell { max-width: none; }
+}
 @media (max-width: 560px) { .cards-grid { grid-template-columns: minmax(0, 1fr); } }
 
 .grid-cell {
@@ -7923,6 +8077,28 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   scrollbar-width: none;
 }
 .cards-reuse-track::-webkit-scrollbar { display: none; }
+
+/* The Cards studio's danger zone. Borrows the settings view's .danger-zone
+   grammar wholesale and only re-states what a footer inside a flex column
+   needs: don't be squeezed by the grid above (flex: 0 0 auto), and give the
+   hint somewhere to go on a narrow screen — .danger-zone-row is a bare flex
+   row, so on a phone the sentence would otherwise be shaved to a column of
+   single words beside the button.
+
+   ⚠️ EVERY ROW HERE IS PAID FOR BY THE CARDS. This view is bounded and the grid
+   is sized to what is left (see .cards-grid), so the settings view's roomy
+   28px/18px margins would come straight off the picture. Shipped at those and
+   it cost 71px, which is what pushed the grid into scrolling (2026-09-13). The
+   title sits INLINE with the button rather than on its own row for the same
+   reason — the block says the same thing in a third of the height. */
+.cards-danger {
+  flex: 0 0 auto;
+  margin-top: 10px;
+  padding-top: 8px;
+}
+.cards-danger .danger-zone-title { margin-bottom: 0; white-space: nowrap; }
+.cards-danger .danger-zone-row { flex-wrap: wrap; row-gap: 6px; }
+.cards-danger .danger-zone-hint { flex: 1 1 260px; line-height: 1.45; }
 .cards-reuse-label,
 .reuse-chip { flex: 0 0 auto; }
 .cards-reuse-label {
@@ -8036,45 +8212,27 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
     gap: 12px;
   }
 
-  /* THE WELL HOLDS STILL — not a scroller, and nothing to stick to any more.
-     `container-type: size` makes it the query container the card measures
-     itself against, which is safe here for exactly one reason: the well's
-     height comes from the grid row, never from its contents. */
-  .studio-stage,
-  .cards-studio.is-composing .studio-stage {
-    overflow: hidden;
-    container-type: size;
-  }
+  /* THE WELL HOLDS STILL and THE CARD IS SIZED TO IT — both now come from the
+     base rules (§ "THE CARD IS SIZED TO THE WELL, IN EVERY VIEW"), which is
+     where the well stopped scrolling on every screen rather than only on this
+     one (2026-09-13). This band used to carry its own copy of the stage's
+     `container-type`, the `--card-w` sum and the card's cap; they were deleted
+     rather than left to drift, because two copies of one formula is one copy
+     and a bug waiting.
 
-  /* THE CARD IS SIZED TO THE WELL. A card is a 4:5 picture over a footer of
-     words, so its height runs about 1.25 × its width + ~60px; a well H tall can
-     carry a card roughly (H − 100) / 1.25 wide once the well's padding and the
-     composer bar are paid for — so the sum is `(the well − what else it holds)
-     × 0.8`, and `--card-rsv` is that "what else". The well never holds the card
-     alone: the preview stacks ✎ EDIT THIS CARD under it, the composer stacks
-     its status bar above it, and either may also be carrying an undo chip. At
-     200px of reserve the cap resolves to the full 300px the moment the well
-     passes ~590px — every tablet held upright, in both states — and scales the
-     card down at TRUE proportions on the one that does not. The sideways block
-     below re-states the reserve for the layout it uses.
-     ⚠️ Two things this rule must NOT do, both learned the hard way:
-     · Never add a class to it. At three it loses to WRITE MODE's
-       `body.kb-open .card-face .wk-card` (three classes + an element), which is
-       what has to win while the keys are up. A fourth class here silently took
-       that fight and sized the card against a well the keyboard had already
-       taken — down to a 113px card. The STATE belongs in `--card-rsv`, set on
-       the studio, for exactly that reason.
-     · Never drop the `min()`. It carries its own fallback — a browser without
-       container query units drops the whole declaration and inherits the plain
-       300px cap, which is the right answer there. */
-  .cards-studio {
-    --card-rsv: 200px;
-    --card-w: min(300px, calc((100cqh - var(--card-rsv)) * 0.8));
-  }
-  .studio-stage .card-face .wk-card {
-    max-width: var(--card-w);
-    min-height: 0;
-  }
+     What stays is the only thing that is genuinely different here: THE RESERVE.
+     A tablet's well carries more around the card than a desktop's — the preview
+     stacks ✎ EDIT THIS CARD under it, the composer stacks its status bar above
+     it, and either may also be carrying an undo chip — and at 200px the cap
+     resolves to the full 300px the moment the well passes ~590px, which is
+     every tablet held upright in both states, scaling the card down at TRUE
+     proportions on the one that does not. The sideways block below re-states it
+     again for the layout it uses.
+     ⚠️ The STATE belongs in `--card-rsv`, never in a new selector on the card.
+     A fourth class on that rule once lost to WRITE MODE's
+     `body.kb-open .card-face .wk-card` and sized the card against a well the
+     keyboard had already taken — down to 113px. */
+  .cards-studio { --card-rsv: 200px; }
 
   /* ---- the two rows a bounded view buys back ----
      THE NOTE. Two lines of explanation the surface already gives in controls:
@@ -8097,9 +8255,10 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
    have taken theirs — and a card wants ~460. Rather than crush the card or hand
    the page its scrollbar back, the rows that are SHORTCUTS rather than
    structure go: the re-feature strip (every frame it offers is still one tap
-   away in the rail's PICTURE block) and, while composing, the slot ribbon (the
-   composer bar directly above the card is that mode's header, and a pill tapped
-   mid-edit is a lost edit anyway). The view's own subtitle and meta go with
+   away in the rail's PICTURE block), the danger zone (the same reset is in the
+   rail, per slot) and, while composing, the slot ribbon (the composer bar
+   directly above the card is that mode's header, and a pill tapped mid-edit is
+   a lost edit anyway). The view's own subtitle and meta go with
    them — three lines of masthead on a surface with 744px to spend.
 
    820px, not 780: it sits above every tablet in landscape (744, 768, 810, 820)
@@ -8111,6 +8270,13 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 
   .cards-reuse { display: none; }
   body:has(.cards-studio.is-composing) .cards-ribbon { display: none; }
+
+  /* THE DANGER ZONE, by the same test: it is a shortcut, not structure. Every
+     card it would reset is still one tap away — select the slot, ↩ RESET TO
+     AUTOMATIC in the rail — and at this height its row is about thirty pixels
+     of photograph on all four cards. It shipped without this and was the only
+     row in the band that had not been earned (2026-09-13). */
+  .cards-danger { display: none; }
 
   /* ---- and the well turns sideways ----
      Same move Pulse makes at the same height and for the same reason (§ "the

@@ -13,7 +13,7 @@ import { hasData } from './helpers/instance-content.js';
 
 const {
   recentStrip, recentTruncate, recentExcerpt, recentTier, recentInitial,
-  cardFocus, rawPick, audioPick, pinTop, pickRecent,
+  cardFocus, rawPick, audioPick, pinTop, pickRecent, pickAutomatic,
   sampleFrames, sampleNote, withSampleFallback,
 } = globalThis.RecentIndex;
 
@@ -253,6 +253,43 @@ describe('pickRecent — featured audio joins the grid', () => {
   });
 });
 
+// The automatic row is PUBLISH ORDER and nothing reorders it afterwards. A
+// swap used to sit at the end of pickAutomatic promoting a slot-4 text card to
+// slot 3 "so it displays in 3-card views"; it overrode recency and pushed a
+// freshly published photograph into the tablet-only slot (owner report
+// 2026-09-13, docs/maintenance/2026-09-13-cards-automatic-publish-order.md).
+// These cases are the fence: the grid still MIXES (ensure trades the oldest
+// pick for the newest note), but it never REORDERS.
+describe('pickAutomatic — the row is publish order, and stays publish order', () => {
+  const four = [
+    { filename: 'f1.webp', slug: 's1', added_at: '2026-09-13T23:10:59.396Z' },
+    { filename: 'f2.webp', slug: 's2', added_at: '2026-08-25T17:55:26.716Z' },
+    { filename: 'f3.webp', slug: 's3', added_at: '2026-08-19T03:03:29.178Z' },
+    { filename: 'f4.webp', slug: 's4', added_at: '2026-08-02T23:46:04.888Z' },
+  ];
+  const olderNote = [{ fn_id: 'fn-1', title: 'A note', added_at: '2026-07-10T04:54:45.577Z' }];
+
+  it('a note older than every photograph takes the tablet slot, not the visible third', () => {
+    const picks = pickAutomatic(four, olderNote, [], []);
+    expect(picks.map((p) => p.kind)).toEqual(['photo', 'photo', 'photo', 'text']);
+    // ensure('text') still ran — the OLDEST photograph is the one it traded away.
+    expect(picks.map((p) => p.data.slug || p.data.fn_id)).toEqual(['s1', 's2', 's3', 'fn-1']);
+  });
+
+  it('a note newer than a photograph keeps its earned place — mixing, not reordering', () => {
+    const newerNote = [{ fn_id: 'fn-2', title: 'A note', added_at: '2026-08-20T00:00:00.000Z' }];
+    const picks = pickAutomatic(four, newerNote, [], []);
+    expect(picks.map((p) => p.kind)).toEqual(['photo', 'photo', 'text', 'photo']);
+  });
+
+  it('every card is in non-increasing date order — the invariant the swap broke', () => {
+    for (const notes of [olderNote, [{ fn_id: 'fn-3', added_at: '2026-08-20T00:00:00.000Z' }]]) {
+      const dates = pickAutomatic(four, notes, [], []).map((p) => String(p.d));
+      expect([...dates].sort((a, b) => b.localeCompare(a))).toEqual(dates);
+    }
+  });
+});
+
 describe('sample fallback — an un-seeded fork still gets a mixed grid', () => {
   it('withSampleFallback: null (missing file) → samples, [] (cleared) → empty', () => {
     const s = [{ id: 'x' }];
@@ -287,6 +324,19 @@ describe('sample fallback — an un-seeded fork still gets a mixed grid', () => 
     expect(note.title).toBe(front.title);
     expect(note.location).toBe(front.location);
     expect(note.body).toBe(m[2].trim());
+    // The DATE is load-bearing since the reorder swap came out of pickAutomatic
+    // (2026-09-13): it is the only reason a fresh fork's visible 3-up row reads
+    // photo · photo · note instead of three photographs. Three copies say it —
+    // here, the frontmatter, and js/page-fn-list.js — so all three are pinned.
+    expect(note.date).toBe(front.date);
+  });
+
+  it('the sample note is dated BETWEEN two sample frames — the fork\'s mixed row, earned by publish order', () => {
+    const frameDates = sampleFrames().map((f) => f.date);
+    expect(frameDates.every(Boolean), 'every sample frame carries a date').toBe(true);
+    const note = sampleNote().date;
+    expect(frameDates.filter((d) => d > note), 'two frames newer than the note').toHaveLength(2);
+    expect(frameDates.filter((d) => d < note), 'one frame older than the note').toHaveLength(1);
   });
 
   it('the sample note lands the feature tier — the drop-cap pull-quote, not the plain wall', () => {
@@ -301,6 +351,8 @@ describe('sample fallback — an un-seeded fork still gets a mixed grid', () => 
     const note = sampleNote();
     expect(src).toContain(`fn_id: '${note.fn_id}'`);
     expect(src).toContain(`title: '${note.title}'`);
+    expect(src, 'the date is what orders the fork\'s opening row — it must not drift here')
+      .toContain(`date: '${note.date}'`);
   });
 });
 

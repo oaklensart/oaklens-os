@@ -44,14 +44,14 @@ try {
      else. It is a <script src>, not a module, so its version lives on this tag;
      the import-map entry beside the console modules exists so dev/sw.js and
      index.html can never disagree with it (tests/guards.test.js). -->
-<script src="/js/recent-index.js?v=31" defer></script>
+<script src="/js/recent-index.js?v=32" defer></script>
 <!-- The shared audio module, loaded for the same reason and on the same terms:
      the SETS shelf resolves "what does this set play" through
      AudioPlayer.resolveSetTracks rather than carrying a second copy of it. Its
      DOM half bails here too — no player is mounted in this document. -->
 <script src="/js/audio-player.js?v=9" defer></script>
 
-<link rel="stylesheet" href="/css/field-console.css?v=82">
+<link rel="stylesheet" href="/css/field-console.css?v=85">
 </head>
 <body>
 
@@ -1516,7 +1516,7 @@ try {
     "/js/console/share.js":     "/js/console/share.js?v=3",
     "/js/console/asset-library.js": "/js/console/asset-library.js?v=3",
     "/js/console/audio.js":     "/js/console/audio.js?v=16",
-    "/js/console/cards.js":     "/js/console/cards.js?v=30",
+    "/js/console/cards.js":     "/js/console/cards.js?v=32",
     "/js/console/publish.js":   "/js/console/publish.js?v=26",
     "/js/console/session.js":   "/js/console/session.js?v=9",
     "/js/console/bench.js":     "/js/console/bench.js?v=1",
@@ -1524,7 +1524,7 @@ try {
     "/js/console/pulse.js":     "/js/console/pulse.js?v=4",
     "/js/console/init.js":      "/js/console/init.js?v=11",
     "/js/markdown-engine.js":   "/js/markdown-engine.js?v=4",
-    "/js/recent-index.js":      "/js/recent-index.js?v=31",
+    "/js/recent-index.js":      "/js/recent-index.js?v=32",
     "/js/audio-player.js":      "/js/audio-player.js?v=9",
     "/js/jpeg-privacy.js":      "/js/jpeg-privacy.js?v=1",
     "/js/raw-lens.js":          "/js/raw-lens.js?v=5",

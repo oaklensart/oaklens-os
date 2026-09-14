@@ -34,6 +34,7 @@ const {
   cardsDoneEditing, cardsCancelEdit, cardsHandleStageClick, cardsSetPalette,
   cardsSetMode, cardsSetLayout, cardsSetDressing, cardsFieldInput, cardsGuardTitle,
   cardsEditStaged, _dressingOf, _normalizeCard, _titleCap,
+  cardsResetAllToAuto, _cardRetireUndoTarget, _cardUndoRetire,
   _composedCards, _composingId, _activeMode,
 } = cards;
 const RI = globalThis.RecentIndex;
@@ -229,6 +230,81 @@ describe('reset to automatic', () => {
     cardsResetToAuto(card.id);
     expect(asked).toBe(true);
     expect(STATE.cards).toHaveLength(1);
+  });
+});
+
+// ---- ⌫ ALL SLOTS AUTOMATIC — the danger zone (owner report, 2026-09-13) ----
+//
+// The bulk gesture has to make exactly the same per-card decision the per-slot
+// control makes, because the thing it would be easy to get wrong is the one
+// thing that cannot be undone: a published card deleted outright frees an
+// address a live link still points at. So these pin the split, the confirm, and
+// that one chip reverses the whole gesture rather than half of it.
+describe('resetting every slot to automatic', () => {
+  const publish = (card) => { card._imported = true; STATE.stagedLog = []; STATE.staged = emptyStaged(); };
+
+  it('takes every composed card off the grid in one gesture', () => {
+    composeNamed('One'); composeNamed('Two');
+    cardsResetAllToAuto();
+    expect(_composedCards()).toHaveLength(0);
+  });
+
+  it('asks first, naming what goes — a bulk clear with no confirm is the violation', () => {
+    let prompt = '';
+    globalThis.confirm = (msg) => { prompt = msg; return false; };
+    composeNamed('Kearny Phantom'); composeNamed('Van Ness');
+    cardsResetAllToAuto();
+    expect(prompt).toContain('Kearny Phantom');
+    expect(prompt).toContain('Van Ness');
+    expect(_composedCards(), 'declining changes nothing').toHaveLength(2);
+  });
+
+  it('retires the published one and trashes the unpublished one — the same split as one slot', () => {
+    const out = composeNamed('Published'); publish(out);
+    const draft = composeNamed('Never shipped');
+    cardsResetAllToAuto();
+
+    expect(_composedCards()).toHaveLength(0);
+    const tomb = STATE.cards.find((c) => c.id === out.id);
+    expect(tomb, 'the published address is still reserved').toBeTruthy();
+    expect(tomb.retired).toBe(true);
+    expect(tomb.title, 'a tombstone holds an address, not content').toBeUndefined();
+    expect(STATE.cards.some((c) => c.id === draft.id), 'the draft left STATE').toBe(false);
+    expect(sessionTrash.some((t) => t.surface === 'cards'), 'and went to the trash').toBe(true);
+  });
+
+  it('one chip puts BOTH retired cards back — the gesture reverses whole', () => {
+    const a = composeNamed('A'); const b = composeNamed('B');
+    publish(a); publish(b);
+    cardsResetAllToAuto();
+    expect(_cardRetireUndoTarget(), 'the chip is offered').toBeTruthy();
+
+    _cardUndoRetire();
+    expect(_composedCards().map((c) => c.title).sort()).toEqual(['A', 'B']);
+    expect(STATE.staged.cards, 'and the ledger is back where it started').toBe(0);
+  });
+
+  it('withdraws the chip once a card has come back by another route', () => {
+    const a = composeNamed('A'); const b = composeNamed('B');
+    publish(a); publish(b);
+    cardsResetAllToAuto();
+    // One tombstone revived by hand — a partial restore would be a history.
+    STATE.cards[STATE.cards.findIndex((c) => c.id === a.id)] = a;
+    expect(_cardRetireUndoTarget()).toBeNull();
+  });
+
+  it('offers no chip when nothing retired — the trash is the way back for a draft', () => {
+    composeNamed('Never shipped');
+    cardsResetAllToAuto();
+    expect(_cardRetireUndoTarget()).toBeNull();
+    expect(sessionTrash.some((t) => t.surface === 'cards')).toBe(true);
+  });
+
+  it('does nothing, and asks nothing, on a homepage that is already automatic', () => {
+    let asked = false;
+    globalThis.confirm = () => { asked = true; return true; };
+    cardsResetAllToAuto();
+    expect(asked).toBe(false);
   });
 });
 

@@ -25,6 +25,79 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-13 (and the single-card view fits too)
+
+**Nothing to do on merge.** The other half of the entry below.
+
+- **The card canvas no longer scrolls, in any view.** Editing one card, or just
+  looking at one, the card now sizes itself to the space it has instead of
+  overflowing it. On a laptop this had been showing up as a thin scrollbar that
+  was always there — the card was about four pixels too tall for its own well.
+- **The card gets smaller, never squashed.** It scales by width, so the picture
+  keeps its exact shape at every size. On a tall screen you get the full-size
+  card as before; on a short one a slightly smaller one, correctly proportioned.
+- **A card that is all words is left at full width on purpose** — narrowing text
+  makes it taller, not shorter, so capping it would have made the problem worse.
+
+---
+
+## 2026-09-13 (the card grid fits your screen)
+
+**Nothing to do on merge.** A same-day follow-up to the entry below.
+
+- **THE GRID in the Cards studio no longer scrolls — the cards scale to fit.**
+  The row now takes whatever height the window has left and sizes the four cards
+  to it, instead of the cards deciding the height and the grid scrolling when
+  they did not fit. On a shorter laptop that means slightly smaller cards and
+  all four ✎ EDIT THIS CARD buttons where you can reach them.
+- **An iPad held sideways works now.** It was scrolling by about 90px, and had
+  been for a while. Held upright it still scrolls — two rows of cards need more
+  height than a tablet has, and shrinking them enough to fit would make them too
+  small to read, so they stay full size and you scroll one row.
+- **Two smaller fixes you may have seen.** A text card squeezed by a short row
+  used to print its opening lines straight over its own location and date; it
+  now trims cleanly instead. And a card with words on the picture sized its
+  title to the browser window rather than to the card, so on a narrow card the
+  last word ran off the edge of the photograph. Both only affected the studio —
+  your published homepage never did either.
+
+---
+
+## 2026-09-13 (your homepage row follows what you published, and a one-press reset)
+
+**Nothing to do on merge** — but one behaviour changes, so it is worth thirty
+seconds of your time.
+
+- **The automatic homepage row now follows publish order, full stop.** There
+  was a rule that quietly promoted a field note into the third card whenever it
+  would otherwise have landed in the fourth. On a young site that was helpful.
+  On a site with a few dozen frames it meant a photograph you published *this
+  week* could be pushed into the fourth card — the one only a tablet held
+  upright ever shows — to make room for a note from two months ago. That rule
+  is gone. Whatever you published most recently leads, every time.
+- **The row still mixes.** If your four newest items are all pictures, the
+  oldest of the four still steps aside for your newest note, so the grid of four
+  is never all one kind. What changed is that the note no longer *jumps the
+  queue*: it takes the place it earned by date. If your newest note is older
+  than your third-newest picture, a phone and a desktop will show three pictures
+  and the note will sit in the tablet card. That is the trade, and it is now
+  predictable — you can look at what you published and know what the homepage
+  will do.
+- **Fresh installs are unaffected.** A brand-new site still opens
+  picture · picture · note. The bundled sample frames and the sample note now
+  carry dates that interleave, so that row happens for the same reason every
+  other row does, rather than because of a special case in the code.
+- **New: `⌫ ALL SLOTS AUTOMATIC` in the Cards studio.** A danger-zone footer
+  that hands the whole homepage back to automatic in one press — for when you
+  have been composing cards for something, the something is over, and you want
+  the grid filling itself again. It only appears when you actually have composed
+  cards. It asks first and names every card by title; published cards keep their
+  `/card/<id>` address reserved exactly as `◼ RETIRE THIS CARD` does, one
+  `↩ UNDO RETIRE` puts them all back, and anything you never published waits in
+  the session trash. Nothing is live until you publish, as always.
+
+---
+
 ## 2026-09-11 (words on a picture look like a plate, and audio from the composer)
 
 **Nothing to do on merge.** Four refinements from the owner's first day with
