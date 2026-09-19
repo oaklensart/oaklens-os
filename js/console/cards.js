@@ -1070,20 +1070,42 @@ export function _composedCards() {
 
 function _cardById(id) { return _cards().find((c) => c && c.id === id) || null; }
 
+// How a card's staged row reads. A `_draft` takeover KEEPS its row — every
+// reversal path (cancel, discard, restoreStagedRow) is built on that row
+// existing — but the row has to SAY it is not going anywhere, or the publish
+// view promises a card the bundle deliberately leaves behind. A pending change
+// that silently does nothing is a worse surprise than the tombstone it avoids.
+function _cardStageLabel(card) {
+  const name = (card.title || '').trim() || 'Untitled card';
+  return card._draft
+    ? `${name} — homepage card (draft — edit it to publish)`
+    : `${name} — homepage card`;
+}
+
 // One row per card, folded. The label names the card the way the owner would.
 // If the card is already in the ledger for this session, update its label and save
 // without inflating the stage counter per keystroke or duplicate action.
 function _stageCard(card, kind) {
+  // ---- WHERE A TAKEOVER STOPS BEING A DRAFT ----
+  // `_draft` marks a card that was seeded by ✎ EDIT THIS CARD and not yet
+  // touched — see cardsEditSlot. It clears on the first real edit, and it
+  // clears HERE because every mutator that changes a card already calls this
+  // (words, crop, picture, link, layout, palette, audio, order). One place, so
+  // a control added later cannot forget to say "this one is real now".
+  //
+  // Only on 'edit': the mint itself stages 'add', and clearing on that would
+  // undo the mark in the same breath as setting it.
+  if (kind === 'edit') delete card._draft;
   const existingRow = (STATE.stagedLog || []).find((r) => r.surface === 'cards' && r.ids[0] === card.id);
   if (existingRow) {
-    existingRow.label = `${(card.title || '').trim() || 'Untitled card'} — homepage card`;
+    existingRow.label = _cardStageLabel(card);
     existingRow.ts = Date.now();
     save();
     return;
   }
   stageChange('cards', {
     id: card.id,
-    label: `${(card.title || '').trim() || 'Untitled card'} — homepage card`,
+    label: _cardStageLabel(card),
     kind: kind || 'edit',
   });
   save();
@@ -1597,6 +1619,22 @@ export function cardsPickImage(id) {
     if (!filename) return;
     card.media = filename;
     card.folder = _folderFor(filename);
+    // ⚠️ PROVENANCE FOLLOWS THE PICTURE, OR IT GOES.
+    //
+    // `source` is what the homepage dedupes on (recent-index.js pickRecent), so
+    // a record that keeps pointing at the entry it was TAKEN OVER FROM while
+    // showing a different photograph is a lie the grid acts on: the automatic
+    // card it no longer resembles stays suppressed, and the entry it now shows
+    // appears twice. The reverse of the 2026-09-18 duplicate, and the same
+    // root — this library lists an original upload beside its own derivative,
+    // so "the same photograph" is routinely a different filename.
+    //
+    // Re-pointing it at the entry that OWNS this file keeps the card honest;
+    // a file no entry claims (an unassigned upload, a wallpaper) leaves it
+    // with no provenance to overstate, and the filename key carries the dedupe
+    // from there.
+    const found = _sourceForMedia(filename);
+    if (found) card.source = found; else delete card.source;
     // A new picture invalidates the old crop's measurement — and would otherwise
     // hand the overlay layout the previous photograph's brightness.
     delete card.img;
@@ -1641,6 +1679,28 @@ function _measurePicture(card) {
     if (_composing === card.id) _repaint();
     return lum;
   });
+}
+
+// Which ENTRY a chosen filename belongs to, in the same `{ surface, id }`
+// vocabulary cardsEditSlot writes and the engine dedupes on. The picker hands
+// back a bare filename and nothing else, so this is the one place that can turn
+// it back into provenance.
+//
+// Only the surfaces that actually put a card on the homepage are searched —
+// those are the only ones a composed card can collide with. A wallpaper or an
+// unassigned upload answers null, which is the honest answer: it has no
+// automatic card to suppress.
+// Exported for tests — the provenance rule is the dedupe contract's other half.
+export function _sourceForMedia(filename) {
+  if (!filename) return null;
+  const hit = (list, surface, pick) => {
+    const e = (list || []).find((x) => x && pick(x) === filename);
+    return e && e.id ? { surface, id: e.id } : null;
+  };
+  return hit(STATE.archive, 'archive', (e) => e.filename)
+    || hit(STATE.buffer, 'buffer', (e) => e.filename)
+    || hit(STATE.posts, 'posts', (e) => e.hero_filename || e.hero)
+    || null;
 }
 
 // Which folder a chosen filename actually lives in. The picker hands back a
@@ -1783,6 +1843,38 @@ export function cardsEditSlot(index) {
     showView('pulse');
     return;
   }
+  // What this slot is, asked once — the duplicate guard below and the seed
+  // further down both need it, and asking twice is how the two drift.
+  const home = SLOT_SURFACE[slot.kind];
+  const entry = _entryOf(slot);
+
+  // ---- ALREADY YOURS: go to that card, do not mint a second one ----
+  //
+  // Two cards from one entry is the shape that put the same photograph on the
+  // homepage twice (2026-09-18): each suppressed the automatic card, neither
+  // suppressed the other, and the budget was spent on one picture. The owner
+  // was not asking for a second card — pressing ✎ EDIT on a slot means "let me
+  // work on this", and the card that already exists IS the answer.
+  //
+  // So it takes you there rather than refusing: a toast with no movement reads
+  // as a dead button, and the reverse of this gesture has to be on screen
+  // (vision §2.4, layer 1). Runs BEFORE the budget check on purpose — with two
+  // cards up, "the homepage holds 2 — reset one first" would be a confusing
+  // way to say "you already made this one".
+  if (entry && entry.id && home) {
+    const already = _composedCards().find((c) => c && c.source
+      && c.source.surface === home.surface && c.source.id === entry.id);
+    if (already) {
+      const at = (_lastSlots || []).findIndex((s2) => s2 && s2.composed && s2.id === already.id);
+      if (at > -1) _slotIndex = at;
+      _focusComposed(already.id);
+      _snapshotExisting(_cardById(already.id));
+      toast(`You already have a card from this ${home.noun} — here it is`, 'info');
+      _repaint();
+      return;
+    }
+  }
+
   if (_composedCards().length >= COMPOSED_MAX) {
     toast(`The homepage holds ${COMPOSED_MAX} composed cards — reset one first`, 'warn');
     return;
@@ -1823,6 +1915,7 @@ export function cardsEditSlot(index) {
     };
     _cards().push(made);
     _recompact();
+    made._draft = true;
     _stageCard(made, 'add');
     _slotIndex = Number(index);
     _focusComposed(made.id);
@@ -1833,8 +1926,6 @@ export function cardsEditSlot(index) {
   }
 
   const RI = engine();
-  const entry = _entryOf(slot);
-  const home = SLOT_SURFACE[slot.kind];
   const media = slot.thumb && entry
     ? (RI && slot.kind === 'text' ? RI.heroFilename(entry) : entry.filename) || ''
     : '';
@@ -1872,6 +1963,21 @@ export function cardsEditSlot(index) {
   };
   _cards().push(card);
   _recompact();
+  // ---- A TAKEOVER IS A DRAFT UNTIL YOU TOUCH IT ----
+  //
+  // Publish is an all-or-nothing snapshot of every surface, so a card seeded
+  // here used to be committed by the next publish of ANYTHING — the Buffer, a
+  // field note — and `_imported` then turned ↩ RESET TO AUTOMATIC into
+  // ◼ RETIRE THIS CARD, a permanent address reservation behind a confirm
+  // dialog. Ten tombstones in a week came out of that loop, every one of them
+  // a card the owner was only looking at
+  // (docs/maintenance/2026-09-18-cards-duplicate-and-draft-publish.md).
+  //
+  // Unlike a free-form card, this one is SEEDED — it has the picture and the
+  // title of the card it took over, so the engine renders it happily and
+  // "unfinished is harmless" stops being true. The mark comes off in
+  // _stageCard on the first real edit; until then buildBundle leaves it home.
+  card._draft = true;
   _stageCard(card, 'add');
   _slotIndex = Number(index);
   _focusComposed(card.id);

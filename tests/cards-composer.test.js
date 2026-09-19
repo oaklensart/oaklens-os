@@ -864,6 +864,81 @@ describe('editing a card the grid picked', () => {
     if (at > -1) { cards.cardsSelectSlot(at); cards.cardsEditSlot(at); }
     expect(STATE.cards).toHaveLength(0);
   });
+
+  // ---- ONE CARD PER ENTRY ----
+  // Two cards from one photograph is what put 333 Market on the homepage twice
+  // (docs/maintenance/2026-09-18-cards-duplicate-and-draft-publish.md): each
+  // suppressed the automatic card, neither suppressed the other, and half the
+  // budget went on one picture.
+  it('takes you to the card you already made instead of minting a second', async () => {
+    STATE.archive = [{ id: 'p-1', slug: 'granite', filename: 'G.webp', title: 'GRANITE', added_at: '2026-08-01' }];
+    await cards.renderCards();
+    const slotOf = () => (cards._cardSlots(cards._stagedInputs()) || [])
+      .findIndex((sl) => sl && sl.kind === 'archive');
+    const at = slotOf();
+    cards.cardsEditSlot(at);
+    const first = STATE.cards[0];
+    // Finish it, so it is a real card and not a ghost the next gesture discards.
+    cardsSetText(first.id, 'title', 'Mine');
+    cardsDoneEditing();
+    await cards.renderCards();
+
+    // The archive photo is deduped out of the row now, so press the composed
+    // card's own slot — the path an author takes when they forget they made it.
+    const again = (cards._cardSlots(cards._stagedInputs()) || [])
+      .findIndex((sl) => sl && sl.composed && sl.id === first.id);
+    cards.cardsEditSlot(again);
+    expect(STATE.cards, 'no second card from the same entry').toHaveLength(1);
+    expect(_composingId()).toBe(first.id);
+  });
+
+  // ---- A TAKEOVER IS A DRAFT UNTIL YOU TOUCH IT ----
+  // Publish is an all-or-nothing snapshot, so a seeded card used to be
+  // committed by the next publish of ANYTHING, and `_imported` then left
+  // ◼ RETIRE THIS CARD as the only way out. Ten tombstones came of it.
+  it('marks a fresh takeover as a draft', async () => {
+    STATE.archive = [{ id: 'p-1', slug: 'granite', filename: 'G.webp', title: 'GRANITE', added_at: '2026-08-01' }];
+    await cards.renderCards();
+    const at = (cards._cardSlots(cards._stagedInputs()) || [])
+      .findIndex((sl) => sl && sl.kind === 'archive');
+    cards.cardsEditSlot(at);
+    expect(STATE.cards[0]._draft).toBe(true);
+  });
+
+  it('clears the draft mark on the first real edit', async () => {
+    STATE.archive = [{ id: 'p-1', slug: 'granite', filename: 'G.webp', title: 'GRANITE', added_at: '2026-08-01' }];
+    await cards.renderCards();
+    const at = (cards._cardSlots(cards._stagedInputs()) || [])
+      .findIndex((sl) => sl && sl.kind === 'archive');
+    cards.cardsEditSlot(at);
+    const made = STATE.cards[0];
+    cardsSetText(made.id, 'title', 'Mine');
+    expect(made._draft).toBeUndefined();
+  });
+
+  it('says in the staged row that a draft is not going anywhere', async () => {
+    // The row stays — every reversal path is built on it existing — so it has
+    // to SAY so, or the publish view promises a card the bundle leaves behind.
+    STATE.archive = [{ id: 'p-1', slug: 'granite', filename: 'G.webp', title: 'GRANITE', added_at: '2026-08-01' }];
+    await cards.renderCards();
+    const at = (cards._cardSlots(cards._stagedInputs()) || [])
+      .findIndex((sl) => sl && sl.kind === 'archive');
+    cards.cardsEditSlot(at);
+    const row = STATE.stagedLog.find((r) => r.surface === 'cards');
+    expect(row.label).toMatch(/draft/i);
+    cardsSetText(STATE.cards[0].id, 'title', 'Mine');
+    const after = STATE.stagedLog.find((r) => r.surface === 'cards');
+    expect(after.label).not.toMatch(/draft/i);
+  });
+
+  // A free-form card is NOT a draft: the owner pressed COMPOSE deliberately,
+  // and the engine already declines to render one with no picture and no words,
+  // so "unfinished is harmless" is still true for it. The asymmetry is the
+  // point — a takeover arrives seeded and therefore renderable.
+  it('does not mark a free-form card as a draft', () => {
+    const card = cardsCompose();
+    expect(card._draft).toBeUndefined();
+  });
 });
 
 describe('exiting edit mode and canceling', () => {

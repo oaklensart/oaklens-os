@@ -511,6 +511,41 @@
     return (h.charAt(0) === '/' && h.charAt(1) !== '/') ? h : '';
   }
 
+  // ---- WHICH ENTRY A ROW ITEM IS — the key the dedupe below asks for ----
+  // A composed card records where it came from as `source: { surface, id }`,
+  // in the console's own SLOT_SURFACE vocabulary (cards.js). For the row to be
+  // asked "are you the thing that card took over", it has to answer in the same
+  // words. Kind plus the raw marker is the whole mapping: the newest-first pool
+  // holds archive photos and posts, and the two pins are a buffer frame and a
+  // track.
+  function itemSurface(item) {
+    if (!item) return '';
+    if (item.kind === 'photo') return item.raw ? 'buffer' : 'archive';
+    if (item.kind === 'text') return 'posts';
+    if (item.kind === 'audio') return 'audio';
+    return '';
+  }
+
+  // ⚠️ THE ID IS `id`, NEVER `fn_id`. A field note carries both and they are
+  // never equal (`k3e9xba` vs `fn-011`). The console writes `entry.id` onto the
+  // card (cards.js `_slotOf` reads `data.id` for every kind, and cardsEditSlot
+  // seeds `source.id` from it), so reaching for `fn_id` here would compare two
+  // different namespaces, never match, and leave every field-note takeover
+  // duplicating — the exact bug this dedupe exists to close, hidden because
+  // photographs would still look fixed. `fn_id` is the publish-order label
+  // pickAutomatic filters on; it is not identity. Pinned in
+  // tests/card-composer.test.js.
+  function sourceKey(surface, id) {
+    return (surface && id) ? (surface + ':' + id) : '';
+  }
+  function composedSourceKey(card) {
+    var s = card && card.source;
+    return s ? sourceKey(s.surface, s.id) : '';
+  }
+  function itemSourceKey(item) {
+    return (item && item.data) ? sourceKey(itemSurface(item), item.data.id) : '';
+  }
+
   // The automatic row, with the owner's cards inserted after the pulse.
   //
   // A LIVE PULSE STILL LEADS (owner, 2026-09-07). The pulse is live, costs no
@@ -535,6 +570,34 @@
     if (madeAudio) {
       row = row.filter(function (item) { return !item || item.kind !== 'audio'; });
     }
+    // ---- WHAT A COMPOSED CARD SUPPRESSES: two keys, strongest first ----
+    //
+    // PROVENANCE FIRST. A takeover records the entry it came from, and that is
+    // identity — it survives re-cropping, re-titling, clearing the picture, and
+    // choosing a different file for it. A filename survives none of those.
+    // cardsPickImage rewrites `media` from the asset library, which lists an
+    // original upload beside its own derivative, so picking "the same
+    // photograph" routinely writes a different string and the automatic card
+    // came back beside the composed one. That is how 333 Market shipped twice
+    // (docs/maintenance/2026-09-18-cards-duplicate-and-draft-publish.md). The
+    // answer was on the record the whole time and this function was not reading
+    // it.
+    //
+    // It also closes the quieter half: `media` is legitimately EMPTY on a card
+    // whose picture was cleared, or taken over from a slot with no thumb. A
+    // filename key has nothing to compare there and the source stayed in the
+    // row; a provenance key still knows.
+    var usedSources = made.map(function (m) { return composedSourceKey(m.over); }).filter(Boolean);
+    if (usedSources.length) {
+      row = row.filter(function (item) {
+        var key = itemSourceKey(item);
+        return !key || usedSources.indexOf(key) === -1;
+      });
+    }
+    // THE FILENAME SECOND, and it is not redundant. A free-form card
+    // (cardsCompose) records no source at all, and a card whose picture was
+    // re-picked from a DIFFERENT entry should still suppress that entry. It is
+    // the weaker key, so it runs after the strong one rather than instead of it.
     var usedMedia = made.map(function (m) { return composedMedia(m.over); }).filter(Boolean);
     if (usedMedia.length) {
       row = row.filter(function (item) {

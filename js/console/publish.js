@@ -360,7 +360,15 @@ export function buildBundle() {
     // empty tile, so an unfinished draft is harmless here.
     //
     // `order` is a RANK, not a slot index, and it compacts — see composedPick.
-    "data/cards.json":     JSON.stringify((STATE.cards || []).map(c => {
+    // ⚠️ A `_draft` CARD IS NOT COMMITTED. It was seeded by ✎ EDIT THIS CARD
+    // and never touched, so it is something the owner was looking at rather
+    // than something they made. Publishing it would give it a permanent
+    // address and leave ◼ RETIRE THIS CARD as the only way out — the loop that
+    // produced ten tombstones in a week
+    // (docs/maintenance/2026-09-18-cards-duplicate-and-draft-publish.md). Same
+    // shape as the posts line below, which has always held unpublished drafts
+    // back from a bundle that otherwise commits everything.
+    "data/cards.json":     JSON.stringify((STATE.cards || []).filter(c => c && !c._draft).map(c => {
       // ⚠️ The tombstone's own branch — the FOURTH in this file, for the fourth
       // time for the same reason (dark frames, retired tracks, retired sets,
       // now retired cards). A composed card's id is its permanent address at
@@ -452,7 +460,7 @@ CONTENTS:
   data/library.json    ${STATE.library.length} entries
   data/audio.json      ${(STATE.audio || []).length} tracks
   data/audio-sets.json ${(STATE.audioSets || []).length} sets
-  data/cards.json      ${(STATE.cards || []).length} composed cards
+  data/cards.json      ${(STATE.cards || []).filter(c => c && !c._draft).length} composed cards
   posts/*.md           ${STATE.posts.length} markdown files
 
 NOTE: Image files are NOT included in this bundle.
@@ -1075,7 +1083,12 @@ export async function publishToServer() {
     Object.keys(SURFACE_MANIFEST)
       .filter(surface => surface !== 'posts')
       .forEach(surface => {
-        STATE[surface].forEach(e => { e._imported = true; });
+        // ⚠️ A CARD THE BUNDLE LEFT BEHIND WAS NOT PUBLISHED, so it must not be
+        // stamped as if it were. `_imported` is what flips ↩ RESET TO AUTOMATIC
+        // into ◼ RETIRE THIS CARD, so stamping a `_draft` card here would hand
+        // it a permanent address it never got — the tombstone loop re-entering
+        // through the back door, one publish later and much harder to see.
+        STATE[surface].forEach(e => { if (!e._draft) e._imported = true; });
       });
     // Only published posts were committed — drafts stay local & unpublished.
     STATE.posts.forEach(p => { if (!p.status || p.status === 'published') p._imported = true; });

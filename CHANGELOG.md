@@ -25,6 +25,43 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-18 (homepage cards: no more duplicates, and a card you're only trying out stays home)
+
+**Nothing to do on merge.** Two fixes to the homepage card studio.
+
+- **The same photograph can't appear twice on your homepage any more.** When you
+  take a card over, the card remembers *which piece of work* it came from — and
+  the homepage now uses that to keep the original from showing up again beside
+  it. It used to match on the picture's filename, which quietly failed in two
+  ordinary situations: if you swapped the card's picture (your library lists an
+  original upload right next to its own resized copy, so "the same photo" can be
+  a different file), or if you cleared the picture entirely. Either way you got
+  the same work twice.
+
+  If you swap a card's picture now, its record of where it came from follows the
+  new picture, or is dropped if the new one doesn't belong to anything.
+
+- **Pressing "Edit this card" on something you've already made a card from takes
+  you to that card**, instead of making a second one from the same work.
+
+- **⚠️ A card you've taken over but not touched is no longer published.** This is
+  the bigger one. Taking a slot over gives you a card that already has the
+  picture and the title, so it was ready to publish immediately — and because
+  publishing is all-or-nothing across your whole site, the next time you
+  published *anything*, that card went out with it. Once published, a card's
+  address is permanent, so the only way to get rid of it was to retire it: a
+  tombstone, forever.
+
+  Now it's held as a draft until you actually edit it. Your publish list shows it
+  as `(draft — edit it to publish)`, so nothing disappears quietly — it just
+  doesn't go live until you've made it yours. Edit anything about it (words,
+  crop, picture, link, layout, colour) and it publishes normally from then on.
+
+  Cards you start from scratch are unaffected — those were never the problem,
+  because an empty one doesn't render.
+
+---
+
 ## 2026-09-18 (two kinds of share image, and a way to turn one off)
 
 **Nothing to do on merge.** New things in the focal-point window, for photos.
