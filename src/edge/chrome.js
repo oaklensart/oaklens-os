@@ -30,27 +30,67 @@ export function _frameImg(origin, filename, width) {
 
 // OG card override. The field console can stamp a branded 1200x630 card for a
 // frame and upload it to meta/<base>-og.webp. When one exists it becomes the
-// og:image — it already bakes in the photo + FRAME // date + wordmark rail, so
-// platforms show a consistent, on-brand unfurl. Falls back to the raw frame.
+// og:image — the stamp already carries the picture, the title and the wordmark,
+// so platforms show a consistent, on-brand unfurl. Falls back to the raw frame.
 // Keyed by image basename so a buffer frame and its archived copy share a card.
 function _cardKey(filename) {
   if (!filename) return null;
   return `meta/${String(filename).replace(/\.[^.]+$/, '')}-og.webp`;
 }
 // Whether a stamped OG card exists for this frame. The R2 head() used to run on
-// every unfurl; cache the boolean at the edge (short TTL) so repeat crawls skip
-// the round-trip. A freshly stamped card may take up to the TTL to surface.
-const _OG_CACHE_TTL = 300; // seconds
+// every unfurl; cache the boolean at the edge so repeat crawls skip the
+// round-trip.
+//
+// ⚠️ THE TWO ANSWERS ARE NOT SYMMETRIC, AND SHARING ONE TTL WAS A BUG.
+// A cached '1' goes stale when a stamp is DELETED: the old card unfurls for a
+// few more minutes, which is harmless — an un-stamp has no publish horizon
+// either way. A cached '0' goes stale when a stamp is PUBLISHED, and that is
+// expensive out of all proportion: the page serves the bare photograph to
+// crawlers that cache their own answer for DAYS, and many (X, Facebook,
+// LinkedIn) never re-crawl without a manual purge. Stamp a card, share it
+// inside the window, and the wrong image is effectively permanent over there.
+// Reported 2026-09-18 with six minutes of timestamped evidence; the owner only
+// recovered because iMessage happens to re-crawl.
+// So: remember "yes" for a while, re-check "no" almost immediately. The short
+// negative TTL still collapses the burst the cache was added for — one share
+// fans out to several fetches within seconds — while a fresh stamp surfaces
+// essentially at once.
+// Purging this from the console instead does NOT work: caches.default is
+// per-colo, so a purge from the author's browser clears their data centre and
+// not the one the crawler lands in — the same limitation purgeCdnCache already
+// documents in src/api/assets.js. See
+// docs/maintenance/2026-09-18-og-stamp-invisible-for-five-minutes.md.
+//
+// ⚠️ THE POSITIVE SIDE IS 60s, NOT 300s, BECAUSE A STAMP CAN NOW BE REMOVED.
+// While nothing could delete a stamp, a stale '1' cost nothing — the worst case
+// was the right card for a few extra minutes. The console can turn a stamp OFF
+// now, and a stale '1' then points og:image at a key that is GONE: the crawler
+// fetches it and gets a 404, i.e. a BROKEN image, not the old card. Bounded to
+// a minute rather than five. Still collapses any realistic crawl burst — a
+// share fans out over seconds, not minutes — and the extra R2 head()s are Class
+// B operations against a 10M/month free allowance, which no fork will notice.
+const _OG_CACHE_TTL = 60;       // seconds — a stamp we FOUND (bounded: it can be removed)
+const _OG_MISS_TTL = 10;        // seconds — a stamp we did NOT find
+
+// ONE SPELLING of the probe-cache address. The delete path purges this key as a
+// best-effort courtesy to the author's own colo (src/api/assets.js), and a
+// second literal over there is how the two would drift into never matching —
+// silently, because a purge that misses looks exactly like a purge that worked.
+export function _cardProbeCacheUrl(origin, key) {
+  return `${origin}/__cardexists/${key}`;
+}
 async function _cardExists(env, origin, key) {
   if (!key) return false;
   try {
     const cache = caches.default;
-    const ck = new Request(`${origin}/__cardexists/${key}`);
+    const ck = new Request(_cardProbeCacheUrl(origin, key));
     const cached = await cache.match(ck);
     if (cached) return (await cached.text()) === '1';
     const exists = !!(await env.CDN.head(key));
     await cache.put(ck, new Response(exists ? '1' : '0', {
-      headers: { 'Cache-Control': `public, max-age=${_OG_CACHE_TTL}` },
+      headers: {
+        'Cache-Control': `public, max-age=${exists ? _OG_CACHE_TTL : _OG_MISS_TTL}`,
+      },
     }));
     return exists;
   } catch (err) {
@@ -213,7 +253,7 @@ export async function getFrameOgData(url, env, page) {
       const day = localDay(e.captured_at || e.published_at, siteConfig.timezone);
       return {
         // Quiet title: the domain row already shows the site's own host, and
-        // the card image carries the FRAME // date branding — so the title
+        // a stamped card image carries the branding itself — so the title
         // de-screams to just the project name (no site-name echo).
         title: 'The Rolling Buffer',
         description: ['Capture first. Process later.', day].filter(Boolean).join(' · '),

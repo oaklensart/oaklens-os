@@ -25,6 +25,158 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-18 (two kinds of share image, and a way to turn one off)
+
+**Nothing to do on merge.** New things in the focal-point window, for photos.
+
+- **Your share image can now be the photograph itself.** Until now a shared
+  photo always unfurled as the *card* — your picture in a tall box with its
+  title and your site name next to it. There is a second option now: **Plain**,
+  which is just the photograph, filling the whole preview, cropped to the point
+  you chose. Pick whichever suits the picture; it's per photo, so you can mix.
+
+  The choice is remembered against the image itself, so opening that photo again
+  later — on any device — shows you the one that's actually live rather than
+  guessing.
+
+- **The crop guide follows your choice.** The red rectangle on your photo shows
+  what the share image keeps, and the two styles keep different shapes — the
+  card a tall one, plain a wide one. It switches when you switch, so you're
+  always aiming at the real thing.
+
+- **You can turn a share image off.** There was no way to undo publishing one.
+  `✕ Remove` appears whenever there's one to remove, asks first, and puts the
+  link back to unfurling with the plain photograph. Publishing again puts it
+  straight back — that's the undo. Worth knowing: this happens immediately,
+  with no publish step, which is why it asks.
+
+- **Photos with a live share image are marked in your Archive.** The small `▣`
+  on the thumbnail — which the Buffer has had for a while — now shows in the
+  Archive too, so you can see at a glance which frames are stamped.
+
+---
+
+## 2026-09-18 (share images show up right away, and the preview tells the truth)
+
+**Nothing to do on merge.**
+
+When you stamp a share image for a photo, that picture is what people see when
+they paste your link into Messages, WhatsApp, Bluesky or a DM. Two things about
+that were quietly wrong.
+
+- **A share image you just made could stay invisible for five minutes.** The
+  site remembers whether a photo has a share image so it isn't checking
+  storage on every single link preview — sensible — but it remembered "this
+  one doesn't" for just as long as "this one does". So: make a share image,
+  paste the link straight away, and the preview could still show the plain
+  photograph instead of the card you made. That would fix itself in a few
+  minutes on your site — but the app that showed the preview has usually
+  **already saved** the wrong picture, and most of them keep it for days and
+  never look again. Now the site re-checks within about ten seconds. Remembering
+  that a share image *does* exist is unchanged, because being a few minutes
+  behind on a deletion costs nothing.
+
+  *If you've ever stamped a card, shared it immediately, and wondered why the
+  old picture kept showing — this was why, and it wasn't your doing.*
+
+- **The share-image preview now tells you whether it's actually live.** The
+  preview in the focal-point window drew the same card whether or not you had
+  ever published it, so there was no way to tell "this is what people see" from
+  "this is what you'd get if you pressed Publish". It now says which, right
+  under the preview. Publishing flips it immediately.
+
+- **Smaller things in the same window.** The instructions underneath now
+  describe the share image when you're looking at a share image (they only ever
+  talked about thumbnails). And the `Show guides` checkbox says what it does —
+  it was labelled in a way that read like a choice between two kinds of card,
+  when all it does is show or hide the two crop outlines on your photo.
+
+---
+
+## 2026-09-17 (a cleanup pass: clearer errors, safer notes)
+
+**Nothing to do on merge** — unless your repo has a file with your computer's
+home folder path in it, which the leak scan now flags. See the last entry below.
+
+A full read of the code looking for dead weight, comments that had stopped
+being true, and small things that were quietly wrong. Most of it you will never
+notice. These are the parts you might.
+
+- **Logging in tells you when the signing secret is missing.** If
+  `SESSION_SECRET` was never set (and there was no KV namespace to make one
+  in), the console used to accept your password, say it worked, and then fail
+  every single action afterwards with nothing on screen explaining why. It now
+  refuses the login and names the secret to set. If you have ever had a console
+  that logs in and then does nothing, this was probably why.
+- **"You haven't made a database yet" no longer looks like a crash.** Bench,
+  field-note drafts and Pulse all reported a hard error when no D1 database was
+  attached, which lit up the console's status lamp as though something had
+  broken. They now say the feature simply is not set up yet, the same way every
+  other optional feature does, and tell you the command to run.
+- **Field notes handle awkward text properly.** A caption with a double quote in
+  it — `![24" monitor](…)` — used to break the image tag. Links that try to run
+  code instead of going somewhere (`javascript:…`) now keep their words and lose
+  the link, rather than rendering as a live link. Your published pages were
+  never at risk here; the console's live preview was.
+- **A future page of yours cannot accidentally get the admin security policy.**
+  Any page whose address began with the letters "dev" — `/devlog`, `/developer`
+  — would have been treated as part of the admin console and given its looser
+  rules. It now has to actually be the console.
+- **Asking an API address the wrong way gets a real answer.** Sending the wrong
+  kind of request to a working address returned your site's 404 *page* — a page
+  for a human, handed to a program. It now answers properly and says which
+  request types that address accepts.
+- **Field notes render a touch faster on a cold visit,** because a malformed API
+  call no longer runs the whole page-rendering path before giving up.
+- **Tooling updated.** Wrangler and the test browser move to current versions.
+  Nothing in your config changes.
+
+⚠️ **The one thing that might newly fail:** the identity leak scan (which runs
+in your CI) now also looks for a local filesystem path — the `/Users/<you>/…`
+or `/home/<you>/…` kind — in any tracked file. These turn up in stray log files
+and pasted terminal output, and they tell the internet your account name and
+folder layout. (The examples here are written with angle brackets on purpose:
+spelled out properly they would trip the very check they describe, which is
+also why `scripts/os-leak-scan.sh` exempts itself.) If your build goes red on this after merging, the fix is to delete the
+file and add it to `.gitignore`; that is exactly what prompted the check.
+
+---
+
+## 2026-09-14 (the console feels like hardware)
+
+**Nothing to do on merge.** A craft pass on how the Field Console looks and
+responds. No settings, no new files to configure, and nothing moved.
+
+- **Buttons push back now.** Press anything and it travels about a pixel into
+  the panel with its shadow tightening, instead of just shrinking slightly. This
+  used to happen only on touchscreens — on a laptop with a mouse there was
+  almost no feedback at all. Now both behave the same.
+- **You can see where the keyboard is.** Tabbing through the console was nearly
+  invisible: there were three focus styles in the whole stylesheet. Every
+  control has a clear ring now.
+- **One light, so the depth is consistent.** Every edge highlight and drop
+  shadow in the console is now worked out from a single light source instead of
+  being drawn by hand, which is what makes a surface look considered rather than
+  assembled. Fewer effects, not more.
+- **Glow means something again.** Light is now reserved for things that are
+  actually happening — the status lamp, a running job, and publishing while it
+  commits. Things that were merely *selected* (which slot you're looking at,
+  which layout you picked) lost their glow, because "I clicked this" and "this
+  is live" should not look the same.
+- **Publishing tells you it's working.** While a publish commits, the publish
+  bar lights up. Before, the only sign was the button going grey, which reads
+  as broken rather than busy.
+- **Two badges stopped pulsing forever.** They ignored the reduced-motion
+  setting and competed with the status lamp for attention.
+- **The dark theme is properly black.** On an OLED phone the old near-black was
+  visibly lighter than the screen's own black, so the app looked like a
+  rectangle sitting on the device. Light mode is unchanged.
+- **Flicking the buffer and archive lands on a row** instead of halfway through
+  one. It only tidies the landing — it never grabs the scroll.
+- **A colour bug you may have been seeing:** in light mode, parts of the console
+  were drawing in the default red instead of your own brand colour. If you run
+  any preset other than `noir`, light mode now uses your colour everywhere.
+
 ## 2026-09-13 (and the single-card view fits too)
 
 **Nothing to do on merge.** The other half of the entry below.

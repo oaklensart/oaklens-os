@@ -28,7 +28,7 @@
 import { STATE, save, clearStage, totalStaged, stagedIdsFor, sessionTrash, trashItem, dropTrashForDeletedR2, _pendingR2Deletes, setPendingR2Deletes } from '../console-state.js';
 import { publishFiles, syncFiles, deleteAssets, fetchDrafts, isLoggedIn, isNotConfigured } from '../console-api.js';
 import { showToast, logEvent, startProgress, endProgress } from '../console-telemetry.js';
-import { toast, refreshStageIndicators, escapeHTML } from './chrome.js';
+import { toast, refreshStageIndicators, escapeHTML, setCommitArmed } from './chrome.js';
 import { getSyncedSha, setSyncedSha } from './assets.js';
 import { ymd } from './utils.js';
 import { scheduleLibrarySync, updatePurgeR2Button, _librarySyncFailed } from './sync.js';
@@ -970,6 +970,14 @@ export async function publishToServer() {
   const btn = document.getElementById('gh-publish-btn');
   if (log) { log.innerHTML = ''; log.classList.add('visible'); }
   if (btn) btn.disabled = true;
+  // THE CONSOLE ARMS. Until 2026-09-14 the entire visual feedback for "this is
+  // committing to GitHub right now" was the button going disabled, which reads
+  // as broken rather than busy; the first fix lit the whole publish panel, and
+  // with the canvas bloom behind it that came out as a wash across the page.
+  // The owner's read: light the CONTROLS, not the panel. Same licensed state
+  // (design-spec.md §6.5), smaller and hotter — and it stays lit until the
+  // commit is confirmed, which is what the `finally` below marks.
+  setCommitArmed(true);
 
   function logLine(msg, cls = 'log-info') {
     if (!log) return;
@@ -1153,5 +1161,6 @@ export async function publishToServer() {
   } finally {
     endProgress('publish');
     if (btn) btn.disabled = false;
+    setCommitArmed(false);   // cools over --arm-cool rather than snapping off
   }
 }

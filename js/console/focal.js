@@ -19,12 +19,12 @@
 // Extracted from console-ui.js 2026-07-29. See dev/console-module-plan.md.
 
 import { STATE, save, stageChange } from '../console-state.js';
-import { getToken, uploadFiles, fetchOgCards } from '../console-api.js';
-import { toast } from './chrome.js';
+import { getToken, uploadFiles, deleteAssets, fetchOgCards } from '../console-api.js';
+import { toast, hideOverlay } from './chrome.js';
 import { CDN_BASE, cdnThumb, SITE_NAME, SITE_FILE_PREFIX } from './assets.js';
-import { paintCard, probeCardTokens, ensureShareFonts, loadCardImage, compositionOf,
-  shareStem, shareKey, CARD_WELL } from './card-paint.js';
-import { renderBuffer, _setOgCardSet, _addOgCard } from './buffer.js';
+import { paintCard, paintPlain, hasPicture, probeCardTokens, ensureShareFonts, loadCardImage,
+  compositionOf, shareStem, shareKey, shareMarker, SHARE_RATIOS, CARD_WELL } from './card-paint.js';
+import { renderBuffer, _setOgCardSet, _addOgCard, _removeOgCard, _hasOgCard, _ogCardStyle } from './buffer.js';
 import { archiveEditId, archiveComposeFocus, archiveComposeCardFocus, _setArchiveComposeFocus, _setArchiveComposeCardFocus, renderArchive } from './archive.js';
 import { renderWall } from './more-views.js';
 import { fnCurrentId, fnMarkDirty, getBufferFrameNumbers } from './fn-editor.js';
@@ -57,9 +57,21 @@ import { fnCurrentId, fnMarkDirty, getBufferFrameNumbers } from './fn-editor.js'
 export const FocalModal = (() => {
   const $ = id => document.getElementById(id);
   const clamp = n => Math.max(0, Math.min(100, n));
-  // What the share image keeps: the card's picture well, which is 4:5 — the
-  // homepage's own crop. The ratio geometry itself lives in card-paint.js.
-  const OG_ASPECT = 1 / CARD_WELL;
+  // WHAT THE SHARE IMAGE KEEPS — and it depends on the style, which is why this
+  // is a function and not the const it was.
+  //
+  //   card   the card's picture well: 4:5, the homepage's own crop
+  //   plain  the whole 1200×630 ground: 1.905:1, a wide letterbox
+  //
+  // The same focal point keeps DIFFERENT parts of the photograph in each, so the
+  // red guide on the stage has to follow the selection. A guide showing a crop
+  // the selected style does not produce would be worse than no guide at all —
+  // the author would be aiming at the wrong box, which is the structural half of
+  // the owner's original "a separate preview for each"
+  // (docs/ideas/og-share-image-styles.md §3).
+  const CARD_ASPECT = 1 / CARD_WELL;
+  const PLAIN_ASPECT = SHARE_RATIOS.og.w / SHARE_RATIOS.og.h;
+  function ogAspect() { return styleMode === 'plain' ? PLAIN_ASPECT : CARD_ASPECT; }
 
   let onSaveCb = null, wired = false;
   let focus = { x: 50, y: 50 };
@@ -70,6 +82,7 @@ export const FocalModal = (() => {
   let cardReady = Promise.resolve();   // the picture this card is waiting on
   let cardImg = null;        // same-origin source for the canvas
   let cardTokens = null;     // the card's own palette, probed once per open (see drawCard)
+  let styleMode = 'card';    // 'card' | 'plain' — which painter, and which crop guide
 
   // One parser for the one string format — _focusPct, at the foot of this file,
   // where the luminance sampler needs the same answer (declarations hoist).
@@ -77,6 +90,88 @@ export const FocalModal = (() => {
   function focusStr() { return `${Math.round(focus.x)}% ${Math.round(focus.y)}%`; }
   function aspectNum(s) { const m = /([\d.]+)\s*[/:]\s*([\d.]+)/.exec(s || ''); return m ? (+m[1]) / (+m[2]) : 1.5; }
   function setStatus(msg, cls) { const s = $('ogc-status'); if (s) { s.textContent = msg || ''; s.className = 'ogc-status ' + (cls || ''); } }
+
+  // ---- what the link unfurls with TODAY ----
+  //
+  // The canvas draws the same card whether or not that card has ever been
+  // published, so on its own it cannot distinguish "this is the current unfurl"
+  // from "this is what ▲ Publish would produce". Reported 2026-09-18: an owner
+  // read a preview of the second kind as the first, concluded the console and
+  // the edge disagreed about the share image, and spent six minutes on a
+  // disagreement that did not exist. The bytes were right the whole time.
+  //
+  // Same source of truth as the buffer's ▣ badge — _hasOgCard reads the set
+  // filled from /api/og-cards (a listing of meta/*), so this line and that badge
+  // can never disagree about what is on R2.
+  //
+  // The marker is the stem without its folder — shareMarker(), which lives in
+  // card-paint.js beside shareStem() precisely so this layer and `share` can
+  // share one copy. That is what the set is keyed by for EVERY kind: frames by
+  // basename, and fn-/audio-/set-/card- stems as themselves
+  // (js/console/buffer.js:208). So this works on every surface the modal serves,
+  // not just frames. `marker` still wins where a surface passed one.
+  function liveMarker(c) {
+    if (!c) return '';
+    return c.marker || shareMarker(c.stem);
+  }
+  // ⚠️ Says nothing about what the link shows INSTEAD, deliberately. That
+  // differs by kind — a frame falls back to the bare photograph, while a track
+  // or a set has no picture to fall back to and _audioOgImage returns null, so
+  // the page's own og:image stands (src/edge/chrome.js). "Not published yet" is
+  // true on every surface; "unfurls as the plain photo" would be a lie on half
+  // of them.
+  //
+  // A download-only surface (the wall: no ?f= route, canPublish:false) gets no
+  // line at all — there is no page that unfurls this card, so neither answer
+  // means anything there.
+  function setLive(isLive) {
+    const el = $('ogc-live');
+    const off = $('focal-btn-remove');
+    // ✕ Remove exists only while there is something to remove. A button that is
+    // permanently on screen and inert half the time is the dead-control shape
+    // the reversibility rule rejects — and here it would also be a standing
+    // invitation to press the one gesture in this modal with no publish horizon.
+    const removable = !!card && card.canPublish !== false && isLive;
+    if (off) off.style.display = removable ? '' : 'none';
+    if (!el) return;
+    if (!card || card.canPublish === false) { el.textContent = ''; el.className = 'ogc-live'; return; }
+    el.className = 'ogc-live' + (isLive ? ' is-live' : '');
+    el.textContent = isLive
+      ? '● live — this is the current unfurl'
+      : '○ not published yet — ▲ Publish Card makes it the unfurl';
+  }
+
+  // ---- the two styles ----
+  //
+  // `card` is the composed card (the picture in its 4:5 well, with its type
+  // beside it); `plain` is the photograph alone, cover-cropped to 1200×630 at
+  // the focal point. Both write the SAME R2 key — the edge probes one address
+  // and whatever bytes are there win, so nothing on the server learns about
+  // styles (src/edge/chrome.js). What the server does learn is which style the
+  // bytes ARE, as object metadata, so reopening can show the live one.
+  function setStyleButtons() {
+    const wrap = $('focal-style');
+    if (!wrap) return;
+    // Hidden where there is no photograph: a track, a saved set and a note that
+    // leads with words would paint an empty rectangle. hasPicture() asks the
+    // same question the image loader answers, so an option is never offered for
+    // a picture that cannot be fetched.
+    const offerable = !!card && hasPicture(card.item);
+    wrap.style.display = offerable ? '' : 'none';
+    for (const b of wrap.querySelectorAll('[data-style]')) {
+      b.classList.toggle('on', b.dataset.style === styleMode);
+      b.setAttribute('aria-pressed', String(b.dataset.style === styleMode));
+    }
+  }
+  function setStyle(mode) {
+    const next = mode === 'plain' ? 'plain' : 'card';
+    if (next === styleMode) return;
+    styleMode = next;
+    setStyleButtons();
+    // Repaint AND re-guide: the two styles keep different parts of the
+    // photograph, so the red rect on the stage moves with the choice.
+    paint();
+  }
 
   // Displayed rect of the contain-fit image inside the stage (so the dot/guides
   // map to the *image*, not the letterboxed container).
@@ -104,7 +199,7 @@ export const FocalModal = (() => {
     if (!card || !$('focal-guide-toggle').checked) { og.style.display = th.style.display = 'none'; return; }
     const place = (el, A) => { const c = cropRectPx(A); el.style.display = 'block';
       el.style.left = c.left + 'px'; el.style.top = c.top + 'px'; el.style.width = c.w + 'px'; el.style.height = c.h + 'px'; };
-    place(th, thumbAspect); place(og, OG_ASPECT);
+    place(th, thumbAspect); place(og, ogAspect());
   }
 
   // ---- the share image ----
@@ -124,7 +219,11 @@ export const FocalModal = (() => {
     const cv = $('ogc-canvas');
     if (!cv || !card) return Promise.resolve();
     if (painting) { repaintQueued = true; return painting; }
-    painting = paintCard(card.item, 'og', {
+    // One line decides the whole style. Both painters take the same arguments
+    // on purpose, so nothing here has to know what either of them draws — the
+    // modal still owns only the POINT.
+    const paint = styleMode === 'plain' ? paintPlain : paintCard;
+    painting = paint(card.item, 'og', {
       canvas: cv,
       image: cardImg,
       focus: focusStr(),
@@ -222,6 +321,18 @@ export const FocalModal = (() => {
     $('focal-thumbwrap').style.display = card ? 'none' : '';
     $('focal-card-actions').style.display = card ? '' : 'none';
     $('focal-modal-title').textContent = card ? '▣ FRAME // SHARE IMAGE' : '◎ FOCAL POINT';
+    // The hint followed neither mode: it talked only about thumbnails while the
+    // right column showed a 1200×630 OG card, so in card mode the one piece of
+    // prose in the modal described a different feature. Both modes are driven by
+    // the SAME point, which is the thing actually worth saying.
+    const hint = $('focal-hint');
+    if (hint) {
+      hint.innerHTML = card
+        ? 'Drag the <span class="accent">point</span> to choose what stays in frame. The same point crops '
+          + 'this share image and every thumbnail of this photo — the full-frame view is never cropped.'
+        : 'Drag the <span class="accent">point</span> to choose what stays in frame when this photo is '
+          + 'cropped to a thumbnail. The full-frame view is never cropped.';
+    }
     // Clear any stale guides — thumbnail mode never re-paints them; card mode
     // re-shows them via paintGuides(). Per-action buttons depend on the surface.
     $('focal-guide-og').style.display = 'none';
@@ -229,6 +340,22 @@ export const FocalModal = (() => {
     if (card) {
       $('focal-btn-copy').style.display = card.shareUrl ? '' : 'none';        // only where a page unfurls this card
       $('focal-btn-publish').style.display = (card.canPublish !== false) ? '' : 'none';
+      // SEED FROM WHAT IS ACTUALLY LIVE, not from whatever was picked last.
+      // Reopening a frame stamped in plain style and previewing it as a card —
+      // over a line reading "● live" — is the same untruth this modal was fixed
+      // for in the first place, one layer along. '' (a stamp made before styles
+      // existed, or none at all) means card, because that is what they all are.
+      const marker = liveMarker(card);
+      const isLive = _hasOgCard(marker);
+      styleMode = (isLive && _ogCardStyle(marker) === 'plain') ? 'plain' : 'card';
+      // A card with no photograph can only ever be the card style.
+      if (!hasPicture(card.item)) styleMode = 'card';
+      setStyleButtons();
+      setLive(isLive);
+    } else {
+      styleMode = 'card';
+      setStyleButtons();
+      setLive(false);        // clears the line — thumbnail mode has no share image
     }
     setStatus('');
     const img = $('focal-img');
@@ -287,7 +414,7 @@ export const FocalModal = (() => {
       const b = await toBlob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(b);
-      a.download = `${SITE_FILE_PREFIX || 'share'}-${(card.stem || 'card').replace(/^meta\//, '')}-og.webp`;
+      a.download = `${SITE_FILE_PREFIX || 'share'}-${shareMarker(card.stem) || 'card'}-og.webp`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       setStatus('downloaded', 'ok');
@@ -308,17 +435,70 @@ export const FocalModal = (() => {
       // ONE SPELLING OF THE KEY. shareStem/shareKey built it when the modal
       // opened; a second literal here is how the edge and the console start
       // looking for different files (chunk 6's last "watch for").
-      const file = new File([blob], shareKey(card.stem, 'og'), { type: 'image/webp' });
-      await uploadFiles([file]);
-      if (card.marker) _addOgCard(card.marker);   // buffer owns the set — see js/console/buffer.js
+      const key = shareKey(card.stem, 'og');
+      const file = new File([blob], key, { type: 'image/webp' });
+      // The style rides along as R2 object metadata, so reopening this frame on
+      // any device shows the style that is live rather than a guess.
+      await uploadFiles([file], { meta: { [key]: styleMode } });
+      _addOgCard(liveMarker(card), styleMode);   // the one set every badge reads
+      setLive(true);                        // the line above the buttons now says so
       if (onSaveCb) onSaveCb(focusStr());   // persist the focal point too — thumbnails use it
       setStatus('✓ published to R2', 'ok');
-      toast('✓ share image published — the link now unfurls with it', 'success');
+      // ⚠️ "now" is up to _OG_MISS_TTL seconds, not instantly: if the edge probed
+      // this key while it was still missing it holds that answer briefly
+      // (src/edge/chrome.js). Ten seconds since 2026-09-18 — it was five minutes,
+      // and a link shared inside that window unfurled as the bare photograph to
+      // crawlers that cache their answer for days.
+      toast('✓ share image published — the link unfurls with it within ~10s', 'success');
       renderBuffer();
     } catch (e) { setStatus('failed', 'err'); toast('⚠ publish failed: ' + e.message, 'error'); }
   }
 
-  return { open, save, reset, close, publish, download, copyLink };
+  // ---- turning a stamp OFF ----
+  //
+  // The counterpart to publish(), and the reversibility rule is satisfied
+  // STRUCTURALLY rather than with an undo chip: the reverse of removing is
+  // ▲ Publish Card, which is still on screen, still pointed at the same stem,
+  // still painting from the same canvas. No history to keep, nothing that can
+  // become a dead button (CLAUDE.md, the three layers).
+  //
+  // ⚠️ IT EARNS A CONFIRM, unlike almost everything else in the console.
+  // Every other destructive gesture here waits for the publish horizon — the
+  // session trash holds it, and nothing is live until you publish. A stamp has
+  // no horizon in either direction: it went live the moment it landed on R2,
+  // and it is gone the moment this returns. So the confirm is the only pause
+  // there is, and it names what goes and what the link falls back to.
+  //
+  // All three ratios go, not just the one that unfurls. `og` is what a crawler
+  // reads, but the share block writes `native` and `story` beside it; deleting
+  // only `og` would leave two orphans on R2 that nothing references and nothing
+  // lists. deleteAssets is idempotent, so removing a stamp that only ever had
+  // `og` is not an error.
+  async function remove() {
+    if (!card || !card.stem) return;
+    if (!getToken()) return toast('log in to remove', 'error');
+    const marker = liveMarker(card);
+    if (!_hasOgCard(marker)) return;          // nothing live to remove
+    if (!confirm(
+      'Remove this share image?\n\n'
+      + 'The link goes back to unfurling with the plain photograph. '
+      + 'This happens on R2 immediately — there is no publish step to undo it, '
+      + 'though ▲ Publish Card puts it straight back.\n\n'
+      + 'Previews already saved by an app that has seen the link may take a '
+      + 'few minutes to catch up.')) return;
+    try {
+      setStatus('removing…');
+      await deleteAssets(Object.keys(SHARE_RATIOS).map((r) => shareKey(card.stem, r)));
+      _removeOgCard(marker);
+      setLive(false);
+      setStatus('✓ removed from R2', 'ok');
+      toast('✓ share image removed — the link unfurls with the photograph again', 'success');
+      // Both badges come off the one set, and both surfaces may be behind us.
+      renderBuffer(); renderArchive();
+    } catch (e) { setStatus('failed', 'err'); toast('⚠ remove failed: ' + e.message, 'error'); }
+  }
+
+  return { open, save, reset, close, publish, remove, download, copyLink, setStyle };
 })();
 
 // Convenience wrapper used by every surface's entry point.
@@ -529,8 +709,14 @@ export async function loadOgCards() {
   try {
     const d = await fetchOgCards();
     if (d && Array.isArray(d.cards)) {
-      _setOgCardSet(d.cards);
+      // Pairs, so the set carries the STYLE each stamp was painted in. `styles`
+      // is additive and may be absent (an older worker, a fork mid-upgrade) —
+      // a missing entry reads as '', which every reader treats as the card
+      // style, because that is what every stamp made before styles existed is.
+      const styles = (d && d.styles) || {};
+      _setOgCardSet(d.cards.map((c) => [c, styles[c] || '']));
       renderBuffer();
+      renderArchive();        // the archive draws the same badge now
     }
   } catch { /* non-fatal: badges just won't show until next publish */ }
 }

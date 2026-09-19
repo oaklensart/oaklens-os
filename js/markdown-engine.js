@@ -21,6 +21,47 @@
 // -- Inline image cache for local previews --
 export const fnInlineImageCache = {};
 
+// ---- attribute safety (v1 review Mo3) ----
+//
+// renderMarkdown escapes &, < and > wholesale before it builds any tag, so the
+// DOUBLE QUOTE is the only dangerous character left — and it is the one that
+// matters, because an unescaped `"` ends the attribute and everything after it
+// is parsed as markup. `![24" monitor](x)` was enough to do it: a benign note
+// about a monitor emitted `alt="24" monitor"`, and `![a](x" onerror="alert(1))`
+// emitted a live onerror.
+//
+// The published pages were never exposed — their strict CSP has no
+// 'unsafe-inline', which neuters both an inline handler and a `javascript:`
+// href. But the CONSOLE PREVIEW runs the relaxed /dev policy and renders with
+// this same engine, so there it was author-scoped self-XSS: paste someone
+// else's markdown into your own editor and it runs. Relying on the CSP to be
+// the only thing between a quote and an event handler is the kind of
+// single-layer defence that stops being true the moment a surface moves.
+const attrEscape = (v) => String(v).replace(/"/g, '&quot;');
+
+// A URL with no scheme is relative (`/wall`, `#anchor`, `img.webp`) and always
+// fine. One WITH a scheme has to be on the list. Control characters and spaces
+// are stripped before the test — a literal tab inside `java<TAB>script:` is the
+// classic bypass, and
+// entity-encoded variants are already dead because & was escaped upstream.
+const hasScheme = (u) => /^[a-z][a-z0-9+.-]*:/i.test(u);
+const normalizeUrl = (u) => String(u).replace(/[\u0000-\u0020]+/g, '');
+
+// Links: the web's schemes plus the two a note might legitimately reach for.
+const safeHref = (u) => {
+  const v = normalizeUrl(u);
+  return !hasScheme(v) || /^(?:https?|mailto|tel):/i.test(v);
+};
+
+// Images: http(s), relative, or the data: URL the inline image cache hands back
+// for a dropped-but-unpublished preview (FileReader.readAsDataURL -> an
+// image/* payload). Narrowed to image/ on purpose — nothing else belongs in a
+// src, and a bare `data:` allowance is a hole for no benefit.
+const safeImgSrc = (u) => {
+  const v = normalizeUrl(u);
+  return !hasScheme(v) || /^https?:/i.test(v) || /^data:image\//i.test(v);
+};
+
 // ============== APPLE MUSIC EMBEDS ==============
 // Apple Music's desktop site hands you a full <iframe> embed snippet, but the
 // iOS/iPadOS share sheet only gives a plain link (e.g.
@@ -112,7 +153,10 @@ export function renderMarkdown(md) {
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
     // Check inline image cache for local previews
     const resolved = fnInlineImageCache[src] || src;
-    return `<img src="${resolved}" alt="${alt}">`;
+    // A src the engine will not vouch for degrades to the alt text rather than
+    // emitting a tag: the note still reads, and nothing is silently swallowed.
+    if (!safeImgSrc(resolved)) return alt;
+    return `<img src="${attrEscape(resolved)}" alt="${attrEscape(alt)}">`;
   });
 
   // headings (longest marker first so ###/## aren't eaten by the # rule) —
@@ -128,8 +172,16 @@ export function renderMarkdown(md) {
   html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
   // links — external ones open a new tab; internal (/wall, #anchor) navigate
   // in place like any site link
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, href) =>
-    /^https?:/i.test(href) ? `<a href="${href}" target="_blank">${text}</a>` : `<a href="${href}">${text}</a>`);
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, href) => {
+    // An unsafe scheme keeps its words and loses its link — the same posture as
+    // the image above, and what every markdown sanitizer does with a
+    // `javascript:` href.
+    if (!safeHref(href)) return text;
+    const h = attrEscape(href);
+    return /^https?:/i.test(href)
+      ? `<a href="${h}" target="_blank">${text}</a>`
+      : `<a href="${h}">${text}</a>`;
+  });
   // frame refs — f#234 / frame#234, case-insensitive, zero-padding optional
   // (manual §5.20). Never inside a code span (`f#12` stays literal); stashed
   // raw HTML is already out of reach (%%FNHTML_n%% placeholders). Emits an

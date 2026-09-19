@@ -76,7 +76,13 @@
   --brand-rgb:    255, 0, 0;
 
   /* ---- L2 semantic · STUDIO (dark) ---- */
-  --surface-0: #050505;              /* app ground     */
+  /* TRUE black, not near-black. On an OLED phone #050505 is visibly lighter
+     than the bezel and the gesture area around it, so the interface reads as
+     a rectangle sitting ON a device rather than part of it — the seam nobody
+     consciously names and every eye finds. #000 switches those pixels off.
+     Card separation IMPROVES: --surface-1 #0c0c0c is now a 12-point step,
+     not 7. STUDIO only; DAYLIGHT keeps its warm paper. */
+  --surface-0: #000000;              /* app ground     */
   --surface-1: #0c0c0c;              /* cards, chrome  */
   --surface-2: #141414;              /* inputs, wells  */
   --surface-3: #1d1d1d;              /* raised chips   */
@@ -93,13 +99,6 @@
   --accent-wash: rgba(var(--brand-rgb), 0.08);
   --accent-line: var(--brand-deep);
   --on-accent:   #000;
-  /* Text that sits on a PHOTOGRAPH rather than on the page — a card's chip, a
-     title over a scrim. Deliberately the same in both themes and every preset:
-     it is legible against the scrim, not against the surface behind it, so
-     flipping it with the theme would make it wrong half the time. The public
-     card makes the same call for the same reason (css/main.css, .wk-tag). */
-  --on-media:    #fff;
-
   --line-1: #161616;
   --line-2: #242424;
   --line-3: #3a3a3a;
@@ -118,9 +117,99 @@
   --media-ink:     #e8e8e8;
   --media-ink-dim: #b0b0b0;
 
-  --shadow-1: 0 4px 14px rgba(0,0,0,0.45);
-  --shadow-2: 0 8px 28px rgba(0,0,0,0.6);
-  --shadow-3: 0 12px 40px rgba(0,0,0,0.7);
+  /* Raw channels for the ACCENT, promoted here from .card-face (where it had
+     been the only declaration in the file). Everything else composited from
+     --brand-rgb directly, which does not flip for DAYLIGHT — so nine rules
+     were painting the Midnight brand onto warm paper, and every preset's
+     light mode wore noir red. One declaration, nine bugs. */
+  --accent-rgb: var(--brand-rgb);
+
+  /* ---- L1.5 · THE LIGHT — one source, one ladder ----------------------
+     The console's only statement about where the light is. Every raised edge,
+     recess, ring, halo and cast shadow below derives from these; a component
+     names a TIER and never writes its own offset, alpha or blur.
+
+     The angle was never the problem — all 58 shadows already fell straight
+     down. The DRIFT was in magnitude: 43 distinct values for maybe six ideas,
+     three spellings of one rim, seven glow radii. So this is a ladder, not a
+     protractor.
+
+     --light-y is a unit MULTIPLIER, not a length, and that is the falsifiable
+     part: set it to -1 and the whole console must relight from below. Anything
+     that still looks right was never deriving from the light. */
+  --light-x: 0;                               /* overhead — no lateral cast */
+  --light-y: 1;                               /* +1 → the shadow falls DOWN */
+
+  /* The two things one light does to one edge. */
+  --light-rim: rgba(255,255,255,0.045);       /* the face it reaches        */
+  --shade-1:   rgba(0,0,0,0.45);              /* the face it does not, near */
+  --shade-2:   rgba(0,0,0,0.6);               /*                      mid   */
+  --shade-3:   rgba(0,0,0,0.7);               /*                      far   */
+
+  /* The five derivations — complete box-shadow values, the whole vocabulary. */
+  --edge-up:  inset 0 calc(var(--light-y) *  1px) 0 var(--light-rim);
+  --edge-in:  inset 0 calc(var(--light-y) *  2px) 4px -1px var(--shade-3);
+  /* The cast shadow a pressed control keeps. This is the piece that decides
+     whether a press reads as DESCENDING or merely as dimming: the first draft
+     replaced the resting shadow outright, so a card went from floating to
+     FLAT rather than floating to pushed-in, and the depth cue went with it.
+     Tighter, closer and darker at the contact point than --shadow-1 — the
+     object moved toward the panel, it did not stop casting. */
+  --shadow-press:
+    calc(var(--light-x) * 1px) calc(var(--light-y) * 1px) 2px -1px var(--shade-3),
+    calc(var(--light-x) * 2px) calc(var(--light-y) * 2px) 5px -3px var(--shade-2);
+  --shadow-1: calc(var(--light-x) *  4px) calc(var(--light-y) *  4px) 14px var(--shade-1);
+  --shadow-2: calc(var(--light-x) *  8px) calc(var(--light-y) *  8px) 28px var(--shade-2);
+  --shadow-3: calc(var(--light-x) * 12px) calc(var(--light-y) * 12px) 40px var(--shade-3);
+
+  /* ---- ARMED / LIVE — the ONLY place this file adds light.
+     "Deboss, don't glow" retires glow from console CHROME; it never retired
+     the SYS lamp. So light is licensed for things that are DOING something
+     right now, and selection is not liveness. A surface opts in with
+     data-lit="accent|ok|warn". Nothing else may write `0 0 <N>px <colour>`. */
+  --lit-rgb:  var(--accent-rgb);
+  --lit-fill: rgba(var(--lit-rgb), 0.1);
+  --lit-edge: rgba(var(--lit-rgb), 0.45);
+  --lit-halo: 0 0 12px rgba(var(--lit-rgb), 0.32);
+  /* The canvas bloom's master dial (phase 2 — js/console/lighting.js). --lit-halo
+     is the light INSIDE the control's own box; a box-shadow cannot leave that
+     box — every `overflow: hidden` ancestor clips it and it stops at the edge
+     of the topbar — so the wide half is painted on one body-level canvas that
+     reads this at paint time. 0 turns the canvas off without unbinding it.
+
+     Raised 1 → 3 on 2026-09-15, owner's call after living with it. Gain is
+     spent as whole composite passes rather than as an alpha multiply, because
+     canvas globalAlpha is clamped to [0,1] and the first spelling made every
+     value above 1 do nothing at all. Three passes lift the faint outer tail
+     roughly threefold while the core saturates — the light reaches further,
+     rather than the middle simply clipping. Settled at 2 on the owner's read:
+     3 was right for the button and too much for the publish panel. */
+  --bloom-gain: 2;
+
+  /* ---- IGNITION — the commit, and the only asymmetric timing in the console.
+     Heat and cool are NOT the same curve: a coil ramps up fast and lets go
+     slowly, and matching the two makes the whole thing read as a CSS class
+     toggling rather than as something warming up. Lifted from the spoolr
+     dashboard's hood ornament, which is where the owner pointed. */
+  --arm-heat: 1.5s cubic-bezier(0.4, 0, 0.5, 1);
+  --arm-cool: 2.6s cubic-bezier(0.33, 0.05, 0.2, 1);
+
+  /* ---- PRESS — travel first. A control that only shrinks reads as a web
+     page; one that travels ~1px into the panel reads as a key that was
+     pushed. A scale() is size-dependent (9px of edge motion on a card, 0.8px
+     on a chip); the travel is not, so the travel is the primitive. */
+  --press-travel: 1.5px;
+  --press-scale:  0.985;
+  /* Eased 0.92 → 0.94 in the same pass that gave the press a real recess: once
+     the shadow is doing the work, dimming this hard starts to read as DISABLED
+     rather than as pressed. */
+  --press-dim:    0.94;
+
+  /* ---- FOCUS — the keyboard's version of a press. The console had THREE
+     :focus-visible rules in 8,500 lines, so tabbing through it was mostly
+     invisible. One ring, stated once, offset so it reads on a filled control
+     and a hairline one alike. */
+  --focus-ring: 0 0 0 2px var(--surface-0), 0 0 0 4px var(--accent-text);
 
   /* ---- geometry: "machined" — square content, radius on floating material ---- */
   --r-1: 3px;        /* chips, badges                          */
@@ -132,7 +221,6 @@
   --t-micro: 0.6875rem;  /* 11px — replaces the old 0.45–0.66rem tier */
   --t-label: 0.75rem;    /* 12px — labels, nav                        */
   --t-body:  0.875rem;   /* 14px — inputs, editor                     */
-  --t-title: clamp(1.15rem, 2.5vw, 1.4rem);
 
   /* ---- motion: one spring, three speeds ---- */
   --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
@@ -189,9 +277,22 @@
   --ok-rgb:   15, 122, 42;
   --warn-rgb: 154, 109, 0;
 
-  --shadow-1: 0 4px 14px rgba(60,50,30,0.18);
-  --shadow-2: 0 8px 28px rgba(60,50,30,0.22);
-  --shadow-3: 0 12px 40px rgba(60,50,30,0.28);
+  /* On paper an object that is ON is not brighter — it is HEAVIER. The halo
+     becomes a ring and a contact shadow, so "lit" reads as "lifted". Same move
+     §4d already makes for the stage tier: hairline outlines vanish in glare.
+     Five values; no [data-theme="light"] [data-lit] selector anywhere. */
+  --accent-rgb: var(--brand-ink-rgb, 196, 17, 17);
+  --light-rim: rgba(255,255,255,0.9);
+  --shade-1:   rgba(60,50,30,0.18);
+  --shade-2:   rgba(60,50,30,0.22);
+  --shade-3:   rgba(60,50,30,0.28);
+  --lit-fill:  rgba(var(--lit-rgb), 0.16);
+  --lit-edge:  rgb(var(--lit-rgb));
+  --lit-halo:  0 0 0 1px rgba(var(--lit-rgb), 0.4), var(--shadow-1);
+  /* And the canvas goes dark with it. Light pooling onto paper is not what a
+     lit object does on a desk — it is what a screen does — so DAYLIGHT paints
+     no bloom at all. One token, still no [data-theme] branch in the module. */
+  --bloom-gain: 0;
 
   color-scheme: light;
 }
@@ -330,7 +431,7 @@ button { font-family: inherit; cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: all 200ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .publish-btn:hover { background: var(--accent); color: var(--on-accent); }
 /* The pending pip. A FLAT SQUARE, no bezel, no glow, no animation — the SYS
@@ -400,7 +501,7 @@ button { font-family: inherit; cursor: pointer; }
   letter-spacing: 0.09em;
   text-align: left;
   border-left: 2px solid transparent;
-  transition: all 150ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .nav-btn:hover { color: var(--text-bright); background: var(--bg-elev-2); }
 .nav-btn.active {
@@ -427,7 +528,7 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--accent);
   border-radius: 50%;
   margin-left: auto;
-  box-shadow: 0 0 6px var(--accent);
+  box-shadow: none;   /* the pip is flat, like the publish pip it mirrors */
 }
 .nav-divider {
   height: 1px;
@@ -489,7 +590,6 @@ button { font-family: inherit; cursor: pointer; }
 .field-row { display: grid; gap: 12px; }
 .field-row.cols-2 { grid-template-columns: 1fr 1fr; }
 .field-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
-.field-row.date-title { grid-template-columns: 110px 1fr; }
 .field-label {
   display: block;
   font-size: var(--t-micro);
@@ -498,9 +598,7 @@ button { font-family: inherit; cursor: pointer; }
   margin-bottom: 5px;
   text-transform: uppercase;
 }
-.field-input,
-.field-textarea,
-.field-select {
+.field-input {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-strong);
@@ -511,12 +609,8 @@ button { font-family: inherit; cursor: pointer; }
   outline: none;
   transition: border-color 150ms ease;
 }
-.field-input:focus,
-.field-textarea:focus,
-.field-select:focus { border-color: var(--accent); }
-.field-input::placeholder,
-.field-textarea::placeholder { color: var(--text-faint); }
-.field-textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+.field-input:focus { border-color: var(--accent); }
+.field-input::placeholder { color: var(--text-faint); }
 
 /* ============ BUTTONS ============ */
 .btn {
@@ -532,7 +626,7 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 0.72rem;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  transition: all 150ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .btn:hover { border-color: var(--text-dim); color: var(--text-bright); }
 .btn-primary {
@@ -564,7 +658,7 @@ button { font-family: inherit; cursor: pointer; }
   padding: 48px 24px;
   text-align: center;
   cursor: pointer;
-  transition: all 200ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
   position: relative;
 }
 .dropzone:hover, .dropzone.over {
@@ -850,6 +944,9 @@ button { font-family: inherit; cursor: pointer; }
   flex-shrink: 0;
   background: var(--bg-elev-2);
   overflow: hidden;
+  /* the ▣ stamped badge is absolute inside this box — without a positioning
+     context it escapes to the nearest one and lands somewhere else entirely */
+  position: relative;
 }
 .archive-card .thumb img { width: 100%; height: 100%; object-fit: cover; }
 .archive-card .info { flex: 1; min-width: 0; font-size: 0.7rem; }
@@ -1386,7 +1483,10 @@ body.fn-focus #view-fn { --fn-foot: var(--safe-bottom); }
   flex-direction: column;
   background: var(--surface-0);
   border-left: 1px solid var(--line-3);
-  box-shadow: -14px 0 40px rgba(0, 0, 0, 0.5);
+  /* The one lateral shadow in the file, and deliberately so: this is a SEAM
+     where the preview panel overlaps the editor, not a cast from the light.
+     Geometry stays; the colour joins the ladder. */
+  box-shadow: -14px 0 40px var(--shade-2);
   transform: translateX(100%);
   transition: transform var(--dur-3) var(--ease-spring);
 }
@@ -1784,7 +1884,7 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
   background: var(--text-faint);
   border-radius: 50%;
   top: 2px; left: 2px;
-  transition: all 150ms ease;
+  transition: left var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
 }
 .list-toggle.on { background: var(--accent); }
 .list-toggle.on::after { left: 16px; background: #fff; }
@@ -1842,7 +1942,6 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
 }
 .publish-changes .pc-row:last-child { border-bottom: none; }
 .publish-changes .pc-glyph { color: var(--accent); width: 1em; flex: none; }
-.publish-changes .pc-glyph.pc-remove { color: var(--text-dim); }
 .publish-changes .pc-label { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
 .publish-changes .pc-n { color: var(--text-dim); font-size: var(--t-micro); }
 .publish-changes .pc-other .pc-label { color: var(--text-dim); }
@@ -1977,7 +2076,7 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
   letter-spacing: 0.13em;
   padding: 6px 8px;
   text-transform: uppercase;
-  transition: all 150ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .uqp-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .uqp-btn:disabled { opacity: 0.35; cursor: default; }
@@ -2004,7 +2103,7 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
 
 /* ============ BURST LINKING ============ */
 /* Existing burst groups — always-visible muted-red indicator (not just in link mode) */
-.buffer-frame.burst-linked { box-shadow: inset 0 0 0 2px rgba(255, 40, 40, 0.45); }
+.buffer-frame.burst-linked { box-shadow: inset 0 0 0 2px rgba(var(--accent-rgb), 0.45); }
 .buffer-frame .burst-badge {
   position: absolute;
   bottom: 4px; left: 4px;
@@ -2013,7 +2112,7 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
   letter-spacing: 0.1em;
   color: #ff6a6a;
   background: rgba(0,0,0,0.85);
-  border: 1px solid rgba(255,40,40,0.4);
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
   padding: 2px 5px;
   pointer-events: none;
 }
@@ -2025,13 +2124,13 @@ body.buffer-link-mode .buffer-frame::before {
   position: absolute;
   inset: 0;
   z-index: 2;
-  background: rgba(255,0,0,0);
+  background: rgba(var(--accent-rgb), 0);
   transition: background 150ms ease;
 }
-body.buffer-link-mode .buffer-frame:hover::before { background: rgba(255,0,0,0.10); }
+body.buffer-link-mode .buffer-frame:hover::before { background: rgba(var(--accent-rgb), 0.10); }
 /* Selected for linking — strong accent border + tint */
 .buffer-frame.burst-selected { box-shadow: inset 0 0 0 3px var(--accent); }
-body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(255,0,0,0.18); }
+body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(var(--accent-rgb), 0.18); }
 /* Toolbar button active state */
 .btn.burst-active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; }
 .btn.burst-active:hover { background: var(--ink-1); border-color: var(--ink-1); color: var(--surface-0); }
@@ -2047,7 +2146,7 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(25
   gap: 16px;
   background: var(--bg-elev-1);
   border: 1px solid var(--accent);
-  box-shadow: var(--shadow-3), 0 0 0 1px rgba(var(--brand-rgb), 0.2);
+  box-shadow: var(--shadow-3), 0 0 0 1px rgba(var(--accent-rgb), 0.2);
   padding: 12px 18px;
   font-family: var(--font-mono);
 }
@@ -2069,7 +2168,7 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(25
   color: var(--text);
   background: var(--bg-elev-1);
   border: 1px solid var(--accent);
-  box-shadow: var(--shadow-3), 0 0 0 1px rgba(var(--brand-rgb), 0.2);
+  box-shadow: var(--shadow-3), 0 0 0 1px rgba(var(--accent-rgb), 0.2);
   padding: 12px 18px;
   cursor: pointer;
 }
@@ -2084,7 +2183,6 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(25
 /* ============ MISC ============ */
 .hint-text { font-size: var(--t-micro); color: var(--text-faint); letter-spacing: 0.13em; line-height: 1.6; margin-top: 8px; }
 .hint-text .accent { color: var(--accent); }
-.section-rule { border: none; border-top: 1px dashed var(--border-strong); margin: 18px 0; }
 
 /* ============ RESPONSIVE ============ */
 @media (max-width: 920px) {
@@ -2214,7 +2312,6 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(25
   .publish-action .hint { margin-bottom: 10px; line-height: 1.45; }
   .import-zone { padding: 14px 16px; }
   .danger-zone { padding: 12px 16px; }
-  .section-rule { margin: 10px 0; }
 
 }
 
@@ -2226,9 +2323,7 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(25
 @media (max-width: 1180px) {
   /* Controls must be allowed to shrink inside grid/flex tracks, not push out.
      (width/box-sizing are already global; restated here for resilience.) */
-  .field-input,
-  .field-select,
-  .field-textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+  .field-input { width: 100%; min-width: 0; box-sizing: border-box; }
 
   /* Rigid metadata grids → wrap instead of clipping their inputs/selects. */
   .field-row.cols-3 { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
@@ -2258,7 +2353,7 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(25
   padding: 6px 9px;
   margin-right: 10px;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .sidebar-toggle:hover { color: var(--text-bright); border-color: var(--text-dim); }
 /* Collapse to a SINGLE column (not "0 1fr"): once .sidebar is display:none it
@@ -2279,7 +2374,7 @@ body.sidebar-collapsed .sidebar { display: none; }
   font-family: var(--font-mono);
   cursor: pointer;
   position: relative;
-  transition: all 150ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .settings-btn:hover { color: var(--text-bright); border-color: var(--text-dim); }
 .settings-status-dot {
@@ -2345,14 +2440,17 @@ body.sidebar-collapsed .sidebar { display: none; }
   position: absolute; width: 26px; height: 26px;
   transform: translate(-50%, -50%);
   border: 2px solid #fff; border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(0,0,0,0.65), 0 0 14px rgba(255,0,0,0.7);
+  box-shadow: 0 0 0 2px var(--shade-3), var(--lit-halo);
   pointer-events: none;
 }
 .focal-dot::before {
   content: ''; position: absolute; inset: 0; margin: auto;
   width: 6px; height: 6px; background: var(--accent); border-radius: 50%;
 }
-.focal-side { width: 168px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
+/* 200px, once. This said 168px while a later rule below said min-width:200px,
+   and min-width silently won — one box with two answers, and the number you
+   read was never the number that rendered. The card preview needs the 200. */
+.focal-side { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
 .focal-crop-label, .focal-readout {
   font-size: var(--t-micro); letter-spacing: 0.13em; color: var(--text-faint);
   font-family: var(--font-mono); text-transform: uppercase;
@@ -2364,11 +2462,36 @@ body.sidebar-collapsed .sidebar { display: none; }
 }
 .focal-crop-preview img { width: 100%; height: 100%; object-fit: cover; }
 /* --- unified framing modal: crop safety-guides + live card preview --- */
-.focal-side { min-width: 200px; }
 .focal-guide { position: absolute; pointer-events: none; box-sizing: border-box; display: none; }
-.focal-guide.og { border: 2px solid var(--accent); box-shadow: 0 0 0 1px rgba(0,0,0,.55); }
+.focal-guide.og { border: 2px solid var(--accent); box-shadow: 0 0 0 1px var(--shade-2); }
 .focal-guide.thumb { border: 1px dashed rgba(224,224,224,.75); }
 .focal-cardwrap canvas { width: 100%; aspect-ratio: 1200 / 630; display: block; background: var(--media-well); border: 1px solid var(--border-strong); }
+/* The two share-image styles. A segmented pair, not a checkbox: they are
+   mutually exclusive and both are always legible, so the unchosen one reads as
+   the available alternative rather than as a disabled control. */
+.focal-style { display: flex; gap: 0; margin-top: 8px; }
+.focal-style-btn {
+  flex: 1; padding: 4px 6px; font-family: var(--font-mono); font-size: var(--t-micro);
+  letter-spacing: 0.13em; text-transform: uppercase; cursor: pointer;
+  background: var(--bg-elev-2); color: var(--text-dim);
+  border: 1px solid var(--border); margin-left: -1px;
+}
+.focal-style-btn:first-child { margin-left: 0; }
+.focal-style-btn:hover { color: var(--text-bright); border-color: var(--border-strong); }
+.focal-style-btn.on {
+  color: var(--accent); border-color: var(--accent);
+  background: var(--bg-elev-1); position: relative; z-index: 1;
+}
+@media (pointer: coarse) { .focal-style-btn { padding: 8px 6px; } }
+
+/* Live-state line under the card preview. The canvas alone cannot say whether
+   it is drawing the CURRENT unfurl or a proposed one, so this does. Green =
+   live is the console's existing language (the LIVE grid toggle, the SYS lamp);
+   an unpublished stamp stays faint rather than alarming — not-yet-published is
+   a normal state, not a fault. */
+.ogc-live { font-size: var(--t-micro); letter-spacing: 0.13em; text-transform: uppercase;
+  font-family: var(--font-mono); color: var(--text-faint); margin-top: 6px; }
+.ogc-live.is-live { color: var(--ok); }
 .focal-guidetoggle { display: flex; align-items: center; gap: 6px; font-size: var(--t-micro); color: var(--text-dim); letter-spacing: 0.09em; margin-top: 8px; cursor: pointer; }
 .focal-guidetoggle .g-og { color: var(--accent); }
 .focal-guidetoggle .g-th { color: var(--text-dim); }
@@ -2397,13 +2520,6 @@ body.sidebar-collapsed .sidebar { display: none; }
   margin-bottom: 12px;
   border-bottom: 1px solid var(--accent-dim);
   padding-bottom: 6px;
-}
-.modal-hint {
-  font-size: var(--t-micro);
-  color: var(--text-faint);
-  letter-spacing: 0.13em;
-  line-height: 1.7;
-  margin-top: 8px;
 }
 .modal-footer {
   padding: 14px 22px;
@@ -2437,7 +2553,7 @@ body.sidebar-collapsed .sidebar { display: none; }
   padding: 5px 10px;
   cursor: pointer;
   text-transform: uppercase;
-  transition: all 150ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .asset-lib-pill:hover { color: var(--text-bright); border-color: var(--text-dim); }
 .asset-lib-pill.active { color: var(--accent); border-color: var(--accent); }
@@ -2579,11 +2695,8 @@ body.sidebar-collapsed .sidebar { display: none; }
 }
 
 /* ---- Multi-select (FN// post body strip picker) ---- */
-/* Selected state: red border + glow */
-.asset-lib-item.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
+/* Selected state lives at §4e ("Selection = ring, not hairline"), 1,600 lines
+   below — an identical-specificity twin that always won. The loser is gone. */
 /* Selection-order number badge (top-right) */
 .asset-lib-select-num {
   position: absolute;
@@ -3029,7 +3142,7 @@ body.sidebar-collapsed .sidebar { display: none; }
   padding: 5px 10px;
   cursor: pointer;
   text-transform: uppercase;
-  transition: all 150ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .audio-lib-pill:hover { color: var(--text-bright); border-color: var(--text-dim); }
 .audio-lib-pill.active { color: var(--accent); border-color: var(--accent); }
@@ -3099,7 +3212,7 @@ body.sidebar-collapsed .sidebar { display: none; }
   justify-content: center;
   cursor: pointer;
   font-size: 0.72rem;
-  transition: all 150ms ease;
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
 .aud-lib-play-btn:hover {
   border-color: var(--accent);
@@ -3266,14 +3379,6 @@ body.sidebar-collapsed .sidebar { display: none; }
 .log-info { color: var(--text-dim); }
 
 /* ============ PHASE 4: BUFFER DATES PANEL ============ */
-.bd-value {
-  padding: 6px 14px;
-  font-size: var(--t-micro);
-  color: var(--accent);
-  letter-spacing: 0.13em;
-  border-bottom: 1px solid var(--border);
-  background: var(--accent-wash);
-}
 .bd-list { padding: 4px 0; }
 .bd-date-row {
   display: flex;
@@ -3366,7 +3471,6 @@ body.sidebar-collapsed .sidebar { display: none; }
 }
 
 /* BENCH SURFACE */
-#view-bench .bench-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2rem; }
 #view-bench .filter-bar { display: flex; gap: 1rem; margin-bottom: 2rem; font-family: var(--font-mono); font-size: 0.8rem; align-items: center; }
 #view-bench .filter-btn { color: var(--text); cursor: pointer; text-transform: uppercase; background: none; border: none; padding: 0.75rem 0.5rem; min-height: 44px; font-family: inherit; font-size: inherit; }
 #view-bench .filter-btn.active { color: var(--accent); }
@@ -3556,7 +3660,7 @@ body.sidebar-collapsed .sidebar { display: none; }
   height: 100%;
   width: 0%;
   background: var(--accent);
-  box-shadow: 0 0 8px rgba(var(--brand-rgb), 0.6);
+  box-shadow: var(--lit-halo);
   transition: width 240ms ease-out;
 }
 .sys-progress.indeterminate .sys-progress-fill {
@@ -3698,7 +3802,7 @@ html, body { overscroll-behavior: none; }
   /* Apple HIG 44pt minimum — structural controls grow to size… */
   .btn, .btn-sm, .uqp-btn, .filter-btn, .status-btn, .nav-btn,
   .modal-close, .ledger-ack, .login-btn,
-  .field-input, .field-select { min-height: 44px; }
+  .field-input { min-height: 44px; }
   /* The gear toggle is a label + a 14px box — too small for a finger on its
      own, so the whole label grows and the box with it. */
   .gear-memory-toggle { min-height: 44px; }
@@ -3775,7 +3879,7 @@ html, body { overscroll-behavior: none; }
   text-transform: uppercase;
 }
 .tab-btn.active { color: var(--accent); }
-.tab-btn:active { opacity: 0.7; }   /* press acknowledgment */
+/* .tab-btn press → the shared mechanism at §4c (was: opacity only). */
 
 /* Muted mini-count over the icon (hidden at zero via :empty) */
 .tab-count {
@@ -3905,7 +4009,7 @@ html, body { overscroll-behavior: none; }
   -webkit-tap-highlight-color: transparent;
 }
 .sheet-item:last-child { border-bottom: none; }
-.sheet-item:active { background: var(--accent-wash); }
+/* .sheet-item press → §4c (was: an accent wash). */
 .sheet-item .sheet-icon { width: 22px; text-align: center; color: var(--ink-3); }
 .sheet-item.active,
 .sheet-item.active .sheet-icon { color: var(--accent); }
@@ -4157,26 +4261,68 @@ body.fn-bar-hidden:has(#view-fn.active) .tabbar {
   .asset-lib-open { opacity: 1; }
 }
 
-/* -- 4c. Universal press acknowledgment: touch gives no hover, so every
-      control confirms the tap in-frame. Scale + dim, compositor-only. -- */
+/* -- 4c. Universal press acknowledgment. ONE mechanism, both pointer types.
+      A control that only shrinks reads as a web page; one that travels ~1px
+      INTO the panel, with its lit top edge rolling over into a recess, reads
+      as a key that was pushed. The travel is the tactile part, and it is
+      size-independent — a scale() is not (0.97 moves a card's edge nine
+      pixels and a chip's edge less than one), which is why travel is the
+      primitive here and scale is the garnish.
+
+      No longer gated on (pointer: coarse). That gate is why a mouse got
+      almost no press feedback at all, and a press is the one channel that
+      behaves identically under a thumb and under a cursor. -- */
+.btn:active, .publish-btn:active, .settings-btn:active, .nav-btn:active,
+.frame-action:active, .icon-btn:active, .filter-btn:active, .status-btn:active,
+.action-btn:active, .back-btn:active, .fn-tool:active, .fn-chip:active,
+.fn-btn:active, .fn-media-row:active, .asset-lib-pill:active, .asset-lib-item:active,
+.asset-lib-sort:active, .uqp-btn:active, .uqp-retry:active, .ledger-ack:active,
+.modal-close:active, .archive-card:active, .buffer-frame:active,
+.bench-card:active, .list-toggle:active, .fb-thumb:active,
+.cards-chip:active, .tab-btn:active, .sheet-item:active, .rl-close:active,
+.pulse-chip:active, #gh-publish-btn:active,
+.layout-chip:active:not(.is-blocked), .action-dock .btn:active:not([disabled]) {
+  transform: translateY(calc(var(--light-y) * var(--press-travel)))
+             scale(var(--press-scale));
+  box-shadow: var(--shadow-press), var(--edge-in);
+  opacity: var(--press-dim);
+  transition-duration: 60ms;   /* down is instant; the release keeps its ease */
+}
 @media (pointer: coarse) {
-  .btn:active, .publish-btn:active, .settings-btn:active, .nav-btn:active,
-  .frame-action:active, .icon-btn:active, .filter-btn:active, .status-btn:active,
-  .action-btn:active, .back-btn:active, .fn-tool:active, .fn-chip:active,
-  .fn-btn:active, .fn-media-row:active, .asset-lib-pill:active, .asset-lib-item:active,
-  .asset-lib-sort:active, .uqp-btn:active, .uqp-retry:active, .ledger-ack:active,
-  .modal-close:active, .archive-card:active, .buffer-frame:active,
-  .bench-card:active, .list-toggle:active, .fb-thumb:active,
-  .cards-chip:active {
-    transform: scale(0.97);
-    opacity: 0.85;
-  }
   /* Row icon controls get a workable touch size (rows are roomy enough). */
   .icon-btn { width: 34px; height: 34px; font-size: 0.85rem; }
   /* Cards view chips already use var(--tap) */
 }
+/* -- 4c-ii. Keyboard focus. :focus-visible only, so a mouse press never draws
+      a ring the presser did not ask for. The double shadow is a hole punched
+      in the surface colour then the ring outside it, which keeps the ring
+      legible against a filled button and a hairline one without needing two
+      rules. -- */
+.btn:focus-visible, .publish-btn:focus-visible, .settings-btn:focus-visible,
+.nav-btn:focus-visible, .frame-action:focus-visible, .icon-btn:focus-visible,
+.filter-btn:focus-visible, .status-btn:focus-visible, .action-btn:focus-visible,
+.back-btn:focus-visible, .fn-tool:focus-visible, .fn-chip:focus-visible,
+.fn-btn:focus-visible, .asset-lib-pill:focus-visible, .asset-lib-sort:focus-visible,
+.uqp-btn:focus-visible, .uqp-retry:focus-visible, .ledger-ack:focus-visible,
+.modal-close:focus-visible, .archive-card:focus-visible, .buffer-frame:focus-visible,
+.bench-card:focus-visible, .list-toggle:focus-visible, .fb-thumb:focus-visible,
+.cards-chip:focus-visible, .tab-btn:focus-visible, .sheet-item:focus-visible,
+.rl-close:focus-visible, .pulse-chip:focus-visible, .layout-chip:focus-visible,
+.cards-seg-btn:focus-visible, .sidebar-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .btn:active, .buffer-frame:active, .asset-lib-item:active { transform: none; }
+  /* Keep the state, drop the journey. The old rule set `transform: none`,
+     which removed the feedback entirely — not what the preference asks for. */
+  .btn, .publish-btn, .archive-card, .buffer-frame, .asset-lib-item,
+  .cards-chip, .tab-btn { transition: none; }
+  /* Same bargain for the ignition: the console still arms — the controls still
+     go accent and still carry the glow, because that is the STATE and it is
+     load-bearing while a commit is in flight — it simply arrives at once
+     instead of ramping over a second and a half. */
+  [data-armed], [data-armed="on"] { transition: none; }
 }
 
 /* -- 4d. DAYLIGHT primaries: hairline outlines vanish in glare — the stage
@@ -4389,7 +4535,7 @@ body.rl-lock { overflow: hidden; }
   background: none; border: 1px solid var(--border-strong); border-radius: var(--r-1);
   color: var(--text); font-size: 1.1rem; cursor: pointer;
 }
-.rl-close:active { background: var(--accent-wash); }
+/* .rl-close press → §4c (was: an accent wash). */
 
 .rl-toolbar {
   display: flex; align-items: center; gap: 8px;
@@ -4668,7 +4814,8 @@ body.rl-lock { overflow: hidden; }
 /* 3 — Publish as a stamp: the button press compresses; success renders an
    inked receipt chip (publishToServer) beside the log. Toast stays — the
    receipt is the record, the toast is the event. */
-#gh-publish-btn:active { transform: scale(.97); }
+/* The publish compression (craft pass item 3) now comes from the shared
+   press mechanism at §4c, which adds the ~1px travel it never had. */
 @keyframes stamp-press {
   0%   { transform: scale(1.14) rotate(-2deg); opacity: 0; }
   60%  { transform: scale(.98)  rotate(.4deg); opacity: 1; }
@@ -4712,19 +4859,134 @@ body.rl-lock { overflow: hidden; }
 .publish-action,
 .archive-card,
 .modal {
-  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(255, 255, 255, .045);
+  box-shadow: var(--shadow-1), var(--edge-up);
 }
-:root[data-theme="light"] .stage-section,
-:root[data-theme="light"] .publish-action,
-:root[data-theme="light"] .archive-card,
-:root[data-theme="light"] .modal {
-  box-shadow: var(--shadow-1), inset 0 1px 0 #fff;
+/* The DAYLIGHT twin of this rule used to live here, restating all four
+   selectors to swap one alpha for #fff. --light-rim already flips with the
+   theme, so the twin is gone: four selectors and a hex literal, subtracted. */
+
+/* 6b — Flick and land: the contact sheets get momentum that ends on a row.
+   -------------------------------------------------------------------------
+   The buffer and the archive are the two highest-traffic scrolling surfaces
+   in the console and neither had any snapping, so a flick through 600 frames
+   lands halfway through a row and you read a band of cropped thumbnails.
+
+   PROXIMITY, never mandatory, and that is the whole safety argument: these
+   grids are not their own scroll container — they scroll inside `.main`
+   alongside headers, stat rows and compose forms. Mandatory snapping on a
+   shared scroller fights the user the moment they want to stop somewhere
+   that is not a card. Proximity only engages when the scroll has already
+   come to rest near a row edge, so it tidies the landing and never steers.
+
+   scroll-margin-top keeps a snapped row clear of the sticky view header. */
+.main { scroll-snap-type: y proximity; }
+.buffer-grid > *,
+.archive-list > * {
+  scroll-snap-align: start;
+  scroll-margin-top: 12px;   /* this file ships no spacing scale to join */
 }
-.rule-perf {
-  height: 1px;
-  border: 0;
-  margin: 14px 0;
-  background-image: repeating-linear-gradient(90deg, var(--line-2) 0 6px, transparent 6px 12px);
+/* A snap point under a finger that is still dragging reads as a stutter. */
+@media (prefers-reduced-motion: reduce) {
+  .main { scroll-snap-type: none; }
+}
+
+/* 7 — ARMED / LIVE: the one place this stylesheet is allowed to add light.
+   -------------------------------------------------------------------------
+   "Deboss, don't glow" retires glow from console CHROME. It never retired the
+   SYS lamp, and this is the same licence extended by the same logic: light
+   means a thing is DOING something right now, so it can never become
+   wallpaper. Four states in the whole console qualify — the lamp, the
+   progress rail, the publish bar while it commits, and the publish button
+   when work is waiting.
+
+   SELECTION IS NOT LIVENESS, and that line is what keeps this honest. Which
+   slot you are looking at, which filter is on, which layout is picked, which
+   card is "live on the site" — all of those are facts, not activity, and all
+   of them lost their halo in this pass rather than gaining one.
+
+   A surface opts in with data-lit="accent|ok|warn" and inherits everything
+   else. On paper --lit-halo resolves to a ring plus a contact shadow instead
+   of a bloom, so DAYLIGHT needs no selector of its own: lit reads as LIFTED,
+   which is what "on" looks like on a desk. */
+[data-lit="ok"]   { --lit-rgb: var(--ok-rgb); }
+[data-lit="warn"] { --lit-rgb: var(--warn-rgb); }
+[data-lit] {
+  background: var(--lit-fill);
+  border-color: var(--lit-edge);
+  box-shadow: var(--edge-up), var(--lit-halo);
+}
+
+/* ---- IGNITION: the console arms itself while a commit is in flight ----
+   Owner's call, 2026-09-15, replacing the canvas bloom that used to wash the
+   whole publish panel: *"instead of a big bloom … the buttons of the interface
+   are like armed … turn to the token accent color and glow hot until the commit
+   is pushed and verified."* The reference is the spoolr dashboard's hood
+   ornament, which heats like a stove coil.
+
+   ⚠️ NOT a fifth licensed state. design-spec.md §6.5 already licenses "the
+   publish bar while it commits"; this is the same state wearing a different
+   surface — the controls rather than the panel behind them. Nothing new glows,
+   and the panel now glows less.
+
+   ⚠️ BOTH STATES MUST DECLARE THE SAME FILTER FUNCTIONS, IN THE SAME ORDER.
+   A `filter` only interpolates against a matching function list; against a
+   missing one the browser swaps discretely and the control blinks on instead of
+   igniting. So `[data-armed]` on its own is the RESTING half — every function
+   present, all at their no-op values — and `[data-armed="on"]` is the hot half.
+   js/console/chrome.js setCommitArmed() sets the resting attribute, flushes
+   layout, then goes hot; on the way down it drops back to resting and removes
+   the attribute only after the cool has run. */
+[data-armed] {
+  filter:
+    brightness(1) saturate(1)
+    drop-shadow(0 0 0 rgba(var(--accent-rgb), 0))
+    drop-shadow(0 0 0 rgba(var(--accent-rgb), 0));
+  transition: filter var(--arm-cool), color var(--arm-cool),
+              border-color var(--arm-cool), background var(--arm-cool);
+}
+[data-armed="on"] {
+  filter:
+    brightness(1.3) saturate(1.15)
+    drop-shadow(0 0 7px rgba(var(--accent-rgb), 0.7))
+    drop-shadow(0 0 20px rgba(var(--accent-rgb), 0.45));
+  transition: filter var(--arm-heat), color var(--arm-heat),
+              border-color var(--arm-heat), background var(--arm-heat);
+}
+/* Everything that is not already a filled accent button turns accent as it
+   heats. The exception is not cosmetic: .btn-primary's label is --on-accent ON
+   the accent, so recolouring it to accent would erase the word "Publish" at the
+   exact moment it matters most. Brightness alone is what lifts that one. */
+[data-armed="on"]:not(.btn-primary) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The one control that emits but keeps its own clothes. `[data-lit]`'s fill and
+   edge are for a surface with no appearance of its own; a tab cell has one, and
+   a filled cell in this bar means SELECTED — which is the one thing the licence
+   says light must never mean. So the publish tab takes the halo (and the canvas
+   pool that rises off it) and leaves the fill alone. */
+.tab-btn[data-lit] { background: transparent; }
+
+/* The bloom canvas (phase 2, js/console/lighting.js). Built at runtime, so this
+   rule is the whole of its presence in the stylesheet.
+
+   z-index 310 puts it OVER the tab bar (300) and every surface, and UNDER the
+   sheet overlay (460) and modals (500) — a sheet is a new plane, and light from
+   the plane behind it should not lie on top. It has to be above the topbar
+   rather than behind the content, because the emitter that matters most lives
+   IN the topbar: light pooling behind a bar that paints its own ground would
+   never be seen.
+
+   NO mix-blend-mode. The bench uses `screen`, and on a document this size that
+   forces the compositor to blend the entire page on every paint — the iPad
+   cliff. The additive part happens inside the module's own emissive buffer
+   instead, where it costs one 360×225 canvas. */
+#lighting-canvas {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 310;
 }
 
 /* 6 — Editor as manuscript: the writing surface is a page on the desk —
@@ -5085,7 +5347,7 @@ body.rl-lock { overflow: hidden; }
   background: var(--surface-1);
   border: 1px solid var(--line-3);
   border-radius: 12px;
-  box-shadow: var(--shadow-3, 0 12px 32px rgba(0, 0, 0, 0.6));
+  box-shadow: var(--shadow-3);
 }
 .pulse-tray.open { display: flex; }
 
@@ -5651,7 +5913,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .pulse-chip:active { border-color: var(--accent); }
+  /* .pulse-chip press → the shared mechanism at §4c (was: a border swap). */
 
   .pulse-palette { padding: 5px 10px; gap: 6px; }
   .pulse-swatch { width: 24px; height: 24px; }
@@ -6017,8 +6279,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
    opposite of.
 
    Every ground here is a token, so the block follows the instance's preset and
-   both themes for free. The one named exception is --on-media (text sitting on
-   a photograph, legible against the scrim rather than against the page).
+   both themes for free.
    ============================================ */
 
 /* ---- the bounded shell ----
@@ -6312,7 +6573,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   color: var(--ink-1);
   background: var(--surface-2);
   border-color: var(--accent);
-  box-shadow: 0 0 12px var(--accent-wash);
+  box-shadow: var(--edge-up);
 }
 .cards-pill-n { color: var(--ink-x); font-weight: 700; }
 .cards-pill.is-active .cards-pill-n { color: var(--accent-text); }
@@ -6368,14 +6629,15 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .tone-badge[data-tone="staged"] {
   color: var(--accent-text);
   background: var(--accent-wash);
-  border-color: rgba(var(--brand-rgb), 0.25);
+  border-color: rgba(var(--accent-rgb), 0.25);
 }
 .tone-badge[data-tone="editing"] {
   color: var(--accent-text);
   background: var(--accent-wash);
   border-color: var(--accent);
-  box-shadow: 0 0 8px var(--accent-wash);
-  animation: cardsDotPulse 1.4s ease-in-out infinite alternate;
+  box-shadow: var(--edge-up);
+  /* was an infinite cardsDotPulse: a second heartbeat competing with the
+     SYS lamp, unguarded for reduced motion, to say a slot is selected. */
 }
 .tone-badge[data-tone="going"] {
   color: var(--warn);
@@ -6389,10 +6651,6 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 }
 
 /* Micro animations for tactile feel */
-@keyframes cardsDotPulse {
-  from { opacity: 0.55; }
-  to { opacity: 1; }
-}
 @keyframes cardsPulseIn {
   from { transform: scale(0.985); opacity: 0.88; }
   to { transform: scale(1); opacity: 1; }
@@ -6438,7 +6696,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border-radius: var(--r-1);
   background:
     radial-gradient(ellipse at 50% 38%, var(--surface-2) 0%, var(--surface-0) 78%);
-  box-shadow: inset 0 0 32px rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 0 32px var(--shade-1);
 }
 /* ---- THE CARD IS SIZED TO THE WELL, IN EVERY VIEW ----
    The well never scrolls. A card is a 4:5 picture over a footer, so its height
@@ -6566,9 +6824,10 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   background: var(--accent);
   border: 1px solid var(--led-bezel, rgba(0, 0, 0, 0.9));
   box-shadow:
-    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.55)),
+    inset 0 0 2px var(--led-spec),
     0 0 6px var(--accent);
-  animation: cardsDotPulse 1.2s ease-in-out infinite alternate;
+  /* The composer dot no longer pulses either — same reason as the badge
+     above. It already carries the accent fill and the LED housing. */
 }
 .cards-composer-title {
   font-size: var(--t-micro);
@@ -6634,10 +6893,10 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   --fg-strong: var(--ink-1);
   --faint: var(--ink-3);
   --font-meta: var(--font-mono);
-  --accent-rgb: var(--brand-rgb);
-}
-:root[data-theme="light"] .card-face {
-  --accent-rgb: var(--brand-ink-rgb, 196, 17, 17);
+  /* --accent-rgb used to be declared here and ONLY here, which is why the rest
+     of the file composited from --brand-rgb and got noir red on paper. It now
+     lives in :root beside the other primitives and inherits, so the painter
+     still reads it off computed style exactly as before. */
 }
 /* ⚠️ The CARD is not 4:5 — its PICTURE is, and the body sits beneath it. That is
    how the real hero card is built (css/main.css: .wk-text[data-layout="hero"]
@@ -6654,7 +6913,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   background: var(--surface-2);
   border: 1px solid var(--line-2);
   border-radius: var(--r-1);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-3);
   /* A CARD'S INTERNAL LAYERING MUST NOT ESCAPE THE CARD — css/main.css says the
      same thing about .wk-card, at length, and this copy of the card had simply
      never carried it. It cost nothing until the overlay band arrived with a
@@ -6667,7 +6926,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 }
 .card-face.is-editing .wk-card {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 20px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-3);
   animation: cardsPulseIn 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 /* The picture band. `data-shape` decides whether it shows at all — the fields
@@ -7225,13 +7484,13 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   background: var(--accent);
   border: 1px solid var(--led-bezel, rgba(0, 0, 0, 0.9));
   box-shadow:
-    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.55)),
+    inset 0 0 2px var(--led-spec),
     0 0 6px var(--accent);
 }
 .card-face .wk-composed[data-state]:not([data-state="default"]) .wk-dot {
   background: rgb(var(--pulse-rgb));
   box-shadow:
-    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.55)),
+    inset 0 0 2px var(--led-spec),
     0 0 6px rgba(var(--pulse-rgb), 0.55);
 }
 /* The two fields ARE the card's text nodes — the renderer's own leaves made
@@ -7492,7 +7751,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .composer-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-wash), 0 0 10px var(--accent-wash);
+  box-shadow: 0 0 0 1px var(--accent-wash);
 }
 .composer-input::placeholder { color: var(--ink-x); }
 
@@ -7510,7 +7769,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border: 1px solid var(--line-1);
   border-radius: var(--r-2);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%), var(--surface-1);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: var(--shadow-1), var(--edge-up);
 }
 .control-block-head {
   display: flex;
@@ -7548,7 +7807,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .control-block-aside[data-tone="staged"] {
   color: var(--accent-text);
   background: var(--accent-wash);
-  border-color: rgba(var(--brand-rgb), 0.25);
+  border-color: rgba(var(--accent-rgb), 0.25);
 }
 .control-block-note {
   font-family: var(--font-mono);
@@ -7594,7 +7853,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   background: var(--surface-3);
   border-color: var(--accent);
   color: var(--ink-1);
-  box-shadow: 0 0 0 1px var(--accent), inset 0 0 6px rgba(var(--brand-rgb), 0.15);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .cards-swatch-pip {
   width: 7px;
@@ -7603,11 +7862,11 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border-radius: 1px;
   background: rgb(var(--chip-rgb, 120, 120, 120));
   border: 1px solid var(--led-bezel, rgba(0, 0, 0, 0.85));
-  box-shadow: inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.45));
+  box-shadow: inset 0 0 2px var(--led-spec);
 }
 .cards-swatch.is-active .cards-swatch-pip {
   box-shadow:
-    inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.65)),
+    inset 0 0 2px var(--led-spec),
     0 0 6px rgba(var(--chip-rgb), 0.7);
 }
 .cards-swatch-label {
@@ -7622,7 +7881,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border-color: var(--line-3);
 }
 .cards-swatch--default.is-active .cards-swatch-pip {
-  box-shadow: inset 0 0 2px var(--led-spec, rgba(255, 255, 255, 0.65));
+  box-shadow: inset 0 0 2px var(--led-spec);
 }
 .cards-swatch--signal { --chip-rgb: var(--brand-rgb); }
 .cards-swatch--ember  { --chip-rgb: 214, 72, 60; }
@@ -7696,15 +7955,13 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border-color: var(--line-3);
   background: var(--surface-3);
 }
-.layout-chip:active:not(.is-blocked) {
-  transform: scale(0.98);
-}
+/* .layout-chip press → §4c (was: scale .98, one of four spellings). */
 .layout-chip.is-on {
   color: var(--ink-1);
   font-weight: 700;
   background: var(--surface-2);
   border-color: var(--accent);
-  box-shadow: 0 0 10px var(--accent-wash), inset 2px 0 0 var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 /* Shown, not hidden: the option exists, and saying why it is unavailable beats
    leaving the owner to wonder where it went. */
@@ -7771,9 +8028,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border-radius: var(--r-1);
   transition: transform 120ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
-.action-dock .btn:active:not([disabled]) {
-  transform: scale(0.98);
-}
+/* .action-dock .btn press → §4c (was: scale .98). */
 .action-dock .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
 
 /* ---- THE GRID: all four cards at once, as they will publish ----
@@ -7913,11 +8168,11 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .grid-cell:hover {
   border-color: var(--line-3);
   transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-2);
 }
 .grid-cell.is-active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-wash), 0 0 16px var(--accent-wash);
+  box-shadow: 0 0 0 1px var(--accent-wash);
 }
 .grid-cell-head {
   display: flex;
@@ -7951,7 +8206,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .grid-edit { width: 100%; justify-content: center; }
 .grid-cell.is-editing {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-wash), 0 0 20px rgba(var(--brand-rgb), 0.25);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .cards-grid-editing-bar {
   display: flex;
@@ -7964,7 +8219,7 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   gap: 6px 8px;
   padding: 6px 8px;
   background: var(--surface-2);
-  border: 1px solid rgba(var(--brand-rgb), 0.3);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
   border-radius: var(--r-1);
   width: 100%;
   box-sizing: border-box;

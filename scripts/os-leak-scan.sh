@@ -192,6 +192,39 @@ for entry in ${IDENTITY_PATTERNS[@]+"${IDENTITY_PATTERNS[@]}"}; do
   fi
 done
 
+# LOCAL FILESYSTEM PATHS. Added 2026-09-16, after a committed npm debug log
+# (`.npm/_logs/…`) was found being SERVED on the live origin with the owner's
+# home directory in it four times. Nothing above could see it: the identity
+# patterns are values (an email, the wordmark, a bucket name), and a home path
+# is a SHAPE — `\bNick\b` does not even match the `inick` in that log, because
+# both sides of it are word characters.
+#
+# This is its own check rather than another IDENTITY_PATTERNS entry because it
+# is not instance identity: a fork leaking ITS owner's home path is the same
+# defect, and the pattern that catches it is the same pattern. So this one does
+# NOT get edited per instance — it travels as-is.
+#
+# No per-file exemption for the known-benign hits, deliberately. Against THIS
+# repo it fires on the `/Users/you` placeholder in `js/page-preflight.js` and on
+# paths quoted inside `docs/maintenance/` — and BOTH are stripped at extraction
+# (os-extract.mjs EXCLUDEs the preflight module and the whole of docs/), so the
+# fork CI this gate actually guards never sees either. Adding them to
+# ALLOWLIST_FILES would exempt those files from EVERY identity check, which is
+# far too much given away to silence a handful of lines that cannot reach a fork.
+#
+# The trailing slash is NOT required by the pattern. `verbose cwd /Users/someone`
+# with nothing after it is exactly the shape an npm log writes, and requiring a
+# slash silently missed it in the first draft of this check.
+# Filtered through ALLOWLIST_FILES by hand rather than via scan(), which does
+# not apply it — this file spells the pattern out in its own comments, and
+# `README.md` and the fork readme are allowed to talk about paths.
+path_out="$(search '/(Users|home)/[A-Za-z0-9_.-]+' | grep -vE "^($allow_re):" || true)"
+if [ -n "$path_out" ]; then
+  printf '\n\033[31m● local filesystem path — a home directory in a tracked file\033[0m\n'
+  printf '%s\n' "$path_out" | sed 's/^/    /'
+  hits=$((hits + $(printf '%s\n' "$path_out" | grep -c .)))
+fi
+
 echo; echo "4. Local git credentials (.git/config)"
 # .git/config is never committed, so this can't leak *through* a push — but it
 # sits in plaintext in every working copy, and anything with read access to the

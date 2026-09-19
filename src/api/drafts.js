@@ -25,11 +25,11 @@
 // Extracted from worker.js (decomposition, manual §6.7).
 
 import { verifyToken } from '../shared/auth.js';
-import { jsonRes, isMissingTableError, d1TablesMissingRes } from '../shared/http.js';
+import { jsonRes, d1MissingRes, isMissingTableError, d1TablesMissingRes } from '../shared/http.js';
 
 export async function handleGetDrafts(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('FN cloud drafts');
   try {
     const { results } = await env.DB.prepare(
       `SELECT id, fn_id, title, location, date, body, hero_filename, buffer_dates, updated_at
@@ -49,7 +49,7 @@ const DRAFT_COLS = 'id, fn_id, title, location, date, body, hero_filename, buffe
 
 export async function handlePutDraft(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('FN cloud drafts');
 
   let d;
   try {
@@ -147,7 +147,7 @@ export async function handlePutDraft(request, env) {
 
 export async function handleDeleteDraft(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('FN cloud drafts');
 
   let id;
   try {

@@ -22,7 +22,7 @@
 import { STATE, save, stageChange, trashItem, _pendingR2Deletes } from '../console-state.js';
 import { getToken, uploadFilesWithRetry } from '../console-api.js';
 import { toast, escapeHTML } from './chrome.js';
-import { cdnThumb, generateVariants, _resizeToWebP } from './assets.js';
+import { cdnThumb, generateVariants, _resizeToWebP, _hasOgCard } from './assets.js';
 import { cleanFilename, slugify, todayISO, uid, ymd, readFileAsDataURL, findDuplicateByHash } from './utils.js';
 import { upsertAutoBarrel, barrelDateFromYMD } from './more-views.js';
 
@@ -507,9 +507,16 @@ export function renderArchive() {
     // Mirror renderBuffer()/renderLibrary(): a frame with no CDN asset behind
     // it must SAY so — pointing <img> at the missing object would 404 quietly
     // and the card would just look empty instead of failed.
+    // ▣ — this frame has a live share image on R2, the same marker the buffer
+    // draws off the same set (js/console/assets.js). The archive was the one
+    // frame surface with no at-a-glance signal, which is how an author came to
+    // believe a preview they were shown was the live unfurl when it was not
+    // (2026-09-18). A failed upload gets no badge: there is no frame yet to have
+    // stamped.
+    const stamped = !a._uploadError && _hasOgCard(String(a.filename || '').replace(/\.[^.]+$/, ''));
     const thumb = a._uploadError
       ? `<div class="thumb" style="display:flex;align-items:center;justify-content:center;font-size:0.5rem;letter-spacing:1px;color:var(--accent);">✕ FAILED</div>`
-      : `<div class="thumb">${(a.image || a.filename) ? `<img src="${cdnThumb(a)}" alt=""${a.focus ? ` style="object-position:${a.focus}"` : ''}>` : ''}</div>`;
+      : `<div class="thumb">${stamped ? '<div class="ogc-badge" title="Live share image on R2">▣</div>' : ''}${(a.image || a.filename) ? `<img src="${cdnThumb(a)}" alt=""${a.focus ? ` style="object-position:${a.focus}"` : ''}>` : ''}</div>`;
     return `
     <div class="archive-card${a._imported ? ' imported' : ''}" onclick="archiveEdit('${a.id}')" style="cursor:pointer;">
       ${thumb}

@@ -50,10 +50,26 @@ describe('bench auth + config gates', () => {
     expect(res.status).toBe(401);
   });
 
-  it('500s when D1 is not configured', async () => {
+  // 501 notConfigured, not 500. Changed 2026-09-16 (v1 review Mo5): an unbound
+  // D1 is a config gap, not a fault — and the console must not red-latch on it.
+  // The bound-but-unmigrated case next door already answered 501; answering 500
+  // one step earlier made "no database yet" look worse than "database with no
+  // tables", which is backwards.
+  it('501s notConfigured when D1 is not bound at all', async () => {
     const res = await call('GET', '/api/bench', { db: undefined });
-    expect(res.status).toBe(500);
-    expect((await res.json()).error).toMatch(/D1/);
+    expect(res.status).toBe(501);
+    const body = await res.json();
+    expect(body.notConfigured, 'the console keys its "feature off" copy off this').toBe(true);
+    // The message names the action, and it is a DIFFERENT action from the
+    // unmigrated case's "run the migrations".
+    expect(body.error).toMatch(/D1/);
+    expect(body.error).toMatch(/binding|bound/i);
+  });
+
+  it('is not in the client retry set (0/502/503/504) — a config gap must not be retried', () => {
+    // Pinned as a number rather than prose because this is the whole reason the
+    // status changed: 501 is deliberate and terminal, 503 would spin.
+    expect([0, 502, 503, 504]).not.toContain(501);
   });
 });
 

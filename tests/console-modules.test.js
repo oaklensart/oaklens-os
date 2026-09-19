@@ -123,6 +123,78 @@ describe('console module layering', () => {
     expect(dangling, `\n${dangling.join('\n')}\n`).toEqual([]);
   });
 
+  it.runIf(files.length)('leaves no dangling reference BETWEEN modules either', () => {
+    // The guard above watches the barrel. This watches the twenty-one modules,
+    // because the same bug lives there and hid twice:
+    //
+    //   init.js:71   called _registerLibraryUploadProbe() (sync.js) — logged as
+    //                Mo2 in the 2026-08-24 review, still open three weeks later
+    //   focal.js:272 called hideOverlay() (chrome.js) — not logged anywhere,
+    //                found by generalising this check on 2026-09-16
+    //
+    // Neither threw. The bridge mirrors every namespace onto `window`, so a
+    // module that names something it never imported resolves anyway — until a
+    // bootstrap without that mirror runs it, and then it is a ReferenceError in
+    // a code path nobody exercises often. Both were one-line fixes; finding
+    // them was the hard part, and is what this automates.
+    const HANDLER = /\bon[a-z]+\s*=\s*\\?"[^"]*"|\bon[a-z]+\s*=\s*\\?'[^']*'/g;
+    const exportsOf = new Map();
+    for (const f of files) {
+      const names = new Set();
+      for (const m of readFileSync(join(DIR, f), 'utf8')
+        .matchAll(/^export\s+(?:const|let|var|class|function|async function)\s+([A-Za-z_$][\w$]*)/gm)) names.add(m[1]);
+      exportsOf.set(f, names);
+    }
+
+    const dangling = [];
+    for (const f of files) {
+      const raw = readFileSync(join(DIR, f), 'utf8');
+      // Inline `on*=` handler bodies are BLANKED, not scanned: they execute in
+      // global scope on purpose, and tests/helpers/inline-handlers.js is what
+      // checks those resolve. Without this, every onclick in buffer.js and
+      // more-views.js reads as a dangling call.
+      const code = raw
+        .replace(HANDLER, (m) => ' '.repeat(m.length))
+        .replace(/(\bfrom\s*)['"][^'"]+['"]/g, '$1""');
+
+      const imported = new Set();
+      for (const m of raw.matchAll(/import\s*\{([^}]*)\}\s*from/g)) {
+        m[1].split(',').map((x) => x.trim().split(/\s+as\s+/).pop().trim())
+          .filter(Boolean).forEach((n) => imported.add(n));
+      }
+      // Any declaration in the file, nested ones included — a module-private
+      // helper may share a name with another module's export.
+      const declared = new Set();
+      for (const m of code.matchAll(/(?:const|let|var|class|function|async function)\s+([A-Za-z_$][\w$]*)/g)) declared.add(m[1]);
+
+      const lineOf = (i) => code.slice(0, i).split('\n').length;
+      const lineStart = (i) => code.lastIndexOf('\n', i) + 1;
+
+      for (const [other, names] of exportsOf) {
+        if (other === f) continue;
+        for (const n of names) {
+          if (imported.has(n) || declared.has(n)) continue;
+          const re = new RegExp(`(^|[^.\\w$])${n.replace(/\$/g, '\\$')}\\s*\\(`, 'gm');
+          for (const m of code.matchAll(re)) {
+            // Comments are skipped per-MATCH rather than stripped wholesale:
+            // this repo is full of `https://` and `FN//` inside real strings,
+            // and a global strip would eat live code (same reasoning as the
+            // line-based check in tests/helpers/inline-handlers.js). A trailing
+            // `// … via cdnThumb()` is a real example that fired here.
+            const before = code.slice(lineStart(m.index), m.index);
+            if (before.includes('//') || before.trimStart().startsWith('*')) continue;
+            dangling.push(
+              `js/console/${f}:${lineOf(m.index)} calls ${n}() — exported by ${other}, `
+              + 'but never imported here. It only resolves through the window mirror.',
+            );
+            break;
+          }
+        }
+      }
+    }
+    expect(dangling, `\n${dangling.join('\n')}\n`).toEqual([]);
+  });
+
   it.runIf(files.length)('every module is versioned in the import map and precached', () => {
     // A module in a subdirectory is exactly what the old ?v= scanner could not
     // see, so this states the requirement directly rather than trusting it.

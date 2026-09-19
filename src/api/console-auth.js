@@ -151,9 +151,33 @@ export async function handleAuth(request, env) {
   // *document* only — see the shell gate in fetch()). Same password, same two
   // required secrets; the cookie just closes the "admin surface served to
   // anyone" gap the portal never had.
+  //
+  // ⚠️ MINT BOTH BEFORE ANSWERING, AND CHECK THEM. Until 2026-09-16 this shipped
+  // whatever createToken() returned — and it returns **null** when no signing
+  // secret resolves (auth.js resolveSessionSecret: no SESSION_SECRET and no
+  // SUBSCRIBERS KV to keep a generated one in, or a KV outage). The reply was
+  // then `{ok: true, token: null}` with `Set-Cookie: console_shell=null`: the
+  // password was right, the login said it worked, and every Bearer call after
+  // it 401'd with nothing on screen explaining why.
+  //
+  // 500, not the 501 notConfigured shape, on purpose. That shape means "this
+  // optional feature is off" and the console is required not to red-latch on
+  // it — but signing is not optional, the caller's password was CORRECT, and
+  // we still cannot issue a credential. That is a fault and should read as one.
+  // It also covers the transient KV case honestly: either way the answer is
+  // "the server could not sign this right now", which is exactly a 500.
   const token = await createToken(env);
+  const shell = await createShellToken(env);
+  if (!token || !shell) {
+    console.error('[auth] password accepted but no signing secret resolved — '
+      + 'set SESSION_SECRET (or bind a SUBSCRIBERS KV namespace); see setup.md');
+    return jsonRes({
+      ok: false,
+      error: 'server cannot sign a session — SESSION_SECRET is unset or unreachable (see setup.md)',
+    }, 500);
+  }
   const res = jsonRes({ ok: true, token }, 200);
-  res.headers.set('Set-Cookie', shellCookie(await createShellToken(env)));
+  res.headers.set('Set-Cookie', shellCookie(shell));
   return res;
 }
 

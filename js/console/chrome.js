@@ -28,7 +28,21 @@ export function toast(msg, kind = "info") {
 // owns the toggle + persistence. Default follows the system; a manual choice
 // sticks via localStorage (same pattern as the sidebar collapse).
 const THEME_KEY = "console_theme";
-const THEME_BAR = { dark: "#050505", light: "#f4f1ea" };   // matches --surface-0
+const THEME_BAR = { dark: "#000000", light: "#f4f1ea" };   // matches --surface-0
+
+// localStorage THROWS rather than returning null in a partitioned browser or
+// with site data blocked, and themeInit() runs at boot — so an unguarded read
+// here took the whole console down before it painted a pixel. Every other
+// surface already try/catches its storage access; console-state.js states the
+// rule as "guard the block, never the function", which is what these are: the
+// block is the access itself, and a theme preference that cannot be read or
+// kept is a degraded preference, never a failed boot.
+const themePref = () => {
+  try { return localStorage.getItem(THEME_KEY); } catch { return null; }
+};
+const rememberTheme = (mode) => {
+  try { localStorage.setItem(THEME_KEY, mode); } catch { /* preference won't stick; the theme still applies */ }
+};
 
 export function applyTheme(mode) {
   document.documentElement.dataset.theme = mode === "light" ? "light" : "dark";
@@ -42,19 +56,19 @@ export function applyTheme(mode) {
 }
 
 export function themeInit() {
-  const saved = localStorage.getItem(THEME_KEY);
+  const saved = themePref();
   const system = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
   applyTheme(saved || system);
   // No manual override → keep tracking the system as it changes (e.g. iPadOS
   // auto dark at sunset). A saved choice always wins.
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", e => {
-    if (!localStorage.getItem(THEME_KEY)) applyTheme(e.matches ? "light" : "dark");
+    if (!themePref()) applyTheme(e.matches ? "light" : "dark");
   });
 }
 
 export function themeToggle() {
   const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
-  localStorage.setItem(THEME_KEY, next);
+  rememberTheme(next);
   applyTheme(next);
 }
 
@@ -374,15 +388,36 @@ export function refreshStageIndicators() {
   // status strip beside it (glanceable telemetry, desktop) and the tab-bar
   // badge on touch, where the tab bar owns publish and there is no strip.
   // The itemised answer lives on the publish page itself.
+  // And it is LIT, not merely outlined (2026-09-14, owner's call on phase 2 of
+  // the lighting pass). "The publish button with work pending" was already one
+  // of the four states design-spec.md §6.5 licenses to carry light, and the
+  // only one of the four with no way to express it: the SYS lamp and the
+  // progress rail glow in CSS, but this button's indicator is the flat square
+  // pip, fenced against exactly that since 2026-08-23 so it can never read as
+  // a second SYS lamp. data-lit lights the BUTTON and never touches the pip —
+  // and it is the one steady light in the console, so it is also what the
+  // canvas bloom pools from (js/console/lighting.js).
+  //
+  // ⚠️ BOTH publish controls, because they are one control at two breakpoints.
+  // The topbar button is `display: none` under 1181px AND on any coarse
+  // pointer, where the tab bar owns publish instead — so lighting only the
+  // topbar would have shipped a feature that does nothing on an iPad, which is
+  // this owner's primary surface. The hidden one measures 0×0 and the bloom
+  // skips it, so the pair costs nothing at either width.
+  const tabPublish = document.querySelector('.tab-btn[data-view="publish"]');
   if (total > 0) {
     btn.classList.remove("empty");
     btn.dataset.pending = "1";
+    btn.setAttribute("data-lit", "accent");
+    tabPublish?.setAttribute("data-lit", "accent");
     btn.setAttribute("aria-label", `Publish — ${total} pending change${total === 1 ? '' : 's'}`);
     stat.innerHTML = `<span class="accent">${total} PENDING</span>`;
     pip.style.display = "block";
   } else {
     btn.classList.add("empty");
     btn.dataset.pending = "0";
+    btn.removeAttribute("data-lit");
+    tabPublish?.removeAttribute("data-lit");
     btn.setAttribute("aria-label", "Publish — no pending changes");
     stat.textContent = "NO PENDING CHANGES";
     pip.style.display = "none";
@@ -415,6 +450,66 @@ export function refreshStageIndicators() {
   setTxt("sheet-count-library", STATE.library.length);
   setTxt("sheet-count-audio",   (STATE.audio || []).length);
   setTxt("sheet-count-cards",   (STATE.cards || []).length);
+}
+
+// ============== IGNITION (the console armed, while a commit is in flight) ==============
+//
+// Owner's call, 2026-09-15. The commit used to announce itself by washing the
+// whole publish panel in canvas bloom; it now announces itself by ARMING the
+// controls — they take the accent and glow hot, like the spoolr dashboard's
+// hood ornament coming up to heat, and stay that way until the commit is
+// confirmed one way or the other.
+//
+// ⚠️ Not a fifth licensed light (design-spec.md §6.5): "the publish bar while
+// it commits" was already licensed, and this is that same state wearing the
+// controls instead of the panel behind them.
+//
+// The set is the console's action surface at that moment — the two buttons that
+// can still change the outcome, and the three topbar chips plus the publish
+// control, so the cluster ignites together rather than one chip staying cold
+// among its neighbours. Missing ids are skipped: a fork's markup can trail the
+// module, and half a set is better than a thrown boot.
+const ARMED_CONTROLS = [
+  '#gh-publish-btn',        // ▲ PUBLISH TO GITHUB
+  '#gh-clear-staged-btn',   // ⌫ CLEAR STAGED
+  '#pulse-topbar-btn',      // ☺  post a pulse
+  '#theme-toggle',          // ☀  STUDIO / DAYLIGHT
+  '#settings-topbar-btn',   // ⚙  settings — carries the logged-in dot
+  '#publish-btn',           // the topbar publish control
+];
+
+// Must outlast --arm-cool (2.6s), or the attribute is pulled mid-fade and the
+// glow snaps off instead of decaying.
+const ARM_COOL_MS = 2700;
+let _armCoolTimer = 0;
+
+/**
+ * Arm or disarm the console. `on` is the whole API — publish.js says what is
+ * happening and this decides what that looks like.
+ *
+ * ⚠️ The two-step is not superstition. A `filter` interpolates only against a
+ * matching function list, so going straight from no filter to the hot one makes
+ * the control BLINK on rather than ignite. So: set the resting attribute (which
+ * declares every function at its no-op value), force one layout flush so the
+ * browser actually computes that state, and only then go hot. On the way down
+ * the reverse — drop to resting, and remove the attribute only once the cool
+ * has finished.
+ */
+export function setCommitArmed(on) {
+  const els = ARMED_CONTROLS
+    .map((sel) => document.querySelector(sel))
+    .filter(Boolean);
+  if (!els.length) return;
+  clearTimeout(_armCoolTimer);
+  els.forEach((el) => el.setAttribute("data-armed", ""));
+  if (on) {
+    void document.body.offsetWidth;   // flush, so the resting state is real
+    els.forEach((el) => el.setAttribute("data-armed", "on"));
+  } else {
+    _armCoolTimer = setTimeout(() => {
+      els.forEach((el) => el.removeAttribute("data-armed"));
+    }, ARM_COOL_MS);
+  }
 }
 
 // Escape a string for safe injection into innerHTML.

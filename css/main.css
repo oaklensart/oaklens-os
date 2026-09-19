@@ -118,7 +118,6 @@
   --font-display: 'Archivo', system-ui, sans-serif;
   --font-body: 'Sora', system-ui, sans-serif;
   --font-meta: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
-  --r-card: 10px;
   --r-chip: 7px;
   --nav-h: 52px;
   color-scheme: dark;
@@ -163,7 +162,6 @@
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Hanken Grotesk', system-ui, sans-serif;
   --font-meta: 'Hanken Grotesk', system-ui, sans-serif;
-  --r-card: 4px;
   --r-chip: 3px;
 }
 :root[data-preset="passe-partout"][data-theme="light"] {
@@ -205,7 +203,6 @@
   --font-display: 'Syne', sans-serif;
   --font-body: 'Syne Mono', monospace;
   --font-meta: 'Syne Mono', monospace;
-  --r-card: 0;
   --r-chip: 2px;
 }
 :root[data-preset="noir"][data-theme="light"] {
@@ -251,7 +248,6 @@
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Hanken Grotesk', system-ui, sans-serif;
   --font-meta: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
-  --r-card: 2px;
   --r-chip: 2px;
 }
 :root[data-preset="selenium"][data-theme="light"] {
@@ -297,7 +293,6 @@
   --font-display: 'Fraunces', Georgia, serif;
   --font-body: 'Hanken Grotesk', system-ui, sans-serif;
   --font-meta: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
-  --r-card: 2px;
   --r-chip: 2px;
 }
 :root[data-preset="cyanotype"][data-theme="light"] {
@@ -1766,54 +1761,10 @@ html {
   text-decoration: none;
 }
 
-/* ============================================
-   SECTION HEADERS
-   Reusable across archive, blog, wall, etc.
-   ============================================ */
-
-.section-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 40px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--gray-800);
-}
-
-.section-label {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: var(--gray-500);
-}
-
-.section-label .accent {
-  color: var(--red);
-}
-
-.section-count {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  letter-spacing: 2px;
-  color: var(--gray-700);
-}
-
 /* Reserve space before JS injects count text — prevents CLS (0.12 score on both) */
 #wall-count,
 #archive-count-line {
   min-height: 1.5em; /* ~13px at font-size: 0.55rem; covers one text line + leading */
-}
-
-/* ============================================
-   PAGE CONTAINER — for scrollable pages
-   Archive, blog, wall, about, dev
-   ============================================ */
-
-.page-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 60px 40px 80px;
 }
 
 /* ============================================
@@ -1953,10 +1904,6 @@ html {
 
   .wx-telemetry {
     display: none;
-  }
-
-  .page-content {
-    padding: 40px 16px 60px;
   }
 }
 

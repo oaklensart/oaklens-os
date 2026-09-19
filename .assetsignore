@@ -10,6 +10,13 @@ worker.js
 site.config.js
 site.config.example.js
 .aider*
+# npm's scratch dir — `_logs/` in particular. A debug log records the absolute
+# path npm ran from, so it carries somebody's home directory verbatim. One was
+# committed on 2026-09-11 and served from here until 2026-09-16; `.gitignore`
+# now stops it being committed, and this stops it being SERVED if it ever is
+# again. Two doors, because the tracked copy got past the first one once.
+.npm
+
 # AI-agent scratch space. `.claude/worktrees/` holds whole CHECKOUTS of this repo
 # (a second copy of every page, and of site.config.js with it), and a fork that
 # commits its `.claude/` settings would otherwise serve them: the assets dir is

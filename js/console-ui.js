@@ -38,6 +38,8 @@
 
 // toast, theme, the view router, sheets, dropzones, escapers
 export * from './console/chrome.js';
+// the canvas bloom: light pooled onto the chassis around whatever is data-lit
+export * from './console/lighting.js';
 // CDN URLs, WebP variant generation, the publish base-revision marker
 export * from './console/assets.js';
 // dates, filenames, content hashing, the id minter

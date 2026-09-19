@@ -10,7 +10,7 @@
 <link rel="icon" type="image/svg+xml" href="/dev/icon.svg">
 <link rel="apple-touch-icon" href="/dev/icon-180.png">   <!-- iOS ignores SVG here; springboard needs PNG -->
 <link rel="manifest" href="/dev/manifest.webmanifest">
-<meta name="theme-color" content="#050505">
+<meta name="theme-color" content="#000000">
 <script>
 /* Anti-flash theme boot: resolve STUDIO (dark) / DAYLIGHT (light) before the
    stylesheet paints. Full theme logic lives in console-ui.js (themeToggle). */
@@ -19,7 +19,7 @@ try {
         || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
   if (_t === 'light') document.documentElement.dataset.theme = 'light';
   document.querySelector('meta[name="theme-color"]')
-    .setAttribute('content', _t === 'light' ? '#f4f1ea' : '#050505');
+    .setAttribute('content', _t === 'light' ? '#f4f1ea' : '#000000');
 } catch (e) {}
 </script>
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -51,7 +51,7 @@ try {
      DOM half bails here too — no player is mounted in this document. -->
 <script src="/js/audio-player.js?v=9" defer></script>
 
-<link rel="stylesheet" href="/css/field-console.css?v=85">
+<link rel="stylesheet" href="/css/field-console.css?v=93">
 </head>
 <body>
 
@@ -937,7 +937,7 @@ try {
         </div>
         <div class="btn-row" style="justify-content: center; gap: 12px;">
           <button class="btn btn-primary" id="gh-publish-btn" onclick="publishToServer()">▲ Publish to GitHub</button>
-          <button class="btn btn-danger" onclick="publishClearStaged()">⌫ Clear Staged</button>
+          <button class="btn btn-danger" id="gh-clear-staged-btn" onclick="publishClearStaged()">⌫ Clear Staged</button>
         </div>
         <div id="publish-receipt-slot"></div>
         <div class="publish-log" id="publish-log"></div>
@@ -1388,8 +1388,30 @@ try {
           <div class="focal-cardwrap" id="focal-cardwrap" style="display:none">
             <div class="focal-crop-label">OG card · 1200×630</div>
             <canvas id="ogc-canvas" width="1200" height="630"></canvas>
+            <!-- Two styles, one R2 key. CARD is the composed card; PLAIN is the
+                 photograph alone, cover-cropped to 1200×630 at the focal point.
+                 Hidden by focal.js wherever there is no photograph to crop (a
+                 track, a set, a words-first note). Switching also moves the red
+                 crop guide on the stage — the two keep different parts of the
+                 picture, so a guide that did not follow would aim you at the
+                 wrong box. -->
+            <div class="focal-style" id="focal-style" role="group" aria-label="Share image style">
+              <button type="button" class="focal-style-btn" data-style="card" aria-pressed="true" onclick="FocalModal.setStyle('card')">▣ Card</button>
+              <button type="button" class="focal-style-btn" data-style="plain" aria-pressed="false" onclick="FocalModal.setStyle('plain')">◼ Plain</button>
+            </div>
+            <!-- Is this drawing what the link ACTUALLY unfurls with, or what it
+                 would unfurl with if you published? The canvas looks identical
+                 either way, and in 2026-09 that cost an owner six minutes of
+                 believing the console and the edge disagreed. focal.js fills it
+                 from the same set the buffer's ▣ badge reads. -->
+            <div class="ogc-live" id="ogc-live"></div>
+            <!-- ONE checkbox, and the two swatches after it are a LEGEND for the
+                 two rectangles it draws on the stage — not two things to choose
+                 between. It read as a mode switch ("does unchecking OG crop give
+                 me a full-frame card?" — no, it changes no output at all), so it
+                 now leads with the verb. -->
             <label class="focal-guidetoggle"><input type="checkbox" id="focal-guide-toggle" checked>
-              <span><span class="g-og">▭</span> OG crop &nbsp; <span class="g-th">▭</span> thumbnail</span></label>
+              <span>Show guides: <span class="g-og">▭</span> card &nbsp; <span class="g-th">▭</span> thumbnail</span></label>
           </div>
           <!-- thumbnail-only mode: existing crop preview -->
           <div class="focal-thumbwrap" id="focal-thumbwrap">
@@ -1406,6 +1428,10 @@ try {
       <span id="focal-card-actions" style="display:none">
         <button class="btn btn-sm" id="focal-btn-copy" onclick="FocalModal.copyLink()">⧉ Copy Link</button>
         <button class="btn btn-sm" onclick="FocalModal.download()">⤓ Download</button>
+        <!-- Only while a stamp IS live (focal.js setLive). The reverse of this
+             is ▲ Publish Card, sitting right beside it — which is the whole
+             undo, because a stamp has no publish horizon in either direction. -->
+        <button class="btn btn-danger btn-sm" id="focal-btn-remove" style="display:none" onclick="FocalModal.remove()">✕ Remove</button>
         <button class="btn btn-stage" id="focal-btn-publish" onclick="FocalModal.publish()">▲ Publish Card</button>
       </span>
       <button class="btn btn-stage" onclick="FocalModal.save()">✓ Set Focal Point</button>
@@ -1499,31 +1525,32 @@ try {
 {
   "imports": {
     "/js/console-telemetry.js": "/js/console-telemetry.js?v=2",
-    "/js/console-api.js":       "/js/console-api.js?v=11",
+    "/js/console-api.js":       "/js/console-api.js?v=12",
     "/js/console-state.js":     "/js/console-state.js?v=16",
-    "/js/console-ui.js":        "/js/console-ui.js?v=64",
-    "/js/console/chrome.js":    "/js/console/chrome.js?v=13",
-    "/js/console/assets.js":    "/js/console/assets.js?v=4",
-    "/js/console/utils.js":     "/js/console/utils.js?v=2",
+    "/js/console-ui.js":        "/js/console-ui.js?v=65",
+    "/js/console/chrome.js":    "/js/console/chrome.js?v=17",
+    "/js/console/lighting.js":  "/js/console/lighting.js?v=2",
+    "/js/console/assets.js":    "/js/console/assets.js?v=5",
+    "/js/console/utils.js":     "/js/console/utils.js?v=3",
     "/js/console/sync.js":      "/js/console/sync.js?v=1",
     "/js/console/upload.js":    "/js/console/upload.js?v=4",
     "/js/console/more-views.js": "/js/console/more-views.js?v=5",
-    "/js/console/archive.js":   "/js/console/archive.js?v=3",
-    "/js/console/buffer.js":    "/js/console/buffer.js?v=4",
+    "/js/console/archive.js":   "/js/console/archive.js?v=4",
+    "/js/console/buffer.js":    "/js/console/buffer.js?v=5",
     "/js/console/fn-editor.js": "/js/console/fn-editor.js?v=8",
-    "/js/console/card-paint.js": "/js/console/card-paint.js?v=5",
-    "/js/console/focal.js":     "/js/console/focal.js?v=12",
-    "/js/console/share.js":     "/js/console/share.js?v=3",
+    "/js/console/card-paint.js": "/js/console/card-paint.js?v=7",
+    "/js/console/focal.js":     "/js/console/focal.js?v=15",
+    "/js/console/share.js":     "/js/console/share.js?v=4",
     "/js/console/asset-library.js": "/js/console/asset-library.js?v=3",
     "/js/console/audio.js":     "/js/console/audio.js?v=16",
     "/js/console/cards.js":     "/js/console/cards.js?v=32",
-    "/js/console/publish.js":   "/js/console/publish.js?v=26",
+    "/js/console/publish.js":   "/js/console/publish.js?v=28",
     "/js/console/session.js":   "/js/console/session.js?v=9",
     "/js/console/bench.js":     "/js/console/bench.js?v=1",
     "/js/pulse-packs.js":       "/js/pulse-packs.js?v=3",
     "/js/console/pulse.js":     "/js/console/pulse.js?v=4",
-    "/js/console/init.js":      "/js/console/init.js?v=11",
-    "/js/markdown-engine.js":   "/js/markdown-engine.js?v=4",
+    "/js/console/init.js":      "/js/console/init.js?v=13",
+    "/js/markdown-engine.js":   "/js/markdown-engine.js?v=5",
     "/js/recent-index.js":      "/js/recent-index.js?v=32",
     "/js/audio-player.js":      "/js/audio-player.js?v=9",
     "/js/jpeg-privacy.js":      "/js/jpeg-privacy.js?v=1",
@@ -1531,7 +1558,7 @@ try {
     "/js/raw-extract.js":       "/js/raw-extract.js?v=4",
     "/js/site-export.js":       "/js/site-export.js?v=4",
     "/js/site-export-core.js":  "/js/site-export-core.js?v=3",
-    "/js/export-manifest.js":   "/js/export-manifest.js?v=17"
+    "/js/export-manifest.js":   "/js/export-manifest.js?v=19"
   }
 }
 </script>

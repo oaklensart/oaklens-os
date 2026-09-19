@@ -382,3 +382,62 @@ describe('long-press registry', () => {
     window.exitBurstLinkMode();
   });
 });
+
+
+// ---- E5: storage that throws must not take the console down ----
+//
+// localStorage does not merely return null when site data is blocked or the
+// browser partitions storage — the accessor THROWS. themeInit() runs at boot,
+// so an unguarded read there kills the console before it paints, and the person
+// sees a blank page with no clue why. Every other surface already try/catches
+// its storage access; chrome.js's theme block did not until 2026-09-16.
+//
+// These drive the real exported functions against a localStorage that throws on
+// everything, which is what a partitioned browser actually hands you.
+describe('the theme survives a localStorage that throws', () => {
+  let realStorage;
+  const hostile = () => {
+    realStorage = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        return {
+          getItem() { throw new DOMException('denied', 'SecurityError'); },
+          setItem() { throw new DOMException('denied', 'SecurityError'); },
+          removeItem() { throw new DOMException('denied', 'SecurityError'); },
+        };
+      },
+    });
+  };
+  const restore = () => {
+    if (realStorage) Object.defineProperty(window, 'localStorage', realStorage);
+  };
+
+  it('themeInit() still applies a theme instead of throwing', () => {
+    hostile();
+    try {
+      expect(() => window.themeInit()).not.toThrow();
+      // It fell back to the system preference rather than leaving the document
+      // unthemed — an unstyled console is not a graceful degradation.
+      expect(['dark', 'light']).toContain(document.documentElement.dataset.theme);
+    } finally { restore(); }
+  });
+
+  it('themeToggle() still flips the theme, it just cannot remember it', () => {
+    hostile();
+    try {
+      document.documentElement.dataset.theme = 'dark';
+      expect(() => window.themeToggle()).not.toThrow();
+      expect(document.documentElement.dataset.theme).toBe('light');
+    } finally { restore(); }
+  });
+
+  it('a working localStorage still persists the choice', () => {
+    // The other half — the guards must not have turned persistence into a no-op.
+    document.documentElement.dataset.theme = 'dark';
+    window.themeToggle();
+    expect(localStorage.getItem('console_theme')).toBe('light');
+    window.themeToggle();
+    expect(localStorage.getItem('console_theme')).toBe('dark');
+  });
+});

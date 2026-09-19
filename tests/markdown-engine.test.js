@@ -190,3 +190,80 @@ describe.skipIf(!HAS_POSTS)('published corpus invariants', () => {
     expect(renderMarkdown(bodyOf('fn-007.md'))).toContain('<div class="buffer-inline"');
   });
 });
+
+
+// ---- Mo3: attributes are escaped, schemes are checked ----
+//
+// The engine escapes &, < and > before it builds any tag, which left the DOUBLE
+// QUOTE as the only way out of an attribute — and no scheme check at all on a
+// link. Logged 2026-08-24 as Mo3, fixed 2026-09-16.
+//
+// The published pages were never exposed: their strict CSP carries no
+// 'unsafe-inline', which kills both an inline handler and a javascript: href.
+// The CONSOLE PREVIEW is the surface that was — it runs the relaxed /dev policy
+// through this same engine, so it was author-scoped self-XSS. These tests are
+// on the ENGINE for that reason: the CSP is a second layer, not the only one,
+// and a renderer that is only safe because of where it happens to run stops
+// being safe the day it runs somewhere else.
+describe('attribute escaping', () => {
+  it('a quote in alt text does not end the attribute', () => {
+    // The benign case that proves it, and the reason this is a correctness bug
+    // before it is a security one: a note about a 24" monitor.
+    const out = renderMarkdown('![24" monitor](/img.webp)');
+    expect(out).toContain('alt="24&quot; monitor"');
+    expect(out).not.toContain('alt="24" monitor"');
+  });
+
+  // Note what these assert and what they do NOT. The text `onerror=` still
+  // appears in the output — inside the src VALUE, inert, because the quotes
+  // around it are escaped. Asserting /\sonerror=/ is absent fails against
+  // correct output, which is how the first draft of these two tests failed.
+  // What must be absent is `onerror="` with a REAL quote: that is the form
+  // that would close the value and start a live attribute.
+  it('a quote in an image src cannot open a second attribute', () => {
+    const out = renderMarkdown('![a](x" onerror="boom)');
+    expect(out, 'a live onerror attribute must not survive').not.toContain('onerror="');
+    expect(out, 'the quotes are what neutralise it').toContain('&quot;');
+  });
+
+  it('a quote in an href cannot open a second attribute', () => {
+    const out = renderMarkdown('[t](/a" onclick="boom)');
+    expect(out).not.toContain('onclick="');
+    expect(out).toContain('&quot;');
+  });
+});
+
+describe('link and image schemes', () => {
+  it('keeps the words and drops the link for a javascript: href', () => {
+    const out = renderMarkdown('[click me](javascript:boom)');
+    expect(out).not.toContain('javascript:');
+    expect(out, 'the text survives — nothing is silently swallowed').toContain('click me');
+    expect(out).not.toMatch(/<a\b/);
+  });
+
+  it('is not fooled by a control character inside the scheme', () => {
+    // The classic bypass. Entity-encoded variants are already dead upstream
+    // (& is escaped before any of this runs), so the raw form is what is left.
+    const out = renderMarkdown('[x](java\tscript:boom)');
+    expect(out).not.toMatch(/<a\b/);
+  });
+
+  it('still allows the schemes a note actually uses', () => {
+    expect(renderMarkdown('[e](https://example.com)')).toContain('<a href="https://example.com"');
+    expect(renderMarkdown('[m](mailto:someone@example.com)')).toContain('<a href="mailto:someone@example.com"');
+    expect(renderMarkdown('[w](/wall)')).toContain('<a href="/wall">');
+    expect(renderMarkdown('[a](#anchor)')).toContain('<a href="#anchor">');
+  });
+
+  it('allows the data:image URL the inline preview cache hands back', () => {
+    // fn-editor drops an image, FileReader gives a data: URL, and the preview
+    // resolves through fnInlineImageCache. Breaking this breaks image drop.
+    const out = renderMarkdown('![a](data:image/webp;base64,AAAA)');
+    expect(out).toContain('<img src="data:image/webp;base64,AAAA"');
+  });
+
+  it('refuses a data: URL that is not an image', () => {
+    const out = renderMarkdown('![a](data:text/html,<script>boom</script>)');
+    expect(out).not.toContain('data:text/html');
+  });
+});

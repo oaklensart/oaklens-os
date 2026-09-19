@@ -42,6 +42,13 @@ const PLAN = [
     'MORE SHEET (tab bar secondary surfaces)',
     'ACTION SHEET (long-press context menu)',
   ]],
+  // The canvas bloom (phase 2 of the lighting pass). A true leaf: it imports
+  // nothing, discovers its emitters by the [data-lit] attribute rather than by
+  // name, and is called once from init(). It sits directly above chrome because
+  // it is chrome's own kind of thing — generic surface plumbing that knows
+  // nothing about buffers, frames or publishing — and because nothing below
+  // chrome exists for it to sit under.
+  ['lighting', []],
   ['assets', ['IMAGE RESIZING', 'CDN PREVIEW HELPER', 'SERVER API']],
   // Was `trash`, renamed 2026-07-29: line attribution had filed nine generic
   // date/file/hash helpers under the SESSION TRASH banner, and only

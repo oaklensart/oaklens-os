@@ -38,7 +38,7 @@
 // author DOES need to be told.
 
 import { verifyToken } from '../shared/auth.js';
-import { jsonRes, isMissingTableError, d1TablesMissingRes, CORS_HEADERS } from '../shared/http.js';
+import { jsonRes, d1MissingRes, isMissingTableError, d1TablesMissingRes, CORS_HEADERS } from '../shared/http.js';
 import { normalizePulseInput, pulseToPublic, defaultTtlHours } from '../shared/pulse.js';
 
 // No `kicker`. The card names itself (src/shared/pulse.js PULSE_LABEL), so there
@@ -75,7 +75,7 @@ export async function handleGetPulse(request, env) {
 // ---- POST /api/pulse — console ----
 export async function handlePostPulse(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('Pulse');
 
   let body;
   try {
@@ -138,7 +138,7 @@ export async function handlePostPulse(request, env) {
 // the old behaviour: one press collapses the lot.
 export async function handleDeletePulse(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('Pulse');
   const now = Date.now();
   try {
     const res = await env.DB.prepare(
@@ -166,7 +166,7 @@ const LOG_LIMIT_MAX = 200;
 
 export async function handlePulseLog(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('Pulse');
 
   const url = new URL(request.url);
   const asked = parseInt(url.searchParams.get('limit') || '', 10);

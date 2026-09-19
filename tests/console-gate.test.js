@@ -196,6 +196,52 @@ describe('/api/auth issues the shell cookie alongside the bearer token', () => {
     expect(res.status).toBe(401);
     expect(res.headers.get('Set-Cookie')).toBeNull();
   });
+
+  // A CORRECT password that cannot be signed. resolveSessionSecret answers null
+  // with no SESSION_SECRET and no SUBSCRIBERS KV to keep a generated one in —
+  // and until 2026-09-16 the endpoint shipped that null straight through as
+  // `{ok: true, token: null}` with `Set-Cookie: console_shell=null`. The login
+  // reported success, then every Bearer call 401'd with nothing on screen
+  // saying why. Fail loud instead.
+  describe('a correct password the server cannot sign', () => {
+    const unsignable = () => ({
+      AUTH_PASSWORD_HASH: PASSWORD_HASH,
+      ASSETS: makeAssets(),
+      // no SESSION_SECRET, and no SUBSCRIBERS KV to generate one into
+    });
+
+    it('answers 500 rather than a cheerful 200', async () => {
+      const res = await worker.fetch(authReq(PASSWORD), unsignable(), ctx);
+      expect(res.status).toBe(500);
+      const data = await res.json();
+      expect(data.ok).toBe(false);
+      // Diagnostic, and it names the fix: this is the one failure a fork hits
+      // when it skips the secret, so the message has to be the documentation.
+      expect(data.error).toMatch(/SESSION_SECRET/);
+    });
+
+    it('never ships a null token', async () => {
+      const res = await worker.fetch(authReq(PASSWORD), unsignable(), ctx);
+      const data = await res.json();
+      expect(data.token, 'a null token is worse than no token').toBeUndefined();
+    });
+
+    it('never sets console_shell=null', async () => {
+      // The other half of the same bug, and the more dangerous one: a literal
+      // "null" cookie is a value the gate then has to reject on every request.
+      const res = await worker.fetch(authReq(PASSWORD), unsignable(), ctx);
+      const setCookie = res.headers.get('Set-Cookie');
+      expect(setCookie === null || !setCookie.includes(`${SHELL_COOKIE}=null`)).toBe(true);
+    });
+
+    it('still refuses a WRONG password the same way — 401, not 500', async () => {
+      // Order matters: the signing check must sit AFTER the password check, or
+      // a misconfigured instance starts answering 500 to credential-stuffing
+      // and leaks that the deployment is broken to anyone who knocks.
+      const res = await worker.fetch(authReq('wrong password'), unsignable(), ctx);
+      expect(res.status).toBe(401);
+    });
+  });
 });
 
 describe('/api/logout', () => {

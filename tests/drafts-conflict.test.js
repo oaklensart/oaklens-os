@@ -216,7 +216,7 @@ describe('PUT /api/drafts — compatibility and edges', () => {
     expect(db.table.get('d1').hero_filename).toBeNull();
   });
 
-  it('401s without a token and 500s without D1', async () => {
+  it('401s without a token and 501s notConfigured without D1', async () => {
     const db = makeDB();
     const unauth = await worker.fetch(new Request('https://example.com/api/drafts', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft()),
@@ -230,6 +230,8 @@ describe('PUT /api/drafts — compatibility and edges', () => {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(draft()),
     }), e);
-    expect(noDb.status).toBe(500);
+    // 501, not 500 — see the note in tests/bench.test.js (v1 review Mo5).
+    expect(noDb.status).toBe(501);
+    expect((await noDb.json()).notConfigured).toBe(true);
   });
 });

@@ -233,6 +233,74 @@ describe('the scan actually searches (not silently dead)', () => {
   });
 });
 
+// §3, local filesystem paths — the shape, not the value.
+//
+// Added 2026-09-16 after a committed `.npm/_logs/*.log` was found being SERVED
+// on the live origin with the owner's home directory in it four times. Every
+// identity pattern above hunts a VALUE (an email, the wordmark, a bucket name),
+// and none of them could see it — `\bNick\b` does not even match the `inick`
+// in that path, because both neighbours are word characters.
+//
+// Two properties worth pinning, and the second is the one that was wrong first:
+//   1. It fires on a home path in a tracked file, in any file type.
+//   2. It does NOT require a trailing slash. `verbose cwd /Users/someone` with
+//      nothing after it is exactly what an npm log writes, and the first draft
+//      of this check required the slash and sailed straight past it.
+describe('§3 local filesystem paths', () => {
+  const plant = (name, body) => {
+    mkdirSync(dirname(join(dir, name)), { recursive: true });
+    writeFileSync(join(dir, name), body);
+    git('add', '-A');
+  };
+
+  // Built by concatenation for the same reason as FAKE_PAT above: a literal
+  // home path in this tracked file would be flagged by the check it tests.
+  const HOME = '/Users' + '/someone';
+  const LINUX_HOME = '/home' + '/someone';
+
+  it('flags a home path inside a deeper path — the npm-log shape', () => {
+    plant('.npm/_logs/debug.log', `12 verbose cwd ${HOME}/site/.claude/worktrees/x\n`);
+    const { code, out } = runScan();
+    expect(code).toBe(1);
+    expect(out).toContain('local filesystem path');
+    expect(out).toContain('.npm/_logs/debug.log');
+  });
+
+  it('flags a BARE home path with nothing after it', () => {
+    // The miss in the first draft: requiring a trailing slash made this pass.
+    plant('notes.md', `ran from ${HOME}\n`);
+    const { code, out } = runScan();
+    expect(code).toBe(1);
+    expect(out).toContain('local filesystem path');
+    expect(out).toContain('notes.md');
+  });
+
+  it('flags the Linux spelling too, not just macOS', () => {
+    plant('notes.md', `ran from ${LINUX_HOME}/site\n`);
+    const { code, out } = runScan();
+    expect(code).toBe(1);
+    expect(out).toContain('local filesystem path');
+  });
+
+  it('does not fire on a tree with no home path in it', () => {
+    // The other half — this check sits in the section that already reports 400+
+    // expected lines against the instance repo, so a false positive here is
+    // genuinely costly: it teaches people to skim section 3.
+    plant('notes.md', 'a path like ./js/console/audio.js is not a home directory\n');
+    const { code, out } = runScan();
+    expect(code).toBe(0);
+    expect(out).not.toContain('local filesystem path');
+  });
+
+  it('respects ALLOWLIST_FILES — the scan must not flag its own comments', () => {
+    // scan() does not apply the allowlist, so this check filters by hand. It is
+    // easy to "simplify" that back into scan() and have the script report
+    // itself on every run, which is how a gate stops being read.
+    const { out } = runScan();
+    expect(out).not.toMatch(/^ *scripts\/os-leak-scan\.sh:/m);
+  });
+});
+
 // §2, resource IDs — the gate that has to tell two situations apart:
 //
 //   a deployed instance's OWN wrangler.jsonc, which must hold real KV/D1 IDs

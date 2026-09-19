@@ -19,7 +19,7 @@ import { STATE, save, stageChange, trashItem, _pendingR2Deletes } from '../conso
 import { getToken } from '../console-api.js';
 import { showToast, startProgress, updateProgress, endProgress } from '../console-telemetry.js';
 import { toast, showView } from './chrome.js';
-import { cdnThumb, generateVariants, SITE_LOCATION } from './assets.js';
+import { cdnThumb, generateVariants, SITE_LOCATION, _hasOgCard } from './assets.js';
 import { cleanFilename, computeHash, findDuplicateByHash, readEXIFDate, readFileAsDataURL, todayISO, uid, ymd } from './utils.js';
 import { _enqueueUpload } from './upload.js';
 import { _setArchiveComposeFocus, _setArchiveComposeCardFocus } from './archive.js';
@@ -196,27 +196,20 @@ export function bufferPromote(id) {
   toast("✓ promoted to archive — fill in metadata", "success");
 }
 
-// Which cards already have a live share stamp on R2 — the MARKER, which is the
-// R2 key with `meta/` and `-og.webp` taken off it. renderBuffer draws the ▣
-// badge from this. Owned here because the renderer is the consumer; the
-// producers sit ABOVE this module (loadOgCards fetches the index, the focal
-// modal and the share block add one) and write through the setters, because an
-// imported binding cannot be assigned.
-// The extraction guard caught this one as a ReferenceError in the suite — the
-// same dangling-const class as CDN_BASE, stopped by the test this time.
-//
-// ⚠️ NOT ONLY FRAMES SINCE CHUNK 8. A frame's marker is its image basename, but
-// /api/og-cards lists every stem under `meta/` — so the set also holds
-// `fn-<slug>`, `audio-<slug>`, `set-<slug>` and `card-<id>`. The buffer looks up
-// bare basenames and simply never asks about those, which is why one set can
-// serve both readers.
-let OG_CARD_SET = new Set();
-export function _setOgCardSet(bases) { OG_CARD_SET = new Set(bases); }
-export function _addOgCard(base) { OG_CARD_SET.add(base); }
-// The reader, for js/console/share.js — the share block says "stamped" or "not
-// stamped yet" off the same set the buffer's badge reads, so the two can never
-// disagree about what is on R2.
-export function _hasOgCard(base) { return OG_CARD_SET.has(base); }
+// The stamped set MOVED DOWN to js/console/assets.js on 2026-09-18, and the
+// reason is the archive. `archive` sits BELOW `buffer` in the plan order, so it
+// could not import this and the ▣ badge could only ever exist on one surface —
+// which is exactly how the archive editor came to give an author no signal at
+// all about what was live. The set was never buffer-specific anyway (its own
+// warning said so: it holds fn-/audio-/set-/card- stems too). It is R2
+// bookkeeping, so it lives in the R2 module, below every reader.
+// Re-exported here because renderBuffer is still a consumer and this module's
+// importers should not have to care where it went.
+// ⚠️ Imported ABOVE as well as re-exported here: `export … from` creates no
+// local binding, and renderBuffer calls _hasOgCard itself. Getting that wrong
+// is a ReferenceError at render time, which is the same dangling shape this
+// module was bitten by once already.
+export { _setOgCardSet, _addOgCard, _removeOgCard, _hasOgCard, _ogCardStyle } from './assets.js';
 
 export function renderBuffer() {
   const display = document.getElementById("buffer-display");
@@ -307,7 +300,7 @@ export function renderBuffer() {
                  data-id="${p.id}">
               ${inner}
               ${burstBadge}
-              ${OG_CARD_SET.has((p.filename || '').replace(/\.[^.]+$/, '')) ? '<div class="ogc-badge" title="Live OG card on R2">▣</div>' : ''}
+              ${_hasOgCard((p.filename || '').replace(/\.[^.]+$/, '')) ? '<div class="ogc-badge" title="Live share image on R2">▣</div>' : ''}
               ${p.featured ? '<div class="raw-badge" title="Featured as a RAW card on the homepage">★</div>' : ''}
               <div class="frame-actions">
                 ${p._importing || p._uploading ? '' : `<button class="frame-action${p.featured ? ' featured' : ''}" title="${p.featured ? 'Featured on homepage — click to unfeature' : 'Feature as RAW card on the homepage'}"

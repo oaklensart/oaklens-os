@@ -21,6 +21,14 @@ node_modules
 .claude/worktrees/
 .claude/settings.local.json
 
+# npm's own scratch dir. It lands here whenever npm runs with this repo as
+# HOME or as the cwd (an agent worktree does exactly that), and a debug log
+# records the absolute path it ran from — i.e. somebody's home directory, which
+# is why this is not merely untidy. One was committed on 2026-09-11 and, because
+# the assets directory is the repo root, served on the live origin until
+# 2026-09-16. `.assetsignore` carries the belt to this braces.
+.npm/
+
 audit/
 
 # bench -> D1 migration scratch files (never commit / never deploy)

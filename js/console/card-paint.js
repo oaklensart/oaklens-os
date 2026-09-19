@@ -90,6 +90,17 @@ export function shareKey(stem, ratio) {
   return `${stem}-${ratio === 'og' ? 'og' : ratio}.webp`;
 }
 
+// The inverse of the folder shareStem() puts on: a stem is a PATH, and the
+// stamped set (/api/og-cards, read through _hasOgCard) is keyed by the bare
+// stem without it. Lives here beside shareStem because it is the same rule read
+// backwards, and because BOTH layers above need it — `share` had the only copy
+// and `share` sits above `focal`, so the focal modal could not reach it and was
+// about to grow a second one. Two more copies of this one-liner were already in
+// the tree (2026-09-18); this is now the only one.
+export function shareMarker(stem) {
+  return String(stem || '').replace(/^meta\//, '');
+}
+
 // ============== GEOMETRY (pure) ==============
 //
 // Where the card sits on each ground, and what else the ground carries. Pure
@@ -1273,6 +1284,79 @@ export async function paintCard(item, ratio, opts = {}) {
   if (geo.text) drawOgAside(ctx, geo.text, comp, tokens, geo.W);
   if (geo.wordmark) drawWordmark(ctx, geo.wordmark, tokens, geo.W);
   return cv;
+}
+
+/**
+ * PAINT THE PICTURE, AND NOTHING ELSE.
+ *
+ * The second share style: the photograph alone, cover-cropped to the ratio at
+ * the frame's focal point. No card, no type, no wordmark, no palette — so it is
+ * a fraction of paintCard and shares its whole input contract, which lets the
+ * modal swap painters without branching on anything but which function to call.
+ *
+ * WHY IT EXISTS. The card stamp gives roughly half of a 1200×630 to the
+ * photograph and the rest to type. On a frame — as opposed to a note or a track
+ * — that is a real decision about what a link preview is FOR, and the owner
+ * wanted the other answer available (docs/ideas/og-share-image-styles.md).
+ *
+ * WHY IT IS NOT THE OLD RAIL. The rail was removed for three reasons; this
+ * dodges two outright. It carries no colour of its own, so there is no brand red
+ * to leak into a fork's previews — the one token it reads is `ground`, and only
+ * for the case where the picture will not load. And it composes nothing, so
+ * there is no second design to keep honest against the site. What remains true
+ * of the rail is true here: it needs a photograph, so it is offered only where
+ * there is one.
+ *
+ * ⚠️ IT CROPS DIFFERENTLY FROM THE CARD, and that is the whole point of having
+ * it. The card's well is 4:5; this fills 1200×630, which is 1.905:1. The SAME
+ * focal point therefore keeps different parts of the photograph in each style,
+ * so a caller showing a crop guide must follow the selected style rather than
+ * assume the card's — see FocalModal.ogAspect().
+ *
+ * No font wait: nothing here draws text, so the caller is not made to pay for
+ * decoding faces it will not use.
+ */
+export async function paintPlain(item, ratio, opts = {}) {
+  const RI = (typeof window !== 'undefined' && window.RecentIndex) || null;
+  if (!RI || typeof RI.cardComposition !== 'function') throw new Error('card engine not loaded');
+  if (!SHARE_RATIOS[ratio]) throw new Error(`unknown share ratio: ${ratio}`);
+  const comp = RI.cardComposition(item);
+  // Same override contract as paintCard: the framing modal is SETTING a point
+  // that is not on the record yet, so its preview has to crop to that.
+  if (opts.focus && comp.media) comp.media = { ...comp.media, focus: opts.focus };
+  const { w: W, h: H } = SHARE_RATIOS[ratio];
+  const tokens = opts.tokens || probeCardTokens(item, opts.tokenNode);
+  const img = opts.image !== undefined ? opts.image : await loadCardImage(comp);
+
+  const cv = opts.canvas || document.createElement('canvas');
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext('2d');
+  // Ground first, so a picture that will not load leaves the site's own surface
+  // rather than a transparent canvas that exports as black regardless of theme.
+  ctx.fillStyle = tokens.ground;
+  ctx.fillRect(0, 0, W, H);
+  if (img && img.naturalWidth) {
+    const f = focusPct((comp.media && comp.media.focus) || '50% 50%');
+    const r = coverRect(img.naturalWidth, img.naturalHeight, W / H, f.x, f.y);
+    ctx.drawImage(img, r.sx, r.sy, r.cw, r.ch, 0, 0, W, H);
+  }
+  return cv;
+}
+
+/** Whether a card has a photograph to paint plainly. A track, a saved set and a
+ *  note that leads with words do not, so the plain style is not offered there —
+ *  it would be a rectangle of ground with nothing on it.
+ *
+ *  Gated on `filename`, the same field loadCardImage() requires, and not on
+ *  `media.src`: they are not the same answer. `src` is the preview URL a card
+ *  renders with and can be a local blob on a not-yet-uploaded entry, while the
+ *  painter always builds its own CDN url from filename + folder. Asking a
+ *  different question than the loader answers is how an option gets offered for
+ *  a picture that cannot be fetched. */
+export function hasPicture(item) {
+  const comp = compositionOf(item);
+  return !!(comp && comp.media && comp.media.filename);
 }
 
 /**

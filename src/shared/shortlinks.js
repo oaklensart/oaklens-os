@@ -67,11 +67,6 @@ const TABLE = new Map(
 // `localhost` — check them against the real host, or with `curl -H Host:`.
 const HOST_SCOPE = String(siteConfig.shortLinkHost || '');
 
-/** The configured codes, for tests and docs. Never used to route. */
-export function shortLinkCodes() {
-  return [...TABLE.keys()];
-}
-
 /**
  * The absolute URL a request path should redirect to, or null for "not a short
  * link" — which is every path on a site that configures none.

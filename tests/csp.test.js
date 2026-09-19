@@ -49,6 +49,8 @@ function prepaintHash(html) {
 // CSP lives in src/shared/csp.js (extracted from worker.js — decomposition,
 // manual §6.7). The Worker imports buildCsp/withCsp/PREPAINT_CSP_HASH from it.
 const worker = read('src/shared/csp.js');
+// Behavioural assertions below call the real thing rather than reading it.
+const { withCsp } = await import('../src/shared/csp.js');
 const hashDecl = worker.match(/PREPAINT_CSP_HASH\s*=\s*"([^"]+)"/);
 
 describe('pre-paint hash stays in sync with the block', () => {
@@ -142,20 +144,63 @@ describe('CSP is worker-owned and strict for the public site', () => {
     }
   });
 
-  it('withCsp relaxes the console, and nothing that is not an admin surface', () => {
-    // Derived, not hardcoded: the extracted engine tree drops the frozen
-    // portal, so a literal '/c/' assertion would fail there for a reason that
-    // is not a defect. What must hold everywhere is that /dev is relaxed and
-    // no *public* surface ever is.
-    const fn = worker.slice(worker.indexOf('function withCsp'), worker.indexOf('function withCsp') + 400);
-    const relaxed = [...fn.matchAll(/startsWith\('([^']+)'\)/g)].map((m) => m[1]);
-    expect(relaxed, 'no relaxed surfaces found — did withCsp change shape?').toContain('/dev');
-    // Every relaxed prefix must be an admin surface. A public page picking up
-    // 'unsafe-inline' is the regression this guards.
-    const ADMIN_PREFIXES = ['/dev', '/c/'];
-    for (const prefix of relaxed) {
-      expect(ADMIN_PREFIXES, `'${prefix}' is relaxed but is not an admin surface`).toContain(prefix);
-    }
+  // Behavioural, not source-scraping. The previous version of this test read
+  // the `startsWith('…')` literals back out of csp.js and checked them against
+  // a list — which meant it agreed, correctly, that `startsWith('/dev')` was
+  // fine, because '/dev' IS an admin surface. What it could not see is that the
+  // same literal also matches `/devlog`. A test that asks the function what it
+  // does answers that question; a test that reads the source cannot.
+  describe('withCsp — which surfaces get the relaxed admin policy', () => {
+    const policyFor = (pathname) => withCsp(
+      new Response('x'), 'https://example.com', pathname,
+    ).headers.get('Content-Security-Policy');
+
+    // SCRIPT-SRC specifically, not the policy as a whole: style-src carries
+    // 'unsafe-inline' on both surfaces by design, so a whole-string search
+    // reports every page as relaxed and the test can never fail. (It did, on
+    // the first run of this rewrite — which is the same mistake the helper
+    // above this describe() block was written to stop.)
+    const isRelaxed = (pathname) => {
+      const policy = policyFor(pathname);
+      const scriptSrc = policy.split('; ').find((d) => d.startsWith('script-src ')) || '';
+      return scriptSrc.includes("'unsafe-inline'");
+    };
+
+    it('relaxes the console surfaces', () => {
+      expect(isRelaxed('/dev'), '/dev').toBe(true);
+      expect(isRelaxed('/dev/field-console'), '/dev/field-console').toBe(true);
+      expect(isRelaxed('/dev/sw.js'), '/dev/sw.js').toBe(true);
+    });
+
+    it('does NOT relax a public path that merely starts with the letters "dev"', () => {
+      // The 2026-09-16 fix. Each of these would have been served the admin CSP
+      // — 'unsafe-inline' on a public page — under the old prefix match.
+      for (const p of ['/devlog', '/developer', '/devotional', '/dev-notes']) {
+        expect(isRelaxed(p), `${p} must stay strict`).toBe(false);
+      }
+    });
+
+    it('keeps every ordinary public page strict', () => {
+      for (const p of ['/', '/archive', '/field-notes', '/about', '/listen', '/wall']) {
+        expect(isRelaxed(p), `${p} must stay strict`).toBe(false);
+      }
+    });
+
+    it('relaxes the portal where there is one, and not where there is not', () => {
+      // ⚠️ DERIVED, and it has to be. scripts/os-extract.mjs rewrites
+      // isAdminSurface for the fork and drops the `/c/` arm with the frozen
+      // portal — so a flat `expect(isRelaxed('/c/…')).toBe(true)` passes here
+      // and fails in every extracted tree, for a reason that is not a defect.
+      //
+      // That is not hypothetical. The source-scraping test this block replaced
+      // carried a comment saying exactly this; the first behavioural draft
+      // copied the comment and hardcoded the assertion anyway, and it was
+      // caught by `node scripts/os-extract.mjs <dir> --verify` — which runs the
+      // extracted suite — and by nothing else. Run that before changing a test
+      // that names a frozen or instance-only surface.
+      const portalIsRouted = worker.includes("'/c/'");
+      expect(isRelaxed('/c/a-project')).toBe(portalIsRouted);
+    });
   });
 });
 

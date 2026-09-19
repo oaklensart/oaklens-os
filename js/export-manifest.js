@@ -93,6 +93,9 @@ export const EXPORT_MANIFEST = {
     // Per-page render scripts — externalized from inline <script> blocks for a
     // strict script-src (no 'unsafe-inline'). Copied verbatim.
     'js/page-index.js',
+    // The chrome those three share (theme lamp + links-out) — without it a
+    // saved copy of the guide has a dead lamp. Stripped for forks alongside
+    // them, by the transform in scripts/os-extract.mjs.
     'js/page-about.js',
     'js/page-archive.js',
     'js/page-buffer.js',
@@ -158,7 +161,7 @@ export const EXPORT_MANIFEST = {
   // (export keywords stripped → globals) loaded before the page scripts;
   // the page falls back to the global when the import fails offline.
   offlineModules: [
-    { src: '/js/markdown-engine.js?v=4', file: 'offline/markdown-engine.js' },
+    { src: '/js/markdown-engine.js?v=5', file: 'offline/markdown-engine.js' },
   ],
 
   // Worker-rendered documents worth carrying for completeness even though

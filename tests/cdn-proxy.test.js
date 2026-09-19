@@ -8,9 +8,10 @@
 // mismatch. Found by a real site export: 'archive/OAKLENS_SF-two
 // cyclist-blur-1024w.webp' 400'd through the proxy while serving fine from
 // cdn.example.com.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import worker from '../worker.js';
 import { createToken } from '../src/shared/auth.js';
+import { _proxyCacheUrl, _wholeAs206 } from '../src/api/assets.js';
 
 const SESSION_SECRET = 'test-secret-please-ignore';
 
@@ -179,5 +180,131 @@ describe('/api/upload key sanitization', () => {
       expect(res.status, name).toBe(500); // per-file error path: nothing stored
       expect(cdn.stored).toEqual([]);
     }
+  });
+});
+
+
+// ---- The `bytes=0-` -> 206 cache-correctness fix (v1 review E3) ----
+//
+// These two helpers were exported for tests that were never written (logged
+// 2026-08-24 as E3, "better than un-exporting: add the missing direct test").
+// The behaviour they carry is not obvious and is expensive to get wrong:
+//
+//   `Range: bytes=0-` means "send the whole thing, streamed" — it is what a
+//   browser sends to START playing media, not a seek. Until 2026-08-14 the
+//   proxy treated it as a partial, so every play on every visit skipped the
+//   colo cache and went to R2: audio was the one path that never benefited
+//   from the cache added for images. It now reads and writes the cache like
+//   the full GET it is, while still ANSWERING 206 because Safari needs that
+//   to believe seeking works.
+//
+// The trap that follows is the one worth a test: what gets STORED must be the
+// 200, because a 206 is not a storable response. Store the 206 and every later
+// visitor gets a partial served as if it were the whole object.
+describe('_wholeAs206 — a whole 200 answered as the 206 media asks for', () => {
+  it('sets a Content-Range covering the entire object', () => {
+    const res = _wholeAs206(new Response('12345', { headers: { 'Content-Length': '5' } }));
+    expect(res.status).toBe(206);
+    expect(res.headers.get('Content-Range')).toBe('bytes 0-4/5');
+  });
+
+  it('passes the body through untouched — nothing is buffered to do this', async () => {
+    const res = _wholeAs206(new Response('12345', { headers: { 'Content-Length': '5' } }));
+    expect(await res.text()).toBe('12345');
+  });
+
+  it('keeps the other headers', () => {
+    const res = _wholeAs206(new Response('12345', {
+      headers: { 'Content-Length': '5', 'Content-Type': 'audio/mpeg' },
+    }));
+    expect(res.headers.get('Content-Type')).toBe('audio/mpeg');
+  });
+
+  it('refuses to invent a range it cannot honestly write', () => {
+    // No Content-Length, or an empty object: a 206 would need a Content-Range
+    // we cannot state. A server may ignore Range and answer 200, so it does
+    // that rather than lie.
+    for (const headers of [{}, { 'Content-Length': '0' }, { 'Content-Length': 'banana' }]) {
+      expect(_wholeAs206(new Response('x', { headers })).status, JSON.stringify(headers)).toBe(200);
+    }
+  });
+});
+
+describe('_proxyCacheUrl — one key builder, or the purge deletes nothing', () => {
+  // A proxy that populates one URL and a purge that deletes another is the
+  // same bug as having no purge: it surfaces an hour later as "the overwrite
+  // didn't take".
+  it('encodes per segment, so a key the pages request matches what is stored', () => {
+    // `shot+one-480w.webp` is requested as `shot%2Bone-480w.webp` (the pages
+    // build src with encodeURIComponent), so a key built on the RAW name would
+    // purge an entry nothing ever wrote.
+    expect(_proxyCacheUrl('https://example.com', 'archive/shot+one-480w.webp'))
+      .toBe('https://example.com/api/cdn/archive/shot%2Bone-480w.webp');
+  });
+
+  it('keeps slashes as separators rather than encoding them away', () => {
+    expect(_proxyCacheUrl('https://example.com', 'audio/sets/a.mp3'))
+      .toBe('https://example.com/api/cdn/audio/sets/a.mp3');
+  });
+
+  it('encodes a space the same way an <img src> does', () => {
+    expect(_proxyCacheUrl('https://example.com', 'archive/two cyclist-blur.webp'))
+      .toBe('https://example.com/api/cdn/archive/two%20cyclist-blur.webp');
+  });
+});
+
+describe('what the edge cache STORES for a bytes=0- request', () => {
+  // The invariant the two helpers exist to protect, exercised through the real
+  // route rather than asserted about it.
+  const withCache = () => {
+    const store = new Map();
+    const puts = [];
+    globalThis.caches = {
+      default: {
+        async match(req) { return store.get(req.url) || undefined; },
+        async put(req, res) { puts.push({ url: req.url, status: res.status }); store.set(req.url, res); },
+      },
+    };
+    return { store, puts };
+  };
+
+  let saved;
+  beforeEach(() => { saved = globalThis.caches; });
+  afterEach(() => { globalThis.caches = saved; });
+
+  const rangeGet = (key, cdn, range) => worker.fetch(
+    new Request(`https://example.com/api/cdn/${key}`, { headers: range ? { Range: range } : {} }),
+    env(cdn),
+    { waitUntil: (p) => p },
+  );
+
+  it('answers 206 to the caller but stores a 200', async () => {
+    const { puts } = withCache();
+    const res = await rangeGet('audio/track.mp3', makeCdn(['audio/track.mp3']), 'bytes=0-');
+    expect(res.status, 'Safari needs the 206 to believe seeking works').toBe(206);
+    expect(puts.length, 'a bytes=0- request must still populate the cache').toBe(1);
+    expect(puts[0].status, 'a 206 is not a storable response').toBe(200);
+  });
+
+  it('files it under the shared key builder, so the purge can find it', async () => {
+    const { puts } = withCache();
+    await rangeGet('audio/track.mp3', makeCdn(['audio/track.mp3']), 'bytes=0-');
+    expect(puts[0].url).toBe(_proxyCacheUrl('https://example.com', 'audio/track.mp3'));
+  });
+
+  it('a genuine seek neither reads nor writes the cache', async () => {
+    // A slice filed under the whole object's key is a corrupt hit for everyone
+    // who comes after.
+    const { puts } = withCache();
+    await rangeGet('audio/track.mp3', makeCdn(['audio/track.mp3']), 'bytes=100-200');
+    expect(puts.length).toBe(0);
+  });
+
+  it('a cache HIT for a bytes=0- request is still answered 206', async () => {
+    const { puts } = withCache();
+    await rangeGet('audio/track.mp3', makeCdn(['audio/track.mp3']), 'bytes=0-');
+    const second = await rangeGet('audio/track.mp3', makeCdn(['audio/track.mp3']), 'bytes=0-');
+    expect(second.status).toBe(206);
+    expect(puts.length, 'the second request was served from cache').toBe(1);
   });
 });

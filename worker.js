@@ -2,7 +2,7 @@ import {
   createRawToken, sha256Hex, verifyShellRequest,
 } from './src/shared/auth.js';
 import siteConfig from './src/shared/config.js';
-import { withCors, handleCORS, demoModeRes } from './src/shared/http.js';
+import { withCors, handleCORS, demoModeRes, jsonRes } from './src/shared/http.js';
 import { securityHeaders, withCsp } from './src/shared/csp.js';
 import { readCachedTemp, refreshLocalTemp } from './src/edge/weather.js';
 import { pageDisabled, publicPages } from './src/shared/pages.js';
@@ -133,6 +133,19 @@ const EXACT_ROUTES = new Map([
   ['GET /api/pulse/log', (request, env) => handlePulseLog(request, env)],
 ]);
 
+// Allowed methods per exact pathname, DERIVED from the table above rather than
+// hand-kept — a second list would be one more thing to forget when a route is
+// added. Used only to answer 405 (see the dispatcher); it can never add a route.
+const EXACT_METHODS = (() => {
+  const byPath = new Map();
+  for (const key of EXACT_ROUTES.keys()) {
+    const [method, pathname] = key.split(' ');
+    if (!byPath.has(pathname)) byPath.set(pathname, new Set());
+    byPath.get(pathname).add(method);
+  }
+  return byPath;
+})();
+
 // Demo mode (site.config.js → demoMode: true): every route that writes —
 // or reads subscriber PII — answers a deliberate 403 { demoMode: true }
 // (see demoModeRes). Keyed exactly like EXACT_ROUTES so the gate cannot
@@ -205,6 +218,32 @@ export default {
     if (exactRoute) {
       const res = await exactRoute(request, env, url);
       return url.pathname.startsWith('/api/') ? withCors(res, url.origin) : res;
+    }
+
+    // A KNOWN path with the WRONG method: answer 405 here rather than letting it
+    // fall through. Two reasons, and the second is the expensive one:
+    //   - `DELETE /api/pulse` answering with the site's HTML 404 page is a lie a
+    //     client cannot act on; 405 + Allow is the honest answer and tells the
+    //     caller what the path does support.
+    //   - everything below this point is the PAGE path — the weather read, the
+    //     OG lookups, the HTMLRewriter — and a malformed API call was paying for
+    //     all of it to render a 404 nobody reads.
+    // Exact pathnames only, so the prefix routes below (bench/raw, cdn, /p/,
+    // short links) are untouched: their pathnames are never in this map.
+    const allowed = EXACT_METHODS.get(url.pathname);
+    if (allowed && !allowed.has(request.method)) {
+      // HEAD is GET without a body and the runtime strips the body itself, so a
+      // path that answers GET must not 405 a HEAD probe (uptime monitors send
+      // them, and the /api/cdn proxy already learned this the hard way).
+      if (!(request.method === 'HEAD' && allowed.has('GET'))) {
+        // HEAD is supported wherever GET is (the branch above lets it through),
+        // so Allow says so — it is meant to list what the resource answers.
+        const allow = [...new Set([...allowed, ...(allowed.has('GET') ? ['HEAD'] : [])])]
+          .sort().join(', ');
+        const res = jsonRes({ ok: false, error: `${request.method} not allowed on ${url.pathname}` }, 405);
+        res.headers.set('Allow', allow);
+        return url.pathname.startsWith('/api/') ? withCors(res, url.origin) : res;
+      }
     }
 
     // BENCH RAW download (prefix — filename varies)

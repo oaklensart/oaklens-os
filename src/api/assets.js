@@ -10,6 +10,7 @@
 import { verifyToken } from '../shared/auth.js';
 import { jsonRes } from '../shared/http.js';
 import { cdnBase } from '../shared/site.js';
+import { _cardProbeCacheUrl } from '../edge/chrome.js';
 
 // R2 key prefixes the Field Console / bench-upload.sh are allowed to write to.
 // Anything outside this set (notably data/ and the bucket root, where app state
@@ -23,6 +24,15 @@ import { cdnBase } from '../shared/site.js';
 //              waveform is pre-measured into data/audio.json, so unlike images
 //              there are no derived variants to store)
 const UPLOAD_KEY_PREFIXES = ['archive/', 'videos/', 'meta/', 'wallpaper/', 'bench/', 'audio/'];
+
+// The styles a share stamp may be painted in. A CLOSED SET, because the value
+// is author-supplied, is written to R2 object metadata and is read back into
+// the console — free text there would be an unbounded string round-tripping
+// through storage. '' (absent) means a stamp made before styles existed, which
+// the console reads as 'card'.
+//   card   the composed card — the picture in its 4:5 well, with its type
+//   plain  the photograph alone, cover-cropped to the ratio at the focal point
+export const SHARE_STYLES = ['card', 'plain'];
 
 // Charset an R2 object key may use, shared by the upload sanitizer and the
 // /api/cdn proxy so anything the upload path can store, the proxy can serve.
@@ -117,6 +127,14 @@ async function purgeCdnCache(origin, key) {
   if (!cache) return;
   const encoded = key.split('/').map(encodeURIComponent).join('/');
   const urls = new Set([`${origin}/api/cdn/${encoded}`, `${cdnBase(origin)}/${encoded}`]);
+  // A `meta/` key also has a BOOLEAN cached against it — the edge's "does a
+  // stamp exist here" probe (_cardExists). Dropping the bytes without dropping
+  // that answer leaves og:image pointing at a key that is gone, which unfurls as
+  // a broken image rather than as the fallback. Same best-effort caveat as
+  // everything else here: it clears the author's own colo, which is the one they
+  // are about to re-test the link from. The durable bound is the probe's own
+  // short TTL, not this.
+  if (key.startsWith('meta/')) urls.add(_cardProbeCacheUrl(origin, key));
   for (const u of urls) {
     try { await cache.delete(new Request(u)); } catch { /* best-effort purge */ }
   }
@@ -138,6 +156,25 @@ export async function handleUpload(request, env) {
 
   const uploaded = [];
   const errors = [];
+
+  // Optional sidecar field: { "<r2 key>": "<style>" }. Only share stamps use it
+  // (see the put below). Malformed JSON is ignored rather than fatal — a style
+  // label is a nicety, and failing an upload over one would trade a real
+  // artefact for a cosmetic detail.
+  const stylesByPath = (() => {
+    try {
+      const raw = formData.get('meta');
+      const parsed = raw ? JSON.parse(String(raw)) : null;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const out = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        // Bounded and closed-set: this string is written to object metadata and
+        // read back into the console, so it may not be free text.
+        if (typeof v === 'string' && SHARE_STYLES.includes(v)) out[k] = v;
+      }
+      return out;
+    } catch { return {}; }
+  })();
 
   const MAX_IMAGE_SIZE = 25 * 1024 * 1024; // 25MB
   const MAX_VIDEO_SIZE = 64 * 1024 * 1024; // 64MB — short looping field-note clips
@@ -185,7 +222,7 @@ export async function handleUpload(request, env) {
       continue;
     }
     // R2 is a flat keyspace, but the worker writes app state there too
-    // (data/bench.json, meta/*-og.webp). Restrict uploads to the prefixes the
+    // (meta/*-og.webp). Restrict uploads to the prefixes the
     // console legitimately writes and reject any residual "../" so an authed
     // session can't clobber arbitrary keys. Defense in depth behind verifyToken.
     if (path.includes('..') || !UPLOAD_KEY_PREFIXES.some(pre => path.startsWith(pre))) {
@@ -194,12 +231,28 @@ export async function handleUpload(request, env) {
     }
     try {
       const buf = await file.arrayBuffer();
+      // A share stamp carries WHICH STYLE it was painted in, as R2 object
+      // metadata. It has to live somewhere, or the console cannot reopen a
+      // stamped frame and show the style that is actually live — which is the
+      // exact lie (a confident preview of something that is not what the link
+      // shows) that this whole area was fixed for on 2026-09-18.
+      //
+      // On the object rather than in a data/*.json on purpose: a stamp has NO
+      // publish horizon. It is live the moment it lands here and gone the moment
+      // it is deleted, so a flag that waited for a publish could disagree with
+      // R2 for as long as the author took to press publish. The truth about R2
+      // belongs on R2. It also costs no schema, travels between devices for
+      // free, and an older stamp with no metadata simply reads as '' — which the
+      // console treats as the card style, because that is what every stamp made
+      // before this was.
+      const style = stylesByPath[path];
       await env.CDN.put(path, buf, {
         httpMetadata: {
           contentType: file.type
             || (isAudio ? 'audio/mpeg' : isVideo ? 'video/mp4' : 'image/webp'),
           cacheControl: 'public, max-age=31536000, immutable',
         },
+        ...(style ? { customMetadata: { style } } : {}),
       });
       uploaded.push(path);
       // Purge the edge cache for this key so an overwrite is reflected here
@@ -277,16 +330,30 @@ export async function handleOgCards(request, env) {
   }
   try {
     const cards = [];
+    const styles = {};
     let cursor;
     do {
-      const listed = await env.CDN.list({ prefix: 'meta/', cursor, limit: 1000 });
+      // `include` is what makes customMetadata come back on a LIST — without it
+      // R2 returns the keys and sizes only, and every stamp would read as
+      // style-less. The console would then show the card style over a plain
+      // stamp, which is the preview-that-is-not-the-unfurl problem again.
+      const listed = await env.CDN.list({
+        prefix: 'meta/', cursor, limit: 1000, include: ['customMetadata'],
+      });
       for (const o of listed.objects) {
         const m = /^meta\/(.+)-og\.webp$/.exec(o.key);
-        if (m) cards.push(m[1]);
+        if (!m) continue;
+        cards.push(m[1]);
+        const st = o.customMetadata && o.customMetadata.style;
+        // Absent is normal (every stamp made before styles existed) and means
+        // 'card'; the console owns that default, not this endpoint.
+        if (SHARE_STYLES.includes(st)) styles[m[1]] = st;
       }
       cursor = listed.truncated ? listed.cursor : null;
     } while (cursor);
-    return jsonRes({ ok: true, cards }, 200);
+    // `cards` keeps its exact shape — a flat array of stems — so nothing that
+    // already reads this endpoint has to change. `styles` is additive.
+    return jsonRes({ ok: true, cards, styles }, 200);
   } catch (err) {
     return jsonRes({ ok: false, error: err.message }, 500);
   }

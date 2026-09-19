@@ -128,7 +128,7 @@ export async function handleExport(request, url, env) {
         // bare token, and EMAIL_RE guarantees a subscriber key contains one,
         // so this still reads no internal key while no longer silently
         // dropping a real subscriber whose address starts with `__`. That
-        // invariant is enforced, not assumed — see tests/subscribers.test.js.
+        // invariant is enforced, not assumed — see tests/subscriber-export.test.js.
         .filter((name) => !name.startsWith('ratelimit:')
           && !name.startsWith('authfail:')
           && !(name.startsWith('__') && !name.includes('@')));

@@ -7,7 +7,7 @@
 //
 // The allowed origin is the request's own origin (all consumers — site pages,
 // field console — are same-origin), set per-response by withCors() in the
-// route ladder so no domain is hardcoded and a fork works on *.workers.dev.
+// router so no domain is hardcoded and a fork works on *.workers.dev.
 
 export const CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
@@ -79,6 +79,25 @@ export function demoModeRes(action) {
 // created yet", and the fix is a command, not a secret.
 export function isMissingTableError(err) {
   return /no such table/i.test(String((err && err.message) || err || ''));
+}
+
+// The same deliberate 501 one step earlier: D1 is not BOUND at all.
+//
+// This answered 500 until 2026-09-16, which read as a fault and red-latched the
+// console over what is plainly a config gap — and an even clearer one than the
+// unmigrated case below, which already answered 501. A fork that has not made a
+// database yet has not broken anything; it has not switched the feature on.
+//
+// Two different sentences on purpose. "Bind a database" and "run the
+// migrations" are different actions, and a message that covers both covers
+// neither — this is the error a fork owner reads while following setup.md.
+export function d1MissingRes(feature) {
+  return jsonRes({
+    ok: false,
+    notConfigured: true,
+    error: `${feature} not configured — no D1 database is bound to this Worker; `
+      + `create one and add a d1_databases binding named DB (see setup.md)`,
+  }, 501);
 }
 
 export function d1TablesMissingRes(feature) {

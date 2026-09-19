@@ -58,7 +58,7 @@ function cdnSrcset(filename) {
 // (dynamic import of a local module is CORS-blocked on file://).
 async function loadMarkdownEngine() {
   if (window.renderMarkdown) return window;
-  return import('/js/markdown-engine.js?v=4');
+  return import('/js/markdown-engine.js?v=5');
 }
 
 function formatDate(dateStr) {

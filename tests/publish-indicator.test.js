@@ -32,7 +32,7 @@ function seedDom() {
     <button class="publish-btn empty" id="publish-btn" data-pending="0"><span class="pip" id="publish-pip"></span> Publish</button>
     <div id="topbar-stage-stat"></div>
     <div id="nav-stage-pip"></div>
-    <span class="tab-badge zero" id="tab-publish-badge">0</span>
+    <button class="tab-btn" data-view="publish"><span class="tab-badge zero" id="tab-publish-badge">0</span></button>
     ${navCounts}
     <span id="tab-count-buffer"></span><span id="tab-count-fn"></span><span id="tab-count-archive"></span>
     <span id="sheet-count-wall"></span><span id="sheet-count-barrel"></span>
@@ -96,6 +96,52 @@ describe('the topbar control is a light, not a counter', () => {
     STATE.staged.library = 6;
     refreshStageIndicators();
     expect(btn().dataset.pending).toBe('0');
+  });
+});
+
+describe('the publish control carries light while work is waiting', () => {
+  // Owner's call, 2026-09-14 (phase 2 of the lighting pass): "when you have
+  // unpublished work sitting there, the PUBLISH button should glow." It was
+  // already one of the four states design-spec.md §6.5 licenses to carry light,
+  // and the only one of the four with no way to express it — its own indicator
+  // is the flat square pip, fenced against glowing since 2026-08-23. data-lit
+  // lights the button; the pip stays flat; js/console/lighting.js pools the
+  // wide half onto the chassis around it.
+  const tab = () => document.querySelector('.tab-btn[data-view="publish"]');
+
+  it('is unlit with nothing staged', () => {
+    refreshStageIndicators();
+    expect(btn().hasAttribute('data-lit')).toBe(false);
+    expect(tab().hasAttribute('data-lit')).toBe(false);
+  });
+
+  it('lights BOTH publish controls, because they are one control at two widths', () => {
+    // ⚠️ The topbar button is display:none under 1181px AND on any coarse
+    // pointer, where the tab bar owns publish instead. Lighting only the topbar
+    // ships a feature that does nothing on an iPad. The hidden one measures 0×0
+    // and the bloom skips it, so the pair costs nothing at either width.
+    STATE.staged.buffer = 2;
+    refreshStageIndicators();
+    expect(btn().getAttribute('data-lit')).toBe('accent');
+    expect(tab().getAttribute('data-lit')).toBe('accent');
+  });
+
+  it('puts the light out again when the work is published', () => {
+    STATE.staged.buffer = 2;
+    refreshStageIndicators();
+    STATE.staged.buffer = 0;
+    refreshStageIndicators();
+    expect(btn().hasAttribute('data-lit')).toBe(false);
+    expect(tab().hasAttribute('data-lit')).toBe(false);
+  });
+
+  it('survives markup that trails the module', () => {
+    // A fork mid-merge can have the module without the tab bar. An unguarded
+    // write here throws on boot — the same guard the nav counts already carry.
+    tab().remove();
+    STATE.staged.posts = 1;
+    expect(() => refreshStageIndicators()).not.toThrow();
+    expect(btn().getAttribute('data-lit')).toBe('accent');
   });
 });
 

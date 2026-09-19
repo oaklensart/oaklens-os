@@ -62,7 +62,7 @@ export function slugify(s) {
 // so any character the server strips on upload and the console keeps is a file
 // stored under one name and requested under another — a 400 the visitor sees
 // as a dead image or a player that will not start. Keep this in lockstep with
-// the server list; tests/console-utils.test.js pins that they match.
+// the server list; tests/audio-key-contract.test.js pins that they match.
 const R2_SAFE_CHARS = /[^\p{L}\p{M}\p{N}_ .+=()/-]/gu;
 
 // Strip oakpush size suffixes from dropped filenames, drop anything an R2 key

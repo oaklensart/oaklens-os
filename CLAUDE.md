@@ -131,7 +131,7 @@ Keep commits focused on one change; write a message that explains *why*, not jus
 
 ## How it's built (orient fast)
 
-- **One Worker, thin router.** `worker.js` (~360 lines) is just the entry: host +
+- **One Worker, thin router.** `worker.js` is just the entry: host +
   legacy redirects, a declarative **`EXACT_ROUTES`** map keyed by
   `"METHOD pathname"`, the prefix routes (`/api/bench/raw`, `/api/cdn`, `/p/`),
   the console-shell gate, and the HTMLRewriter asset path. **Order is behavior** —
@@ -146,15 +146,16 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   (D1), `CDN` (R2) — the resource *names* behind them are instance config and
   live in `wrangler.jsonc`, never here. Daily cron `0 11 * * *`.
 - **Identity is edge-injected**, never hardcoded (see engine vs. instance).
-- **The console is twenty layered modules.** `js/console-ui.js` is a thin
+- **The console is twenty-one layered modules.** `js/console-ui.js` is a thin
   barrel — `export *` from `js/console/*` in layer order — and holds no logic.
   A module may import only ones *below* it in that order; when lower code needs
   something above, the thing above **registers** with it (six seams, all wired
   in `js/console/init.js`). `tests/console-modules.test.js` enforces the
   layering against the real imports — read it for the layer order.
-- **~2,000 tests** (`vitest`, Node env). CI runs `npm test` + a `wrangler deploy
-  --dry-run` bundle check. (Approximate on purpose — an exact count in a doc is
-  drift waiting to happen; `npm test` prints the real one.) The leak scan is a
+- **The suite is `vitest`, Node env.** CI runs `npm test` + a `wrangler deploy
+  --dry-run` bundle check. (No count here on purpose — a number in a doc is
+  drift waiting to happen, and this one drifted twice: "~850" when it was 1837,
+  then "~2,000" when it was 2660. `npm test` prints the real one.) The leak scan is a
   **manual** gate here and a **CI** gate in the extracted public repo — this
   repo is supposed to carry the identity it hunts for.
 

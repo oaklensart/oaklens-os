@@ -11,11 +11,11 @@
 // Extracted from worker.js (decomposition, manual §6.7).
 
 import { verifyToken } from '../shared/auth.js';
-import { jsonRes, notConfiguredRes, isMissingTableError, d1TablesMissingRes, CORS_HEADERS } from '../shared/http.js';
+import { jsonRes, d1MissingRes, notConfiguredRes, isMissingTableError, d1TablesMissingRes, CORS_HEADERS } from '../shared/http.js';
 
 export async function handleGetBench(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('bench queue');
 
   const url = new URL(request.url);
   const statusFilter = url.searchParams.get('status');
@@ -39,7 +39,7 @@ export async function handleGetBench(request, env) {
 
 export async function handleAddBenchEntries(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('bench queue');
 
   let newEntries;
   try {
@@ -82,7 +82,7 @@ export async function handleAddBenchEntries(request, env) {
 
 export async function handleUpdateBenchEntry(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('bench queue');
 
   let updateReq;
   try {
@@ -131,7 +131,7 @@ export async function handleUpdateBenchEntry(request, env) {
 
 export async function handleDeleteBenchEntry(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('bench queue');
 
   let delReq;
   try {
@@ -166,7 +166,7 @@ export async function handleDeleteBenchEntry(request, env) {
 
 export async function handleClearDoneBenchEntries(request, env) {
   if (!await verifyToken(request, env)) return jsonRes({ ok: false, error: 'unauthorized' }, 401);
-  if (!env.DB) return jsonRes({ ok: false, error: 'D1 not configured' }, 500);
+  if (!env.DB) return d1MissingRes('bench queue');
 
   try {
     // Delete and reclaim the rows atomically; purge their R2 previews after.

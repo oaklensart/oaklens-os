@@ -25,11 +25,25 @@ import { getCardRecord, getCardOgData, _validCardId } from '../src/edge/chrome.j
 // injection (tests/console-features.test.js owns that), so a pass-through
 // stand-in is exactly enough — except for the OG assertion, which drives the
 // recorded handlers itself.
-let _savedCaches, _savedRewriter;
+let _savedCaches, _savedRewriter, _savedFetch;
 let injected = [];
+let networkCalls = [];
 beforeEach(() => {
   _savedCaches = globalThis.caches;
   _savedRewriter = globalThis.HTMLRewriter;
+  // Nothing in these tests may reach the network. RECORDED, not just thrown:
+  // refreshLocalTemp wraps its fetch in its own try/catch and logs the failure,
+  // so a throwing stub is swallowed and every test still passes — which is
+  // exactly what happened to the first version of this guard. The afterEach
+  // assertion below is what actually enforces it.
+  // env.ASSETS.fetch is its own stub and is unaffected; the only caller of
+  // global fetch on this path is refreshLocalTemp.
+  networkCalls = [];
+  _savedFetch = globalThis.fetch;
+  globalThis.fetch = (input) => {
+    networkCalls.push(String(input));
+    throw new Error('network disabled in tests');
+  };
   injected = [];
   globalThis.HTMLRewriter = class {
     on(sel, handler) {
@@ -48,6 +62,21 @@ beforeEach(() => {
     transform(res) { return new Response(res.body, res); }
   };
   const store = new Map();
+  // Seed the weather entry with a FRESH `ts`, or these tests make six real
+  // requests to api.open-meteo.com carrying this instance's real coordinates.
+  //
+  // The `{ waitUntil() {} }` stub below does not prevent that, which is the
+  // non-obvious part: the worker calls `refreshLocalTemp(origin)` and passes
+  // the resulting promise to waitUntil — so the fetch has ALREADY started by
+  // the time the no-op receives it. The stub discards the result, not the call.
+  // A fresh entry means readCachedTemp answers non-stale and the refresh branch
+  // is never taken at all.
+  //
+  // It also silenced three happy-dom `AbortError` stack traces per run: those
+  // were the in-flight fetches being torn down with the test window, and they
+  // were the only alarming-looking output in an otherwise clean suite.
+  store.set('https://example.com/__wx_cache',
+    JSON.stringify({ temp: 60, ts: Date.now() }));
   globalThis.caches = {
     default: {
       async match(req) {
@@ -63,6 +92,12 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.caches = _savedCaches;
   globalThis.HTMLRewriter = _savedRewriter;
+  globalThis.fetch = _savedFetch;
+  // Applies to EVERY test in this file, which is the point: the weather call
+  // was made by the shared route path, not by any one assertion. Before the
+  // 2026-09-16 seed this fired six real requests to api.open-meteo.com per run,
+  // carrying this instance's real coordinates into every CI log.
+  expect(networkCalls, 'these tests must make no network requests').toEqual([]);
 });
 
 const { entryHref, composedPick } = globalThis.RecentIndex;

@@ -218,9 +218,16 @@ export function logoutServer() {
 }
 
 // ============== R2 UPLOAD / DELETE ==============
-export function uploadFiles(files, { signal, tel } = {}) {
+/**
+ * `meta` is an optional { "<r2 key>": "<style>" } sidecar, ridden by share
+ * stamps so the object remembers which style it was painted in (the server
+ * writes it as R2 customMetadata — src/api/assets.js). Everything else ignores
+ * it, and the server drops anything outside its closed set.
+ */
+export function uploadFiles(files, { meta, signal, tel } = {}) {
   const fd = new FormData();
   files.forEach(f => fd.append('files', f, f.name));
+  if (meta && Object.keys(meta).length) fd.append('meta', JSON.stringify(meta));
   return apiFetch('/api/upload', { method: 'POST', body: fd, signal,
     timeoutMs: API_TIMEOUTS.upload,
     tel: { channel: 'r2', label: 'R2 ▲', ...tel } });

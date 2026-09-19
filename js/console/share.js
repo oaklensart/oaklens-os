@@ -36,7 +36,7 @@ import { toast, escapeHTML, escapeAttrJS, openSheet, closeSheet } from './chrome
 import { SITE_FILE_PREFIX } from './assets.js';
 import { _addOgCard, _hasOgCard } from './buffer.js';
 import { fnCurrentId } from './fn-editor.js';
-import { paintCard, shareStem, shareKey, SHARE_RATIOS } from './card-paint.js';
+import { paintCard, shareStem, shareKey, shareMarker, SHARE_RATIOS } from './card-paint.js';
 
 // The three files a stamp writes, in the order they are painted. `og` first on
 // purpose: it is the one an unfurl reads, so if a later ratio fails the most
@@ -53,12 +53,14 @@ const STAMP_RATIOS = ['og', 'native', 'story'];
 //   name   what to call it in a toast, in the owner's own words
 //
 // The MARKER — what /api/og-cards lists — is the stem with its `meta/` prefix
-// off. focal.js passes one explicitly because it predates the other four stems;
-// here it is derived, because `meta/<x>` → `<x>` is the same string either way
-// and a second field is a second thing to get wrong.
-export function shareMarker(stem) {
-  return String(stem || '').replace(/^meta\//, '');
-}
+// off. focal.js still passes one explicitly on a frame because that field
+// predates the other four stems, and falls back to deriving it everywhere else;
+// here it is always derived, because `meta/<x>` → `<x>` is the same string
+// either way and a second field is a second thing to get wrong.
+// Re-exported, not re-implemented: the rule moved down to card-paint.js so the
+// focal modal (which sits BELOW this module and cannot import it) can use the
+// same one. Callers and tests keep reaching for share.shareMarker.
+export { shareMarker };
 
 /** Assemble a target. Returns null when the card has no address to share — a
  *  pulse, an unpublished note, the automatic playlist that is nobody's set. A

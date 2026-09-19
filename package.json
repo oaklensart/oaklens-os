@@ -27,8 +27,8 @@
     "bcryptjs": "^3.0.3"
   },
   "devDependencies": {
-    "happy-dom": "^20.11.1",
+    "happy-dom": "^20.14.5",
     "vitest": "^4.1.9",
-    "wrangler": "^4.103.0"
+    "wrangler": "^4.133.0"
   }
 }

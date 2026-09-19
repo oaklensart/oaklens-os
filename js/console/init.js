@@ -19,7 +19,8 @@
 import { STATE, load, restoreSidebar, restoreFnBar, resetConsole } from '../console-state.js';
 import { isLoggedIn } from '../console-api.js';
 import { registerView, registerLongPress, refreshStageIndicators, themeInit, wireDropzone, _wireSheetDrag, _initKeyboardInsets, _initViewportFrame, _initStickyHeaders, _initLongPress, closeActionSheet, closeMoreSheet } from './chrome.js';
-import { updatePurgeR2Button } from './sync.js';
+import { lightingInit } from './lighting.js';
+import { updatePurgeR2Button, _registerLibraryUploadProbe } from './sync.js';
 import { _libraryUploadsPending } from './upload.js';
 import { renderWall, renderBarrel, renderNetwork, renderLibrary, wallIngest, libraryIngest } from './more-views.js';
 import { renderArchive, archiveIngestPhoto, archiveUpdatePreview, restoreGearMemory, setGearRemember } from './archive.js';
@@ -119,6 +120,7 @@ export function init() {
   restoreSidebar();
   restoreFnBar();
   wireDevelopIn();
+  lightingInit();   // the bloom; finds its own emitters, inert where a 2D context cannot be had
   loadOgCards();   // mark frames that already have a live OG card (persists across reloads)
   refreshStageIndicators();
   _updateSettingsDots();
@@ -213,9 +215,6 @@ export function init() {
   });
   archiveUpdatePreview();
 
-  ["fn-id","fn-title","fn-location","fn-date","fn-body"].forEach(id => {
-    // Handled by fnSetupEnhancements — kept for reference
-  });
   fnSetupEnhancements();
 
   renderBuffer();

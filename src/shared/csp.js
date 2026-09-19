@@ -126,8 +126,18 @@ export function securityHeaders(origin, strict) {
 
 // Copy a response and stamp the surface-appropriate CSP plus the static
 // security headers. /dev + /c/ keep 'unsafe-inline'; everything else is strict.
+//
+// ⚠️ SEGMENT MATCH, NOT PREFIX MATCH. This was `startsWith('/dev')` until
+// 2026-09-16, which is true of `/devlog`, `/developer` and anything else a
+// future page might be called — and each would have been handed the ADMIN
+// CSP, quietly re-allowing 'unsafe-inline' on a public page. Nothing named
+// that exists today; the point is that adding one would have been silent.
+// `/c/` was always written with its slash and was never exposed.
+const isAdminSurface = (pathname) =>
+  pathname === '/dev' || pathname.startsWith('/dev/');
+
 export function withCsp(resp, origin, pathname) {
-  const strict = !pathname.startsWith('/dev');
+  const strict = !isAdminSurface(pathname);
   const r = new Response(resp.body, resp);
   for (const [k, v] of Object.entries(securityHeaders(origin, strict))) r.headers.set(k, v);
   return r;
