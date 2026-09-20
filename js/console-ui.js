@@ -40,6 +40,8 @@
 export * from './console/chrome.js';
 // the canvas bloom: light pooled onto the chassis around whatever is data-lit
 export * from './console/lighting.js';
+// "what does this do?" — the help overlay and every word it says
+export * from './console/help.js';
 // CDN URLs, WebP variant generation, the publish base-revision marker
 export * from './console/assets.js';
 // dates, filenames, content hashing, the id minter

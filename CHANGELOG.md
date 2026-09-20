@@ -25,6 +25,100 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-19 (the footer stays put, and Publish fits on one screen)
+
+**Nothing to do on merge.** Two layout fixes, both visible the moment you load.
+
+- **Your homepage footer now stays at the bottom of the window, like it does on
+  every other page.** It used to scroll away with the rest of the page — which
+  made sense back when the homepage was one screen tall, and stopped making
+  sense when the recent-work grid was added underneath the hero. Your site's
+  one constant strip — your name, your city, the archive manifest — is on
+  screen wherever a visitor has scrolled to.
+
+- **The console's Publish screen fits in one window.** All of it — the counters,
+  Remote Sync, Publish to GitHub, Site-in-a-ZIP, the legacy export and the reset
+  — now sits side by side in two columns instead of one long scroll, on any
+  screen wide enough to hold them. And the row of counters across the top is one
+  line again: it had been laid out for seven of them and there are nine, so Cards
+  and Library were wrapping onto a second row beside a lot of empty space. It is
+  built to stay one line however many surfaces the console grows.
+
+- **The four zones under the counters now look like one thing.** Remote Sync,
+  Publish to GitHub, Site-in-a-ZIP and the reset box share a panel, a heading
+  size and a left edge, instead of two centred boxes, a dashed one and a rule.
+
+- **One button is red now, not three.** Publish to GitHub keeps the full
+  treatment because it is the one you press; Clear Staged and Export Site sit
+  quiet and light up when you point at them (or tab to them). Nothing moved and
+  nothing was removed — they just stopped competing with the main event.
+
+- **"Synced" tells you what came back in a readable shape.** It used to be one
+  long run-on line of `surface:count` pairs that wrapped wherever the panel
+  ended. It is a small aligned table now — name, dotted leader, number — so you
+  can find the one you care about without reading the whole thing.
+
+- **Help's outlines now tuck under the top bar.** With `?` on, an outline around
+  something taller than the screen used to be drawn right over the header —
+  across your site name and the buttons up there. It stops at the bar now and
+  slides under it as you scroll, the way the page itself does. Same for the
+  bottom bar on a tablet, and same for the spotlight when you pick something.
+
+---
+
+## 2026-09-19 (the console can explain itself now)
+
+**Nothing to do on merge.** A new `?` button in the console's top bar.
+
+- **Press `?` and the console tells you what everything does.** Every control on
+  the screen that has an explanation gets a dotted outline. Pick one and the rest
+  of the screen dims, that control stays lit, and a short note says what it does
+  in plain English — usually two sentences, plus a line for the thing that trips
+  people up. Pick another, or press `Esc` to leave.
+
+  It works the same with a finger as with a mouse, which is the point: the
+  console used to explain itself only through tooltips, and a tablet has nowhere
+  to hover. Forty explanations ship with it, covering the top bar and all twelve
+  screens.
+
+  While it's on, tapping a control explains it instead of pressing it — so you
+  can safely ask what **Publish** does without publishing anything, and nothing
+  under the dimmed part of the screen can be set off by a stray click. Help
+  stays open until you close it: press `?` again, press Done, or hit `Esc`.
+  Clicking the background doesn't drop you out of it.
+
+  It works with a keyboard too: Tab moves between the marked controls, Enter
+  opens one, Esc steps back.
+
+  **How it looks.** The rest of the console dims, and every control you can ask
+  about stays at full brightness with a thin frame and corner brackets around
+  it — quiet, so a screen full of them doesn't look like a screen full of
+  errors. The `?` button itself lights up in your site's colour while help is
+  on, the same way the publish button does when you have work waiting, so it's
+  obvious the mode is engaged. The one you pick is the only thing lit, with the
+  light spilling around it onto the dimmed console. In Daylight the light goes
+  and the control simply lifts off the page instead, because a glow on paper
+  looks like a smudge on the screen.
+
+- **The outlines hold still.** Picking something inside a long list used to
+  scroll the page underneath you, so coming back everything had moved. It
+  doesn't any more, and an outline now traces the edges of the control itself
+  rather than drawing a line along the edge of the window when something is too
+  tall to fit. The glow on the `?` is a real falloff now instead of a hard box.
+
+- **Your tracks explain themselves.** The audio shelf now covers what a track
+  carries and what each of the buttons beside it does — including the one people
+  ask about most, the difference between putting a track on your homepage and
+  adding it to the feed people follow. They appear with your first upload.
+
+- **A dead spot under the top bar is gone.** Your Publish button was quietly
+  about twice as tall as it looks, overhanging the bar it sits in — so a click
+  in a narrow strip just below the top-right corner of the page opened the
+  publish screen with nothing there to click. Nothing looked wrong, which is why
+  it lasted. The button is now exactly as big as it appears.
+
+---
+
 ## 2026-09-18 (homepage cards: no more duplicates, and a card you're only trying out stays home)
 
 **Nothing to do on merge.** Two fixes to the homepage card studio.

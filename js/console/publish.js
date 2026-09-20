@@ -779,6 +779,49 @@ export function _syncVerdict(data, files) {
   return { mode: data.headSha ? 'ok' : 'no-head' };
 }
 
+// The sync readout. Same facts, laid out.
+//
+// It used to be one dot-joined sentence assigned straight to textContent:
+// `✓ synced 4:41:31 PM · buffer:716 · archive:93 · posts:12 · …` for twelve
+// surfaces. Nothing in it is wrong — it is simply unreadable at the one moment
+// it is read. It wraps wherever the panel happens to end, so a surface sits
+// under a different `·` on every line and nothing aligns with anything;
+// finding "how many cards" means scanning a paragraph. Owner, 2026-09-19:
+// *"the dots don't line up … easier to consume at a glance if it's uniform."*
+//
+// So: the verdict on its own line, then one cell per surface in a grid — name
+// left, number right and tabular, columns that line up because they are
+// columns. The element is emptied and rebuilt rather than appended to, so a
+// second sync never stacks on the first.
+//
+// textContent still reads as the whole readout (the browser concatenates the
+// descendants), which is what `tests/sync-skip.test.js` asserts against and
+// what a screen reader gets — the shape changed, the sentence did not.
+export function _renderSyncReadout(el, verdict, pairs) {
+  if (!el) return;
+  el.textContent = '';
+  const head = document.createElement('div');
+  head.className = 'sync-readout-head';
+  head.textContent = verdict;
+  el.appendChild(head);
+  if (!pairs || !pairs.length) return;
+  const grid = document.createElement('div');
+  grid.className = 'sync-readout-grid';
+  for (const [name, value] of pairs) {
+    const cell = document.createElement('div');
+    cell.className = 'sync-readout-cell';
+    const k = document.createElement('span');
+    k.className = 'sync-readout-k';
+    k.textContent = name;
+    const v = document.createElement('span');
+    v.className = 'sync-readout-v';
+    v.textContent = value;
+    cell.append(k, v);
+    grid.appendChild(cell);
+  }
+  el.appendChild(grid);
+}
+
 // The two config mistakes behind almost every total GitHub failure, said in
 // terms of the fix. Anything else returns null and the raw error stands.
 export function _githubHint(message) {
@@ -877,7 +920,7 @@ export async function syncFromServer() {
           content.forEach(p => { if (p.hero && !p.hero_filename) p.hero_filename = p.hero; });
         }
         importIntoSurface(surface, content);
-        results.push(`${surface}:${content.length}`);
+        results.push([surface, String(content.length)]);
       }
       // Only a complete snapshot is worth remembering: if any surface didn't
       // import (a per-file failure, or a fresh fork's legitimate 404s), the
@@ -898,7 +941,7 @@ export async function syncFromServer() {
         const tags = [];
         if (changed) tags.push(`+${changed}`);
         if (removed) tags.push(`-${removed}`);
-        results.push(`drafts:${dData.drafts.length}${tags.length ? ` (${tags.join(' ')})` : ''}`);
+        results.push(['drafts', `${dData.drafts.length}${tags.length ? ` (${tags.join(' ')})` : ''}`]);
       }
     } catch (err) { console.warn('[sync] drafts:', err.message); }
 
@@ -925,10 +968,11 @@ export async function syncFromServer() {
       renderWall(); renderBarrel(); renderNetwork(); renderLibrary(); renderAudio(); renderPublish();
       // An up-to-date sync that still lands here only merged drafts (D1) —
       // say that, not "synced from main": no GitHub-backed surface moved.
-      if (statusEl) statusEl.textContent = upToDate
-        ? `✓ up to date (${data.headSha.slice(0, 7)}) · ${results.join(' · ')}`
-        : `✓ synced ${new Date().toLocaleTimeString()} · ${results.join(' · ')}`;
-      logEvent(`✓ sync · ${upToDate ? `up to date (${data.headSha.slice(0, 7)}) · ` : ''}${results.join(' · ')}`, 'info');
+      const flat = results.map(([k, v]) => `${k}:${v}`).join(' · ');
+      _renderSyncReadout(statusEl, upToDate
+        ? `✓ up to date (${data.headSha.slice(0, 7)})`
+        : `✓ synced ${new Date().toLocaleTimeString()}`, results);
+      logEvent(`✓ sync · ${upToDate ? `up to date (${data.headSha.slice(0, 7)}) · ` : ''}${flat}`, 'info');
       if (!upToDate) toast('✓ Synced from GitHub main', 'success');
       updatePurgeR2Button();
     } else if (upToDate) {

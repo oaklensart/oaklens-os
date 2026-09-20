@@ -193,7 +193,9 @@ describe('a generated key is a real key — the gates still hold', () => {
   it('an unsigned or tampered token is rejected', async () => {
     const env = { SUBSCRIBERS: fakeKV() };
     const token = await createToken(env);
-    const tampered = `${token.slice(0, -2)}xy`;
+    // Not just `+ 'xy'`: a token that already ends in "xy" would be rebuilt
+    // identical and the assertion would be testing a VALID token.
+    const tampered = `${token.slice(0, -2)}${token.endsWith('xy') ? 'zz' : 'xy'}`;
     const req = new Request('https://example.com/api/x', { headers: { Authorization: `Bearer ${tampered}` } });
     expect(await verifyToken(req, env)).toBe(false);
   });

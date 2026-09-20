@@ -16,7 +16,7 @@
 // Mutations (/api/* upload, publish, sync) always require the network and are
 // never intercepted or cached — this SW only serves the static shell.
 
-const CACHE = 'oaklens-console-v190';
+const CACHE = 'oaklens-console-v198';
 const SHELL = '/dev/field-console.html';
 // Same-origin shell assets. The js/ versions here must match the import map in
 // field-console.html exactly — that map is where a module's version is decided,
@@ -24,13 +24,14 @@ const SHELL = '/dev/field-console.html';
 // import map, so the duplication is unavoidable; tests/guards.test.js keeps the
 // two in step. CSS is a plain <link>, so its ?v= still lives on the tag.
 const SHELL_ASSETS = [
-  '/css/field-console.css?v=93',
+  '/css/field-console.css?v=99',
   '/js/console-state.js?v=16',
   '/js/console-api.js?v=12',
   '/js/markdown-engine.js?v=5',
-  '/js/console-ui.js?v=65',
-  '/js/console/chrome.js?v=17',
+  '/js/console-ui.js?v=66',
+  '/js/console/chrome.js?v=18',
   '/js/console/lighting.js?v=2',
+  '/js/console/help.js?v=6',
   '/js/console/assets.js?v=5',
   '/js/console/utils.js?v=3',
   '/js/console/sync.js?v=1',
@@ -45,12 +46,12 @@ const SHELL_ASSETS = [
   '/js/console/asset-library.js?v=3',
   '/js/console/audio.js?v=16',
   '/js/console/cards.js?v=33',
-  '/js/console/publish.js?v=29',
+  '/js/console/publish.js?v=30',
   '/js/console/session.js?v=9',
   '/js/console/bench.js?v=1',
   '/js/pulse-packs.js?v=3',
   '/js/console/pulse.js?v=4',
-  '/js/console/init.js?v=13',
+  '/js/console/init.js?v=14',
   '/js/console-telemetry.js?v=2',
   // Not a console module and not loaded as one: the public homepage's grid
   // logic, which the shell pulls in as a classic <script> so the Cards view

@@ -303,17 +303,32 @@ describe('a card\'s internal layering cannot escape the card', () => {
     ).toMatch(/isolation:\s*isolate/);
   });
 
-  it('the fixed mobile homepage footer keeps a stacking level', () => {
-    // The desktop rule drops to `z-index: auto` because there the footer is in
-    // flow. The mobile block makes it fixed again and inherited that `auto`, so
-    // a bar overlaying the page sat at level 0 beneath it.
-    const rule = css.match(/\.page--home \.footer \{[^}]*position:\s*fixed[^}]*\}/);
-    expect(rule, 'the mobile homepage footer is no longer fixed — recheck this guard').toBeTruthy();
+  it('the homepage footer is the same fixed bar as every other page', () => {
+    // This guard used to ask a narrower question — whether the MOBILE homepage
+    // override kept its stacking level — because the homepage opted out of the
+    // fixed footer at desktop (`position: relative`, `z-index: auto`) from when
+    // it was one screen tall, and the mobile block had to put both back.
+    //
+    // The recent-work grid made the homepage scroll, so that opt-out dropped
+    // the site's one persistent piece of chrome below the fold on the front
+    // door alone (owner report, 2026-09-19). There is no override left to ask
+    // about; the two things that hold now are asserted instead.
+    const rule = css.match(/^\.footer \{[\s\S]*?^\}/m);
+    expect(rule, '.footer has no base rule').toBeTruthy();
+    expect(
+      rule[0],
+      'Every page keeps its footer on screen. This is the rule that does it.',
+    ).toMatch(/position:\s*fixed/);
     expect(
       rule[0],
       'A fixed footer overlays the page, so it must outrank it. Left at `z-index: auto` '
       + 'it paints below any positioned content.',
     ).toMatch(/z-index:\s*\d+/);
+    expect(
+      css,
+      'the homepage is opting out of the shared footer again — whatever the '
+      + 'declaration, that is the bug this guard was rewritten for.',
+    ).not.toMatch(/\.page--home \.footer \{/);
   });
 });
 

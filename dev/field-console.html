@@ -51,7 +51,7 @@ try {
      DOM half bails here too — no player is mounted in this document. -->
 <script src="/js/audio-player.js?v=9" defer></script>
 
-<link rel="stylesheet" href="/css/field-console.css?v=93">
+<link rel="stylesheet" href="/css/field-console.css?v=99">
 </head>
 <body>
 
@@ -75,6 +75,9 @@ try {
        so the two are obviously one thing. -->
   <button class="settings-btn" id="pulse-topbar-btn" onclick="showView('pulse')" title="Post a pulse" aria-label="Post a pulse">☺</button>
   <button class="settings-btn theme-btn" id="theme-toggle" onclick="themeToggle()" title="Switch STUDIO / DAYLIGHT mode" aria-label="Toggle light or dark mode">☀</button>
+  <button class="settings-btn" id="help-topbar-btn" onclick="helpToggle()"
+          title="What does this do? — outlines everything on this screen you can ask about"
+          aria-label="Show help" aria-expanded="false">?</button>
   <button class="settings-btn" id="settings-topbar-btn" onclick="openSettings()" title="Console Settings">
     ⚙<span class="settings-status-dot" id="settings-dot"></span>
   </button>
@@ -82,7 +85,7 @@ try {
        publish"; the count lives one glance left in #topbar-stage-stat (and on
        the publish page, now itemised). Square + static — deliberately NOT a
        second SYS lamp, which is the round bezelled LED with the glow. -->
-  <button class="publish-btn empty" id="publish-btn" data-pending="0" onclick="openPublishView()"
+  <button class="publish-btn publish-btn--idle" id="publish-btn" data-pending="0" onclick="openPublishView()"
           aria-label="Publish — no pending changes">
     <span class="pip" id="publish-pip" aria-hidden="true"></span> Publish
   </button>
@@ -187,7 +190,7 @@ try {
 
       <div class="btn-row" style="margin-top: 8px;">
         <button class="btn btn-sm btn-ghost" onclick="openAssetLibrary(assetToBuffer, 'archive')">◎ FROM LIBRARY</button>
-        <button class="btn btn-sm btn-ghost" onclick="RawLens.open('buffer')" title="Browse RAW files from a card reader — extracts the embedded JPEG on-device">◇ RAW LENS</button>
+        <button class="btn btn-sm btn-ghost" id="buffer-raw-lens-btn" onclick="RawLens.open('buffer')" title="Browse RAW files from a card reader — extracts the embedded JPEG on-device">◇ RAW LENS</button>
       </div>
 
       <div class="stage-section">
@@ -244,8 +247,8 @@ try {
             <div class="preview-empty">// NO IMAGE LOADED</div>
           </div>
           <div class="filename" id="archive-filename"></div>
-          <button class="btn btn-sm btn-ghost" onclick="openArchiveFocal()" title="Set the thumbnail crop focal point">◎ FOCAL POINT</button>
-          <button class="btn btn-sm btn-ghost" onclick="openArchiveCardFocal()" title="Set the crop for the tall 4:5 homepage 'recent work' card (falls back to the focal point if unset)">◎ CARD CROP</button>
+          <button class="btn btn-sm btn-ghost" id="archive-focal-btn" onclick="openArchiveFocal()" title="Set the thumbnail crop focal point">◎ FOCAL POINT</button>
+          <button class="btn btn-sm btn-ghost" id="archive-card-crop-btn" onclick="openArchiveCardFocal()" title="Set the crop for the tall 4:5 homepage 'recent work' card (falls back to the focal point if unset)">◎ CARD CROP</button>
         </div>
 
         <div class="compose-form">
@@ -311,7 +314,7 @@ try {
           </div>
 
           <div class="btn-row gap-12">
-            <button class="btn btn-stage btn-full" onclick="archiveStage()">▲ Stage to Archive</button>
+            <button class="btn btn-stage btn-full" id="archive-stage-btn" onclick="archiveStage()">▲ Stage to Archive</button>
             <button class="btn btn-ghost" onclick="archiveClear()">Clear</button>
           </div>
           <div class="hint-text">
@@ -750,7 +753,7 @@ try {
       <div class="stage-section">
         <div class="stage-header">
           <div class="stage-title">SETS · <span class="count" id="audio-sets-count">0</span></div>
-          <button class="btn btn-sm btn-ghost" onclick="_setCreate()"
+          <button class="btn btn-sm btn-ghost" id="audio-new-set-btn" onclick="_setCreate()"
             title="A named list of tracks, with its own address">+ NEW SET</button>
         </div>
         <div class="aud-sets" id="audio-sets-display"></div>
@@ -868,7 +871,10 @@ try {
           <div class="delta" id="sum-delta-archive"></div>
         </div>
         <div class="summary-card" id="sum-fn" onclick="publishToggleChanges('fn')">
-          <div class="label">FN// Posts</div>
+          <!-- "FN//" not "FN// Posts": the sidebar and the tab bar both call
+               this surface FN//, and it is the one label long enough to clip
+               its own counter card at the narrow end of the desktop rail. -->
+          <div class="label">FN//</div>
           <div class="count" id="sum-count-fn">0</div>
           <div class="delta" id="sum-delta-fn"></div>
         </div>
@@ -924,7 +930,7 @@ try {
         <div id="upload-queue-status" style="display:none; margin-top:6px; font-size:0.62rem; color:var(--accent); letter-spacing:1.5px;"></div>
       </div>
 
-      <div class="publish-action" style="margin-top: 12px;">
+      <div class="publish-action publish-commit">
         <h3>PUBLISH TO GITHUB</h3>
         <div class="hint">
           Commits updated JSON + markdown directly to <span style="color:var(--accent);">main</span>.<br>
@@ -935,54 +941,54 @@ try {
                nothing performs. -->
           <span id="publish-deploy-hint">Then run <span style="color:var(--accent);">npx wrangler deploy</span> to take it live — or connect this repo to Cloudflare Builds (see setup.md) and skip that step forever.</span>
         </div>
-        <div class="btn-row" style="justify-content: center; gap: 12px;">
+        <div class="btn-row publish-act-row">
           <button class="btn btn-primary" id="gh-publish-btn" onclick="publishToServer()">▲ Publish to GitHub</button>
-          <button class="btn btn-danger" id="gh-clear-staged-btn" onclick="publishClearStaged()">⌫ Clear Staged</button>
+          <button class="btn btn-danger btn--unlit" id="gh-clear-staged-btn" onclick="publishClearStaged()">⌫ Clear Staged</button>
         </div>
         <div id="publish-receipt-slot"></div>
         <div class="publish-log" id="publish-log"></div>
-        <div class="hint-text" style="margin-top: 18px;">
+        <div class="hint-text publish-workflow">
           <span class="accent">WORKFLOW:</span> Drop photos (auto-upload to R2) → write notes → <span style="color:var(--green);">Publish → done</span>
         </div>
       </div>
 
-      <div class="publish-action" style="margin-top: 12px;">
+      <div class="publish-action publish-export">
         <h3>SITE-IN-A-ZIP</h3>
         <div class="hint">
           Full offline mirror of the <span style="color:var(--accent);">published</span> site: rendered pages, content, and CDN media,<br>
           all paths relative — open <span style="color:var(--accent);">index.html</span> from a thumb drive, no server, no account.<br>
           <span style="color:var(--text-faint);">data/*.json + posts/*.md ride along, so the zip doubles as a git-restorable backup.</span>
         </div>
-        <div class="btn-row" style="justify-content:center; gap:14px; flex-wrap:wrap;">
-          <label style="font-size:0.62rem; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; display:inline-flex; gap:6px; align-items:center;">
+        <div class="btn-row se-tiers">
+          <label class="se-tier">
             <input type="checkbox" class="bd-checkbox" id="se-tier-web" checked> web images (480/1024)
           </label>
-          <label style="font-size:0.62rem; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; display:inline-flex; gap:6px; align-items:center;">
+          <label class="se-tier">
             <input type="checkbox" class="bd-checkbox" id="se-tier-hires" checked> high-res (2048)
           </label>
-          <label style="font-size:0.62rem; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; display:inline-flex; gap:6px; align-items:center;">
+          <label class="se-tier">
             <input type="checkbox" class="bd-checkbox" id="se-tier-video" checked> video
           </label>
-          <label style="font-size:0.62rem; letter-spacing:1.5px; text-transform:uppercase; cursor:pointer; display:inline-flex; gap:6px; align-items:center;">
+          <label class="se-tier">
             <input type="checkbox" class="bd-checkbox" id="se-tier-full"> wallpaper originals
           </label>
         </div>
-        <div class="btn-row" style="justify-content:center; margin-top:10px;">
-          <button class="btn btn-primary" id="site-export-btn" onclick="exportSiteZip()">⇩ Export Site (.zip)</button>
+        <div class="btn-row publish-act-row">
+          <button class="btn btn--unlit" id="site-export-btn" onclick="exportSiteZip()">⇩ Export Site (.zip)</button>
         </div>
-        <div id="site-export-status" class="import-status" style="text-align:center;"></div>
+        <div id="site-export-status" class="import-status"></div>
       </div>
 
-      <details style="margin-top: 20px; border: 1px dashed var(--border-strong);">
-        <summary style="padding: 12px 16px; font-size: 0.62rem; color: var(--text-faint); letter-spacing: 2px; cursor: pointer; text-transform: uppercase; list-style: none;">
+      <details class="publish-legacy">
+        <summary class="publish-legacy-sum">
           ▸ Legacy: Export ZIP Bundle
         </summary>
-        <div style="padding: 16px; border-top: 1px solid var(--border);">
-          <div class="hint" style="text-align:left; font-size:0.65rem; margin-bottom:14px;">
+        <div class="publish-legacy-body">
+          <div class="hint">
             Fallback for offline use. Generates a zip with updated JSON + markdown files.<br>
             Drop into <span style="color:var(--accent);">your site folder</span> then <span style="color:var(--accent);">git add . &amp;&amp; git commit &amp;&amp; git push</span>.
           </div>
-          <div class="btn-row" style="gap: 10px;">
+          <div class="btn-row">
             <button class="btn btn-sm" onclick="publishExportBundle()">↓ Export Bundle (.zip)</button>
             <button class="btn btn-ghost btn-sm" onclick="publishExportJSON()">↓ JSON only</button>
           </div>
@@ -1527,9 +1533,10 @@ try {
     "/js/console-telemetry.js": "/js/console-telemetry.js?v=2",
     "/js/console-api.js":       "/js/console-api.js?v=12",
     "/js/console-state.js":     "/js/console-state.js?v=16",
-    "/js/console-ui.js":        "/js/console-ui.js?v=65",
-    "/js/console/chrome.js":    "/js/console/chrome.js?v=17",
+    "/js/console-ui.js":        "/js/console-ui.js?v=66",
+    "/js/console/chrome.js":    "/js/console/chrome.js?v=18",
     "/js/console/lighting.js":  "/js/console/lighting.js?v=2",
+    "/js/console/help.js":      "/js/console/help.js?v=6",
     "/js/console/assets.js":    "/js/console/assets.js?v=5",
     "/js/console/utils.js":     "/js/console/utils.js?v=3",
     "/js/console/sync.js":      "/js/console/sync.js?v=1",
@@ -1544,12 +1551,12 @@ try {
     "/js/console/asset-library.js": "/js/console/asset-library.js?v=3",
     "/js/console/audio.js":     "/js/console/audio.js?v=16",
     "/js/console/cards.js":     "/js/console/cards.js?v=33",
-    "/js/console/publish.js":   "/js/console/publish.js?v=29",
+    "/js/console/publish.js":   "/js/console/publish.js?v=30",
     "/js/console/session.js":   "/js/console/session.js?v=9",
     "/js/console/bench.js":     "/js/console/bench.js?v=1",
     "/js/pulse-packs.js":       "/js/pulse-packs.js?v=3",
     "/js/console/pulse.js":     "/js/console/pulse.js?v=4",
-    "/js/console/init.js":      "/js/console/init.js?v=13",
+    "/js/console/init.js":      "/js/console/init.js?v=14",
     "/js/markdown-engine.js":   "/js/markdown-engine.js?v=5",
     "/js/recent-index.js":      "/js/recent-index.js?v=33",
     "/js/audio-player.js":      "/js/audio-player.js?v=9",

@@ -49,6 +49,9 @@ const PLAN = [
   // nothing about buffers, frames or publishing — and because nothing below
   // chrome exists for it to sit under.
   ['lighting', []],
+  // Never lived in the monolith — it arrived whole, so its section list is
+  // empty on purpose (dev/console-module-plan.md, the `lighting` precedent).
+  ['help', []],
   ['assets', ['IMAGE RESIZING', 'CDN PREVIEW HELPER', 'SERVER API']],
   // Was `trash`, renamed 2026-07-29: line attribution had filed nine generic
   // date/file/hash helpers under the SESSION TRASH banner, and only

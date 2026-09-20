@@ -20,6 +20,7 @@ import { STATE, load, restoreSidebar, restoreFnBar, resetConsole } from '../cons
 import { isLoggedIn } from '../console-api.js';
 import { registerView, registerLongPress, refreshStageIndicators, themeInit, wireDropzone, _wireSheetDrag, _initKeyboardInsets, _initViewportFrame, _initStickyHeaders, _initLongPress, closeActionSheet, closeMoreSheet } from './chrome.js';
 import { lightingInit } from './lighting.js';
+import { _initHelp } from './help.js';
 import { updatePurgeR2Button, _registerLibraryUploadProbe } from './sync.js';
 import { _libraryUploadsPending } from './upload.js';
 import { renderWall, renderBarrel, renderNetwork, renderLibrary, wallIngest, libraryIngest } from './more-views.js';
@@ -121,6 +122,7 @@ export function init() {
   restoreFnBar();
   wireDevelopIn();
   lightingInit();   // the bloom; finds its own emitters, inert where a 2D context cannot be had
+  _initHelp();      // the `?` key; the overlay itself builds on first use
   loadOgCards();   // mark frames that already have a live OG card (persists across reloads)
   refreshStageIndicators();
   _updateSettingsDots();

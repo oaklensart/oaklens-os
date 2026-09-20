@@ -320,11 +320,27 @@ describe('the tablet pass — a wide, short screen spends width, not height', ()
   });
 
   it('publish lays its cards out two-up, and stays hidden when inactive', () => {
-    expect(tablet).toMatch(/#view-publish\.active \{[^}]*display: grid/);
+    // The two-up layout was written here and is no longer the tablet's alone:
+    // desktop makes the same trade for the same reason, so the rule moved to a
+    // `min-width: 901px` block in the PUBLISH VIEW section and the tablet pass
+    // keeps only the sizes that are its own. Assert it against the whole
+    // stylesheet, and pin the floor separately — a phone must keep the stack.
+    const all = strip(css);
+    expect(all).toMatch(/#view-publish\.active \{[^}]*display: grid/);
     // `.view { display: none }` hides inactive views — an unqualified
     // `#view-publish` would out-specify that and show it over every other view.
-    expect(tablet, 'the grid rule must be scoped to .active')
+    expect(all, 'the grid rule must be scoped to .active')
       .not.toMatch(/#view-publish \{[^}]*display: grid/);
+    // Two columns need a screen that can hold them. Whatever media block the
+    // rule lives in, its opening query must carry a min-width, or a 375px
+    // phone is handed a two-column settings panel.
+    const at = all.indexOf('#view-publish.active {');
+    const query = all.lastIndexOf('@media', at);
+    expect(at, 'no two-up rule at all').toBeGreaterThan(0);
+    expect(
+      all.slice(query, all.indexOf('{', query)),
+      'the two-up publish grid is not behind a min-width — phones get it too',
+    ).toMatch(/min-width:\s*(9|\d{4})/);
   });
 
   it('the archive action row shares its width instead of overflowing', () => {
@@ -334,6 +350,134 @@ describe('the tablet pass — a wide, short screen spends width, not height', ()
 
   it('is scoped to tablets, in both arms of the band', () => {
     expect(css).toContain('@media (min-width: 901px) and (max-width: 1180px),\n       (min-width: 901px) and (pointer: coarse) {');
+  });
+});
+
+describe('the publish queue is a settings surface, not a scroll', () => {
+  // Owner report, 2026-09-19: the queue ran ~1180px of content in an 848px
+  // pane on a 1512×900 desktop, and the counter rail — nine surfaces — broke
+  // onto a second line with seven cards above and two beside a wide blank.
+  //
+  // Assertions read the RULES, not the prose: the comment blocks in the
+  // stylesheet quote the very declarations they warn against, so a raw text
+  // match would find the warning and call it the fix.
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  it('the counter rail is one line, however many surfaces there are', () => {
+    // THE BUG, and it is a class of bug: `repeat(7, 1fr)` with a comment
+    // naming the seven surfaces, written when there were seven. Audio and
+    // Cards made nine and the number stayed. A track count is a fact about the
+    // markup — so this test DERIVES the count from the markup rather than
+    // restating it, and would have failed the day the eighth card landed.
+    const cards = (read('dev/field-console.html')
+      .match(/class="summary-card"/g) || []).length;
+    expect(cards, 'the publish view has no counter cards at all')
+      .toBeGreaterThan(6);
+
+    const rail = bare.match(/^\.publish-summary \{[\s\S]*?^\}/m);
+    expect(rail, '.publish-summary has no base rule').toBeTruthy();
+
+    const hardcoded = rail[0].match(/repeat\(\s*(\d+)/);
+    expect(
+      hardcoded && Number(hardcoded[1]),
+      `the rail lays out ${hardcoded && hardcoded[1]} tracks for ${cards} counter `
+      + 'cards. Even matched, a literal count goes stale the next time a surface '
+      + 'is added — which is exactly how audio and cards ended up on line two.',
+    ).toBeFalsy();
+
+    // What replaces it: equal shares of whatever width is there. A zero basis
+    // always fits, so the cards shrink together instead of wrapping.
+    expect(rail[0], 'the rail is not a flex row').toMatch(/display:\s*flex/);
+    expect(bare, 'the counter cards do not take an equal share')
+      .toMatch(/^\.summary-card \{[\s\S]*?flex:\s*1 1 0/m);
+    // A long label must clip, not wrap: a wrapped label makes its own card
+    // taller than the eight beside it and the rail grows a second line again.
+    expect(bare).toMatch(/\.summary-card \.label \{[^}]*white-space:\s*nowrap/);
+  });
+
+  it('one button on the surface is loud, and it is the one you press most', () => {
+    // Red is this console's ONE loud colour and the publish surface was
+    // spending it three times over: PUBLISH TO GITHUB filled, CLEAR STAGED
+    // outlined beside it, EXPORT SITE (.ZIP) filled the same red one column
+    // across. Owner, 2026-09-19: *"the publish to github only needs the full
+    // red treatment all the time since it gets the most use."*
+    const html = read('dev/field-console.html');
+    const btn = (id) => html.match(new RegExp(`<button[^>]*id="${id}"[^>]*>`))?.[0] ?? '';
+
+    expect(btn('gh-publish-btn'), 'the primary lost its fill').toContain('btn-primary');
+    for (const id of ['site-export-btn', 'gh-clear-staged-btn']) {
+      expect(btn(id), `${id} is filled red again — that is three loud buttons`)
+        .not.toContain('btn-primary');
+      expect(btn(id), `${id} is not unlit at rest`).toContain('btn--unlit');
+    }
+    // Exactly one filled primary in the publish view, whatever gets added next.
+    const view = html.slice(html.indexOf('id="view-publish"'),
+      html.indexOf('</section>', html.indexOf('id="view-publish"')));
+    expect((view.match(/btn-primary/g) || [])).toHaveLength(1);
+  });
+
+  it('unlit ignites for a keyboard, not only for a mouse', () => {
+    // A control that only announces itself on hover is invisible to anyone
+    // tabbing. Both arms, one rule.
+    const lit = bare.match(/\.btn--unlit:hover,\s*\n?\s*\.btn--unlit:focus-visible \{[^}]*\}/);
+    expect(lit, '.btn--unlit has no hover+focus-visible ignite').toBeTruthy();
+    expect(lit[0]).toMatch(/color:\s*var\(--accent\)/);
+  });
+
+  it('unlit dims the colours, never the pixels', () => {
+    // The first cut used `opacity: 0.55` — the topbar idle button's trick —
+    // which put the label near 3.5:1 against the panel. That button is a
+    // status light wearing a word; this one is a control you have to READ
+    // before deciding to press it. Opacity here means one thing: disabled.
+    const rest = bare.match(/^\.btn--unlit \{[^}]*\}/m);
+    expect(rest, '.btn--unlit has no rest rule').toBeTruthy();
+    expect(rest[0], 'unlit is dimming with opacity again').not.toMatch(/opacity/);
+    expect(bare).toMatch(/\.btn--unlit:disabled[^{]*\{[^}]*opacity/);
+  });
+
+  it('a commit in flight still lights an unlit control', () => {
+    // setCommitArmed() lights gh-clear-staged-btn among others, and the arm
+    // recolours everything that is not already a filled primary. That only
+    // reaches an unlit button if it is declared AFTER it — equal specificity,
+    // source order decides. Armed and unlit at the same time would read as
+    // "this control is off" during the one moment it is busy.
+    const unlit = bare.indexOf('.btn--unlit {');
+    const armed = bare.indexOf('[data-armed="on"]:not(.btn-primary)');
+    expect(unlit, 'no .btn--unlit rule').toBeGreaterThan(-1);
+    expect(armed, 'the arm no longer recolours non-primaries').toBeGreaterThan(-1);
+    expect(armed, 'unlit now outranks the arm — armed controls stay grey')
+      .toBeGreaterThan(unlit);
+  });
+
+  it('the panels carry no inline layout left over from the stack', () => {
+    // Every one of these was a `style=` attribute placing a row by hand when
+    // the view was one scrolling column: two panel margins, three centred
+    // rows, a centred status line, four identical label styles. An inline
+    // style can only be answered with !important, which is why the two-column
+    // block could not simply left-align them. They are classes now.
+    const html = read('dev/field-console.html');
+    const view = html.slice(html.indexOf('id="view-publish"'),
+      html.indexOf('</section>', html.indexOf('id="view-publish"')));
+    for (const dead of [/justify-content:\s*center/, /text-align:\s*center/,
+      /class="publish-action[^"]*"\s+style="margin-top/]) {
+      expect(view, `${dead} is back in the publish markup`).not.toMatch(dead);
+    }
+    // …and the classes that replaced them exist in the stylesheet.
+    for (const cls of ['.publish-act-row', '.se-tiers', '.se-tier', '.publish-legacy']) {
+      expect(bare, `${cls} is used in the markup but has no rule`).toContain(cls);
+    }
+  });
+
+  it('the two panels are named, not counted', () => {
+    // `.publish-action:nth-of-type(1)` was the first attempt at "the publish
+    // card, then the export card". They are both `div`s among other `div`s, so
+    // nth-of-type counts siblings of type div and matched neither — silently,
+    // with the layout falling back to auto-placement and looking nearly right.
+    const html = read('dev/field-console.html');
+    expect(html, 'the publish card lost its name').toContain('publish-action publish-commit');
+    expect(html, 'the export card lost its name').toContain('publish-action publish-export');
+    expect(bare, 'the layout is picking panels out by position again')
+      .not.toMatch(/#view-publish\.active[^{]*\.publish-action:nth-/);
   });
 });
 
@@ -371,5 +515,118 @@ describe('the split preview pane is gone, and stays gone', () => {
     // The old pane was always on screen, so it re-rendered markdown on every
     // keystroke and had no choice. A closed overlay must cost nothing.
     expect(js).toMatch(/export function fnRender\(\)\s*\{[^}]*if \(fnPreviewOpen\) _fnRenderPreview\(\)/);
+  });
+});
+
+
+// ============================================================================
+// THE HELP MARKS FOLD UNDER THE FIXED BARS
+//
+// The console has two fixed bars — the topbar, and on the tab-bar band a
+// bottom one — and the content scrolls UNDER both. The help overlay's marks
+// did not: they were clipped to the WINDOW, so a region taller than the screen
+// had its mark drawn from y=0 — a red frame lying across the wordmark and the
+// header controls, with the topbar's own marks sitting inside it. Owner,
+// 2026-09-19, with a screenshot: *"I guess my expectation is that they would
+// fold underneath the header like everything else."*
+//
+// This is geometry, so it is tested as geometry and not by reading the source:
+// a stubbed topbar, tab bar and target, through the two functions the marks
+// and the spotlight both go through.
+// ============================================================================
+const HELP_MOD = await import('../js/console/help.js');
+const HELP_SRC = read('js/console/help.js');
+
+describe('a help mark folds under the bars, like the thing it marks', () => {
+  const VW = 1000;
+  const VH = 620;
+  const TOPBAR_H = 52;
+  const TABBAR_H = 56;
+  const PAD = 4;   // help.js's own breathing room, on the edges it keeps
+
+  /** An element with the rect we say it has — happy-dom lays nothing out. */
+  const at = (el, top, bottom, left = 100, right = 900) => {
+    el.getBoundingClientRect = () => ({
+      top, bottom, left, right, width: right - left, height: bottom - top, x: left, y: top,
+    });
+    return el;
+  };
+
+  const build = ({ tabbar = true } = {}) => {
+    document.body.innerHTML =
+      '<header class="topbar"><button id="chrome-btn"></button></header>'
+      + '<div class="layout"><div class="main"><div id="target"></div></div></div>'
+      + (tabbar ? '<nav class="tabbar"><button id="tab"></button></nav>' : '');
+    at(document.querySelector('.topbar'), 0, TOPBAR_H, 0, VW);
+    if (tabbar) at(document.querySelector('.tabbar'), VH - TABBAR_H, VH, 0, VW);
+    window.innerWidth = VW;
+    window.innerHeight = VH;
+  };
+
+  it('a content control gets the field between the bars', () => {
+    build();
+    const field = HELP_MOD._fieldFor(document.getElementById('target'));
+    expect(field.top).toBe(TOPBAR_H);
+    expect(field.bottom).toBe(VH - TABBAR_H);
+  });
+
+  it('a control that IS a bar gets the whole window', () => {
+    // Clipping the header's own marks to the content area would erase exactly
+    // the marks the header needs — that control is not under anything.
+    build();
+    const field = HELP_MOD._fieldFor(document.getElementById('chrome-btn'));
+    expect(field.top).toBe(0);
+    expect(field.bottom).toBe(VH);
+  });
+
+  it('a target scrolled under the topbar is cut at the bar, not at y=0', () => {
+    build();
+    const el = at(document.getElementById('target'), 20, 400);   // top under a 52px bar
+    const box = HELP_MOD._visibleRect(el);
+    expect(box.top, 'the mark is being drawn over the topbar again').toBe(TOPBAR_H);
+    // The free edge still gets its padding; the clipped one gets none.
+    expect(box.top + box.height).toBe(400 + PAD);
+  });
+
+  it('a target running under the tab bar is cut at the tab bar', () => {
+    build();
+    const el = at(document.getElementById('target'), 200, VH + 300);
+    const box = HELP_MOD._visibleRect(el);
+    expect(box.top + box.height).toBe(VH - TABBAR_H);
+  });
+
+  it('with no tab bar on screen the content field reaches the floor', () => {
+    // Desktop: the bar is not rendered, and a mark must not stop short of the
+    // bottom of a window with nothing in the way.
+    build({ tabbar: false });
+    expect(HELP_MOD._fieldFor(document.getElementById('target')).bottom).toBe(VH);
+  });
+
+  it('a hidden tab bar owns nothing — measured, never assumed from a breakpoint', () => {
+    // The bar comes and goes for four reasons (width, pointer, the FN bar-hide
+    // toggle, the on-screen keyboard), which is why _bottomInset measures it.
+    build();
+    document.querySelector('.tabbar').style.display = 'none';
+    expect(HELP_MOD._fieldFor(document.getElementById('target')).bottom).toBe(VH);
+  });
+
+  it('the spotlight is cut from the same rect, so it folds too', () => {
+    // One place computes the box for both the mark and the scrim hole.
+    // Un-dimming the topbar to show off a control in the scroller would light
+    // the wrong thing.
+    const marks = HELP_SRC.slice(HELP_SRC.indexOf('function _placeMarks'));
+    expect(marks, 'the marks stopped going through _visibleRect')
+      .toMatch(/_visibleRect\(el, PAD, field\)/);
+    expect(HELP_SRC, 'card mode stopped going through _visibleRect')
+      .toMatch(/const rect = _visibleRect\(_target\)/);
+  });
+
+  it('an edge is only drawn where the control really ends', () => {
+    // A hairline at the bar is the BAR's edge, not the thing's — the same
+    // argument the module already made about the window's edge.
+    const marks = HELP_SRC.slice(HELP_SRC.indexOf('function _placeMarks'));
+    for (const side of ['field.top', 'field.left', 'field.bottom', 'field.right']) {
+      expect(marks, `the ${side} edge test still measures the window`).toContain(side);
+    }
   });
 });

@@ -406,7 +406,7 @@ export function refreshStageIndicators() {
   // skips it, so the pair costs nothing at either width.
   const tabPublish = document.querySelector('.tab-btn[data-view="publish"]');
   if (total > 0) {
-    btn.classList.remove("empty");
+    btn.classList.remove("publish-btn--idle");
     btn.dataset.pending = "1";
     btn.setAttribute("data-lit", "accent");
     tabPublish?.setAttribute("data-lit", "accent");
@@ -414,7 +414,7 @@ export function refreshStageIndicators() {
     stat.innerHTML = `<span class="accent">${total} PENDING</span>`;
     pip.style.display = "block";
   } else {
-    btn.classList.add("empty");
+    btn.classList.add("publish-btn--idle");
     btn.dataset.pending = "0";
     btn.removeAttribute("data-lit");
     tabPublish?.removeAttribute("data-lit");

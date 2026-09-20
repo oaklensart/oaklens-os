@@ -446,16 +446,24 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--accent);
 }
 .publish-btn:hover .pip { background: var(--on-accent); }
-.publish-btn.empty {
+/* IDLE — nothing pending. Named `--idle`, and NOT `empty`, which is what it was
+   until 2026-09-19: `.empty` is also the generic empty-STATE block that six
+   renderers use for "// ARCHIVE EMPTY", and its `padding: 48px 20px` beat this
+   button's own `8px 16px`. That made the button 112px tall inside a 52px bar,
+   overhanging it by ~30px top and bottom — invisible, because the idle state
+   also dims the border to near-black, but a live click target for Publish
+   sitting under the top-right corner of the content area. A state modifier on a
+   control gets a namespaced name, so a block utility can never claim it. */
+.publish-btn--idle {
   opacity: 0.4;
   border-color: var(--border-strong);
   color: var(--text-dim);
 }
-.publish-btn.empty:hover { background: transparent; color: var(--text-dim); }
+.publish-btn--idle:hover { background: transparent; color: var(--text-dim); }
 /* Unlit: the housing stays, the light goes out — the control keeps its shape
    so it never looks like it moved or vanished. */
-.publish-btn.empty .pip,
-.publish-btn.empty:hover .pip {
+.publish-btn--idle .pip,
+.publish-btn--idle:hover .pip {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--border-strong);
 }
@@ -646,6 +654,54 @@ button { font-family: inherit; cursor: pointer; }
 .btn-ghost { color: var(--text-dim); border-color: var(--border); }
 .btn-danger { color: var(--accent); border-color: var(--accent-dim); }
 .btn-danger:hover { background: var(--accent-soft); border-color: var(--accent); }
+/* UNLIT — a secondary control at rest, in the topbar Publish button's grammar:
+   the housing stays, the light goes out (`.publish-btn--idle`). Reach for it
+   and it ignites.
+
+   This is a hierarchy fix, not decoration. Red is this console's ONE loud
+   colour and it was being spent on three buttons at once on the publish
+   surface: PUBLISH TO GITHUB (filled), CLEAR STAGED (outlined) beside it, and
+   EXPORT SITE (.ZIP) filled the same red one column over. Three equal reds is
+   no hierarchy — the eye has nowhere to land, and the one button that is the
+   whole point of the screen competes with a backup utility for attention.
+   Owner's call, 2026-09-19: *"realistically the publish to github only needs
+   the full red treatment all the time since it gets the most use."*
+
+   A REST-STATE modifier, deliberately: it dims whatever the button already is
+   and hands its own identity straight back on hover or focus, so it composes
+   with `.btn-danger` (CLEAR STAGED keeps meaning "destructive") instead of
+   replacing it. It must sit after the variants it dims — equal specificity,
+   source order decides.
+
+   Keyboard parity is not optional here: a control that only announces itself
+   on hover is invisible to anyone tabbing, so `:focus-visible` ignites it on
+   exactly the same terms. */
+.btn--unlit {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-dim);
+  font-weight: 400;
+}
+.btn--unlit:hover,
+.btn--unlit:focus-visible {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* ⚠ Unlit dims the COLOURS, never the pixels. The first cut of this used
+   `opacity: 0.55` — the topbar idle button's trick — and it put the label at
+   roughly 3.5:1 against the panel, under the 4.5:1 that small text needs. That
+   button is a status light wearing a word; this one is a control you are meant
+   to be able to read before you decide to press it. `--text-dim` on its own is
+   quiet and legible (~5.4:1), and it leaves `opacity` free to mean the one
+   thing it should mean here. */
+.btn--unlit:disabled,
+.btn--unlit:disabled:hover {
+  opacity: 0.4;
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-dim);
+}
 .btn-sm { padding: 6px 10px; font-size: var(--t-micro); }
 .btn-row { display: flex; gap: 8px; margin-top: 4px; }
 .btn-row.gap-12 { gap: 12px; }
@@ -1902,26 +1958,174 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
 .icon-btn.danger:hover { color: var(--accent); border-color: var(--accent); }
 
 /* ============ PUBLISH VIEW ============ */
-/* One column per summary card (there are 7: buffer/archive/fn/wall/barrel/
-   network/library) so the rail reads as a single line at desktop; the tablet
-   and phone queries below re-wrap it. */
+/* THE COUNTER RAIL IS A FLEX ROW, NOT AN N-TRACK GRID.
+   It was `grid-template-columns: repeat(7, 1fr)` with a comment naming the
+   seven surfaces — and then the console grew two more (audio, cards). Nine
+   cards into seven tracks wrapped the last two onto a second line beside a
+   half-empty row, which is what a stale count in a stylesheet looks like on
+   screen. A track count is a fact about the markup, and facts belong where
+   they can't drift.
+   `flex: 1 1 0` asks each card for an equal share of whatever width is there,
+   so the rail is one line for seven cards, nine, or the tenth surface someone
+   adds next year. The narrower layouts below re-wrap it by handing the cards a
+   percentage basis instead — the only thing a breakpoint has to say. */
 .publish-summary {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 12px;
-  margin-bottom: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 .summary-card {
+  flex: 1 1 0;
+  min-width: 0;
   background: var(--bg-elev-1);
   border: 1px solid var(--border);
-  padding: 16px;
+  padding: 14px 12px;
   position: relative;
 }
 .summary-card.has-changes { border-color: var(--accent-dim); cursor: pointer; }
 .summary-card.changes-open { border-color: var(--accent); }
-.summary-card .label { font-size: var(--t-micro); color: var(--text-dim); letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 8px; }
+/* One line, always. A label that outgrows its share clips rather than wrapping,
+   because a wrapped label makes its card taller than the eight beside it. */
+.summary-card .label { font-size: var(--t-micro); color: var(--text-dim); letter-spacing: 0.13em; text-transform: uppercase; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .summary-card .count { font-size: 1.6rem; color: var(--text-bright); letter-spacing: 0.09em; }
-.summary-card .delta { position: absolute; top: 14px; right: 14px; font-size: var(--t-micro); color: var(--accent); letter-spacing: 0.09em; }
+.summary-card .delta { position: absolute; top: 12px; right: 12px; font-size: var(--t-micro); color: var(--accent); letter-spacing: 0.09em; }
+
+/* ---- THE QUEUE IS A SETTINGS SURFACE, NOT A SCROLL (≥901px) ----
+   Six full-width cards down a wide screen — counters, remote sync, publish,
+   Site-in-a-ZIP, legacy export, danger — each one screen further down, on a
+   surface whose whole job is "show me the state and let me press the button".
+   The tablet pass argued this first and owned the rule; the same argument is
+   *stronger* at desktop, where the single column left a 1512px window with
+   1180px of content in an 848px pane and a half-empty right margin beside
+   every card. So the layout lives here, for every width that can hold two
+   columns, and the tablet pass keeps only the sizes that are its own.
+
+   Placement is explicit rather than left to row-by-row auto-flow, because a
+   two-column grid pairs its rows: REMOTE SYNC (short) beside PUBLISH (tall)
+   leaves the short one stretched and the rest of the surface ragged. Column 1
+   takes the two panels that carry the act — sync, then publish. Column 2 takes
+   Site-in-a-ZIP, spanning the two rows the legacy export and the danger zone
+   share beneath it, so both columns run full height and nothing floats in
+   space. `dense` backfills column 2's second row when the session trash (a
+   full-width band, and usually absent) is between them in the markup.
+
+   `.active` is on the selector because `.view { display: none }` hides the
+   inactive ones — an unqualified `#view-publish { display: grid }` would show
+   this view on top of every other. */
+@media (min-width: 901px) {
+  #view-publish.active {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-flow: row dense;
+    gap: 12px;
+    align-content: start;
+    /* The 80px in `.view` clears the phone tab bar, which is not on screen at
+       these widths; here it is 80px of scroll bought for nothing. */
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+  /* The header, the counter rail and the panels that answer them read across
+     the whole surface. */
+  #view-publish.active > .view-header,
+  #view-publish.active > .publish-summary,
+  #view-publish.active > .publish-changes,
+  #view-publish.active > .trash-section { grid-column: 1 / -1; }
+  /* Every one of these carries its own bottom margin (or an inline
+     `margin-top: 12px`, from when they were stacked). The grid's gap is the
+     spacing now — doubled spacing is what a converted stack looks like. */
+  #view-publish.active > .view-header { margin-bottom: 0; }
+  #view-publish.active > .publish-summary { margin-bottom: 0; }
+  #view-publish.active > .publish-changes { margin: 0; }
+  #view-publish.active > .import-zone { margin-bottom: 0; }
+  #view-publish.active > .publish-action { margin-top: 0 !important; }
+  /* Column 1 is the publish pipeline — fetch what's live, then commit. Column 2
+     is everything beside it: the offline mirror, the legacy export, the reset.
+     PUBLISH TO GITHUB spans two rows so the three shorter panels opposite it
+     add up to the same height; without that span the columns hold 2 items
+     against 3, and a grid row that only one column fills is the hole this
+     layout exists to remove. The two panels are named in the markup
+     (`.publish-commit` / `.publish-export`) rather than picked out by position:
+     they are both `.publish-action` divs among other divs, so `nth-of-type`
+     counts the wrong things and silently matches neither. */
+  #view-publish.active > .import-zone { grid-column: 1; }
+  #view-publish.active > .publish-commit { grid-column: 1; grid-row: span 2; }
+  #view-publish.active > .publish-export { grid-column: 2; }
+  #view-publish.active > details { grid-column: 2; }
+  #view-publish.active > .danger-zone { grid-column: 2; }
+
+  /* The panels were sized for a column you scrolled. Two columns halve the
+     height on their own; this takes the rest of the air out so the queue
+     clears a 1280×800 laptop as well as a studio display. Scoped to the view
+     so nothing else that wears these classes is squatted with it. */
+  #view-publish.active > .publish-action { padding: 20px 24px; }
+  #view-publish.active > .publish-action .hint { margin-bottom: 14px; }
+  #view-publish.active > .import-zone { padding: 16px 22px; }
+  #view-publish.active > .import-zone .import-sub { margin-bottom: 10px; }
+  #view-publish.active > .view-header { padding-bottom: 14px; }
+
+  /* ---- ONE PANEL, FOUR TIMES ----
+     Side by side, the four zones under the rail were four different objects:
+     two filled boxes with CENTRED type, one dashed transparent box, and one
+     that was not a box at all (a dashed top rule). Stacked in a single column
+     nobody notices — you only ever see one at a time. In two columns they are
+     compared, and the surface read as four things that happened to land near
+     each other rather than one panel drawn four times. Owner, 2026-09-19:
+     *"it needs some organization and layout — it's not harmonious."*
+
+     So: one shell, one heading, one alignment, and the deboss that `.publish-action`
+     alone used to get. Left — not centred — because a panel beside another
+     panel is read down its leading edge, and because the centred copy was
+     wrapping into ragged triangles ("no server, no / account."). The danger
+     zone keeps its identity in its title and its button, not in a different
+     box; a lone dashed outline among solid ones is exactly the disharmony. */
+  #view-publish.active > .import-zone,
+  #view-publish.active > .publish-action,
+  #view-publish.active > .publish-legacy,
+  #view-publish.active > .danger-zone {
+    background: var(--bg-elev-1);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-1), var(--edge-up);
+    margin: 0;
+    padding: 22px 26px;
+    text-align: left;
+  }
+  /* One heading grammar. Four different sizes (1.1rem / 0.85rem / 0.62rem /
+     --t-micro) across four panels of equal weight is what "chaotic" looks
+     like close up. */
+  #view-publish.active > .import-zone h4,
+  #view-publish.active > .publish-action h3,
+  #view-publish.active > .publish-legacy > .publish-legacy-sum,
+  #view-publish.active > .danger-zone .danger-zone-title {
+    font-size: var(--t-label);
+    color: var(--text-bright);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+    padding: 0;
+  }
+  /* The legacy fold's summary is its heading AND its control, so it keeps the
+     pointer and re-closes its own gap when the fold is shut. */
+  #view-publish.active > .publish-legacy > .publish-legacy-sum { cursor: pointer; }
+  #view-publish.active > .publish-legacy:not([open]) > .publish-legacy-sum { margin-bottom: 0; }
+  #view-publish.active > .publish-legacy > .publish-legacy-body { padding: 0; border-top: 0; }
+  /* One body voice underneath them, too. */
+  #view-publish.active > .import-zone .import-sub,
+  #view-publish.active > .publish-action .hint,
+  #view-publish.active > .danger-zone .danger-zone-hint {
+    font-size: var(--t-micro);
+    color: var(--text-faint);
+    letter-spacing: 0.13em;
+    line-height: 1.55;
+  }
+  /* Rows read from the leading edge with everything else. The inline
+     `justify-content: center` these carried is why they are classes now. */
+  #view-publish.active .publish-act-row,
+  #view-publish.active .se-tiers { justify-content: flex-start; }
+  #view-publish.active #site-export-status { text-align: left; }
+  /* The danger zone's own row keeps its button and its warning on one line. */
+  #view-publish.active > .danger-zone .danger-zone-row { flex-wrap: wrap; row-gap: 8px; }
+}
 
 /* ---- The change panel: what a card's "+N ▲" actually is ---- */
 .publish-changes {
@@ -1945,9 +2149,41 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
 .publish-changes .pc-label { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
 .publish-changes .pc-n { color: var(--text-dim); font-size: var(--t-micro); }
 .publish-changes .pc-other .pc-label { color: var(--text-dim); }
-.publish-action { background: var(--bg-elev-1); border: 1px solid var(--border); padding: 28px; text-align: center; }
+.publish-action { background: var(--bg-elev-1); border: 1px solid var(--border); padding: 28px; text-align: center; margin-top: 12px; }
 .publish-action h3 { color: var(--text-bright); font-size: 1.1rem; letter-spacing: 0.13em; margin-bottom: 8px; }
 .publish-action .hint { color: var(--text-faint); font-size: 0.7rem; letter-spacing: 0.13em; margin-bottom: 20px; line-height: 1.6; }
+/* These five carried the same declarations as inline `style=` attributes, from
+   when the publish view was one stacked column and each row was positioned by
+   hand. They are named now so a layout can have an opinion about them — the
+   two-column block below left-aligns all five at once, which an inline style
+   can only be beaten with `!important`. Centred here: that is what the
+   single-column phone layout has always looked like, and still does. */
+.publish-act-row { justify-content: center; gap: 12px; }
+.se-tiers { justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.se-tier {
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+#site-export-status { text-align: center; }
+.publish-workflow { margin-top: 18px; }
+.publish-legacy { margin-top: 20px; border: 1px dashed var(--border-strong); }
+.publish-legacy-sum {
+  padding: 12px 16px;
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  letter-spacing: 2px;
+  cursor: pointer;
+  text-transform: uppercase;
+  list-style: none;
+}
+.publish-legacy-body { padding: 16px; border-top: 1px solid var(--border); }
+.publish-legacy-body .hint { text-align: left; font-size: 0.65rem; margin-bottom: 14px; }
+.publish-legacy-body .btn-row { gap: 10px; }
 
 /* ============ TOAST ============ */
 .toast-zone {
@@ -2180,6 +2416,57 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(va
 .import-zone .import-sub { font-size: var(--t-micro); color: var(--text-faint); letter-spacing: 0.13em; margin-bottom: 12px; line-height: 1.6; }
 .import-zone .import-status { font-size: var(--t-micro); color: var(--green); letter-spacing: 0.13em; margin-top: 10px; }
 
+/* ---- THE SYNC READOUT ----
+   What a sync brought back, laid out instead of recited. This was one
+   dot-joined sentence — `✓ synced 4:41:31 PM · buffer:716 · archive:93 · …`
+   for twelve surfaces — which wraps wherever the panel happens to end, so no
+   two lines break at the same place and no surface sits under the one above
+   it. It is the densest text on the screen and the least readable.
+
+   A grid of equal cells fixes it by construction: every name starts on a
+   column, every number ends on one, and the leader carries the eye across the
+   gap between them. Numbers are tabular so 716 and 93 line up on their digits
+   rather than their glyph widths. `auto-fill` means the panel decides how many
+   columns it can hold — four in a half-width column, more on a wide one — and
+   a thirteenth surface joins without a number changing anywhere. */
+.sync-readout-head { color: var(--green); }
+.sync-readout-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: 2px 20px;
+  margin-top: 7px;
+}
+.sync-readout-cell { display: flex; align-items: baseline; min-width: 0; }
+.sync-readout-k {
+  order: 1;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The leader. A flex container's ::after IS a flex item, so `order` can seat it
+   between the two spans without a third element in the DOM. */
+.sync-readout-cell::after {
+  content: '';
+  order: 2;
+  flex: 1 1 auto;
+  min-width: 6px;
+  align-self: center;
+  /* `--text-ghost` (--ink-x) is the token reserved for rules and ornaments and
+     explicitly never for words — which is exactly what a leader is. `--border`
+     was the first choice and is #161616: invisible on a #0c0c0c panel, so the
+     leader was there and did nothing. Flips to a warm grey in DAYLIGHT. */
+  border-bottom: 1px dotted var(--text-ghost);
+  margin: 0 6px;
+}
+.sync-readout-v {
+  order: 3;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ============ MISC ============ */
 .hint-text { font-size: var(--t-micro); color: var(--text-faint); letter-spacing: 0.13em; line-height: 1.6; margin-top: 8px; }
 .hint-text .accent { color: var(--accent); }
@@ -2189,7 +2476,9 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(va
   .layout { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .archive-compose { grid-template-columns: 1fr; height: auto; }
-  .publish-summary { grid-template-columns: repeat(2, 1fr); }
+  /* Two per row — the rail is flex now, so a breakpoint sets a basis, not a
+     track count (see the PUBLISH VIEW block). */
+  .publish-summary .summary-card { flex-basis: calc(50% - 5px); }
 }
 
 /* ---- TABLET (≈921–1180px, e.g. iPad Mini landscape) ----
@@ -2210,8 +2499,8 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(va
      taller than the whole viewport, and the Archive view came to 2188px with
      1620px of scroll under it. The two-column layout is what fits.
      `--sidebar-w` went with it — it sizes a track that is display:none here. */
-  /* 7-across can't hold at iPad widths — wrap to a clean 4+3. */
-  .publish-summary { grid-template-columns: repeat(4, 1fr); }
+  /* Nine across can't hold at iPad widths — wrap to 5 + 4. */
+  .publish-summary .summary-card { flex-basis: calc(20% - 8px); }
 }
 
 /* ============================================================
@@ -2273,36 +2562,20 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(va
   .compose-form .btn-row .btn-full { width: auto; flex: 1 1 auto; min-width: 0; }
 
   /* ---- PUBLISH: a settings surface, not a scroll ---- */
-  /* SIX CARDS DOWN A 1085px-WIDE SCREEN. Counters, remote sync, publish,
-     Site-in-a-ZIP, trash, danger — each full width, each one screen further
-     down, on a surface whose whole job is "show me the state and let me press
-     the button". Two columns is the entire fix: the same cards, side by side,
-     and the queue reads as a settings panel instead of a scroll.
-     `.active` is on the selector because `.view { display: none }` hides the
-     inactive ones — an unqualified `#view-publish { display: grid }` would
-     show this view on top of every other. */
-  #view-publish.active {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    align-content: start;
-  }
-  /* The header and the counter rail read across the whole surface. */
-  #view-publish.active > .view-header,
-  #view-publish.active > .publish-summary { grid-column: 1 / -1; }
-  #view-publish.active > .publish-changes { grid-column: 1 / -1; }
-  /* These carry `style="margin-top: 12px"` inline, from when they were stacked.
-     The grid's own gap is the spacing now, and an inline margin needs
-     !important to answer. */
-  #view-publish.active > .publish-action { margin-top: 0 !important; }
+  /* The two-column layout moved to the base PUBLISH VIEW block (≥901px), where
+     desktop shares it — the argument was never tablet-specific. What stays
+     here is the tablet's own trade: a landscape iPad is WIDE and SHORT, so the
+     vertical rhythm tightens further than a desktop needs. */
 
-  /* Seven counters do not need seven cards' worth of height. Squat them and
-     the whole queue — counters, sync, publish — lands in one screen. */
+  /* Nine counters do not need nine cards' worth of height. Squat them and
+     the whole queue — counters, sync, publish — lands in one screen. The rail
+     is already one flex line; this only overrides the basis the 921–1180 rule
+     above set, and tightens the rhythm. */
   .publish-summary {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 8px;
     margin-bottom: 14px;
   }
+  .publish-summary .summary-card { flex-basis: 0; }
   .summary-card { padding: 9px 10px; }
   .summary-card .label { margin-bottom: 2px; }
   .summary-card .count { font-size: 1.15rem; }
@@ -4338,6 +4611,14 @@ body.fn-bar-hidden:has(#view-fn.active) .tabbar {
   color: #fff;
 }
 :root[data-theme="light"] .btn-danger { background: var(--accent-wash); }
+/* … unless it is unlit. That rule is `:root[data-theme="light"] .btn-danger`
+   — three selectors deep — and `.btn--unlit` is one, so in DAYLIGHT the wash
+   won and CLEAR STAGED sat there tinted red while STUDIO showed it quiet. The
+   companion lives here rather than hoisting `.btn--unlit` to a higher
+   specificity, because the dimming belongs to the modifier, not to a fight. */
+:root[data-theme="light"] .btn--unlit { background: transparent; }
+:root[data-theme="light"] .btn--unlit:hover,
+:root[data-theme="light"] .btn--unlit:focus-visible { background: var(--accent-wash); }
 
 /* Selection = ring, not hairline: survives sunlight in both modes. */
 .asset-lib-item.selected {
@@ -8772,3 +9053,502 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   .cards-swatch { min-height: var(--tap); }
 }
 
+/* =============================================================
+   HELP — "what does this do?", answered where it is asked
+   -------------------------------------------------------------
+   Two states, both driven by classes on #help-layer:
+
+     .open    browse — a machined frame around everything you can
+                       ask about, and a HUD line saying so.
+     .carded  card   — the console recedes, one control stays lit,
+                       and one card explains it.
+
+   ⚠️ BROWSE MODE DOES NOT GLOW, and that is the licence, not
+   taste. design-spec.md §6.5: light is for things that are DOING
+   something, and selection is not liveness. Ten controls marked
+   as *available to ask about* are the purest case of selection
+   there is — lighting them would have been a fifth licensed
+   state and the loudest thing in the console. So the mark is
+   drawn the way a machinist marks a part: corner registration
+   brackets and a hairline, borrowed from ANALOGS.NETWORK's own
+   `.frame`, which is where this console's light came from.
+
+   The one lit thing is the control you actually picked, in card
+   mode, and it is lit because it is the only thing happening.
+   Its pool is painted HERE rather than by js/console/lighting.js,
+   because that canvas sits at z-index 310 — under sheets, by its
+   own rule that light from the plane behind should not lie on
+   top of a new plane. Help is a new plane.
+
+   Nothing in this section names a colour. Everything reads the
+   preset's accent and both themes for free.
+   ============================================================= */
+
+/* The target itself stays UNTOUCHED — no outline, no background, nothing that
+   could lose to its own styling or leak out of an `overflow: hidden` parent.
+   The mark that annotates it is drawn in the overlay, in this module's own
+   element, so the help layer keeps its promise of changing no other module's
+   appearance. This class carries only behaviour: a borrowed tab stop, and a
+   focus ring for the keyboard. */
+.help-target:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.help-layer {
+  /* Written by the module from the tab bar's measured box (it comes and goes
+     for four different reasons, so a breakpoint would lie). Declared here as
+     the contract, and so a sheet has a sane value before the first card. */
+  --help-foot: 0px;
+  --help-bracket: 14px;
+  position: fixed;
+  inset: 0;
+  overflow: hidden;         /* a mark on a control scrolled past the edge */
+  z-index: 470;             /* over sheets (460), under RAW lens (490) and
+                               modals (500): an expired-session login still wins */
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease-out), visibility var(--dur-2) var(--ease-out);
+}
+.help-layer.open { visibility: visible; opacity: 1; }
+
+/* The dim. One SVG with a mask, because browse needs a hole per marked control
+   plus the `?` itself — and N spread box-shadows stack into N layers of dark,
+   each one painting over the others' holes. Card mode uses the same element
+   with a single hole, so there is one mechanism rather than two.
+
+   Under the marks and over nothing: it never catches a pointer, because in
+   browse the page has to stay hit-testable for the capture handler to tell
+   WHICH control was tapped. */
+.help-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#help-scrim-fill { fill: var(--scrim); }
+/* Browse dims a little less than card does — you are still reading the whole
+   screen there, and the cutouts do the work of saying which parts matter. Both
+   numbers were set at the screen: on a console this dark, veiling the ground
+   does nothing (it is already black) and the whole effect is carried by how far
+   the TEXT and the hairlines drop, so 0.68 looked like nothing had happened. */
+.help-scrim { opacity: 0.88; transition: opacity var(--dur-2) var(--ease-out); }
+.help-layer.carded .help-scrim { opacity: 1; }
+
+/* ---- browse: the annotation mark ---------------------------------------- */
+
+/* One host for every mark, so clearing browse mode is one `textContent = ''`
+   rather than a walk over other modules' elements. */
+.help-marks { position: absolute; inset: 0; pointer-events: none; }
+
+.help-mark {
+  position: absolute;
+  pointer-events: none;
+  border-radius: var(--r-1);
+  /* No fill. The control underneath is already the brightest thing on a dimmed
+     screen — the scrim cuts a hole for it — so a wash on top would only re-tint
+     what the dim just made stand out. Hairline and brackets are the annotation;
+     the light is the console's own.
+
+     A BORDER, per edge, rather than one inset ring: a control taller than the
+     screen is clipped to the viewport, and a ring drew a hairline along the
+     window's edge that had nothing to do with the control and slid as you
+     scrolled. The module says which edges are real; the rest are not drawn. */
+  border: 0 solid rgba(var(--accent-rgb), 0.3);
+}
+.help-mark[data-edges~="t"] { border-top-width: 1px; }
+.help-mark[data-edges~="r"] { border-right-width: 1px; }
+.help-mark[data-edges~="b"] { border-bottom-width: 1px; }
+.help-mark[data-edges~="l"] { border-left-width: 1px; }
+
+/* Two pseudo-elements, two corners — each one draws an L, and only when BOTH
+   of its edges belong to the control rather than to the window. */
+.help-mark::before,
+.help-mark::after {
+  content: '';
+  position: absolute;
+  display: none;
+  width: var(--help-bracket);
+  height: var(--help-bracket);
+  border: 0 solid rgba(var(--accent-rgb), 0.75);
+  pointer-events: none;
+}
+.help-mark[data-edges~="t"][data-edges~="l"]::before {
+  display: block;
+  top: -1px; left: -1px;
+  border-top-width: 1px;
+  border-left-width: 1px;
+  border-top-left-radius: var(--r-1);
+}
+.help-mark[data-edges~="b"][data-edges~="r"]::after {
+  display: block;
+  bottom: -1px; right: -1px;
+  border-bottom-width: 1px;
+  border-right-width: 1px;
+  border-bottom-right-radius: var(--r-1);
+}
+
+/* A mark can be wider than it is tall by a factor of thirty (a dropzone against
+   a chip), so the bracket shrinks rather than meeting itself in the middle. */
+.help-mark[data-narrow] { --help-bracket: 8px; }
+
+
+/* ---- card: the scrim, the light, and the explanation --------------------- */
+
+/* Catches the click that returns you to browse. Transparent, and only present
+   while a card is open — in browse the page must stay hit-testable so the
+   capture handler can tell WHICH control you tapped. */
+.help-catch { position: absolute; inset: 0; display: none; }
+.help-layer.carded .help-catch { display: block; pointer-events: auto; }
+
+/* The ring around the lit control. The DIM is the scrim above — this used to
+   carry it as its own `box-shadow` spread past the viewport, which is the right
+   answer for exactly one hole and no answer at all for ten. */
+.help-hole {
+  position: fixed;
+  z-index: 1;
+  border-radius: var(--r-1);
+  pointer-events: none;
+  display: none;
+  outline: 1px solid rgba(var(--accent-rgb), 0.9);
+  outline-offset: 0;
+}
+.help-layer.carded .help-hole { display: block; }
+
+/* The pool the lit control throws onto the dimmed console. A gradient, not a
+   `box-shadow` halo: a halo is trapped inside the box that casts it and this
+   one has to lie ON the scrim, which is that box's own shadow. */
+.help-glow {
+  position: fixed;
+  z-index: 2;
+  display: none;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(var(--accent-rgb), 0.17) 0%,
+    rgba(var(--accent-rgb), 0.055) 34%,
+    transparent 68%);
+}
+.help-layer.carded .help-glow { display: block; }
+
+/* The same pool, around the armed `?`. Its cutout is tight to the button, so
+   what falls off is a gradient rather than the hard edge of an un-dimmed
+   rectangle — which is the difference between something emitting and a sticker
+   (owner: "it feels like it was pasted on in photoshop"). Sits above the scrim
+   for the same reason the spotlight's does: it has to lie ON the dim. */
+.help-arm-glow {
+  position: fixed;
+  z-index: 2;
+  display: none;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(var(--accent-rgb), 0.28) 0%,
+    rgba(var(--accent-rgb), 0.10) 26%,
+    rgba(var(--accent-rgb), 0.03) 48%,
+    transparent 70%);
+}
+.help-layer.open .help-arm-glow { display: block; }
+
+/* DAYLIGHT keeps the scrim and drops both pools, for the reason --bloom-gain is
+   0 there: light spilling onto paper reads as a screen artefact rather than as
+   something that is on. The rings stay — on paper, lit reads as LIFTED. */
+:root[data-theme="light"] .help-glow,
+:root[data-theme="light"] .help-arm-glow { display: none; }
+
+.help-card {
+  --arrow-x: 50%;
+  --arrow-y: 50%;
+  position: fixed;
+  z-index: 3;
+  display: none;
+  width: min(320px, calc(100vw - 32px));
+  padding: 15px 17px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  /* Raised material takes the ladder's cast shadow AND a 1px inset top
+     highlight — "deboss, don't glow" is what says this is an object on top of
+     the console rather than a rectangle drawn on it. */
+  box-shadow: var(--edge-up), var(--shadow-3);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  pointer-events: auto;
+}
+.help-layer.carded .help-card { display: block; }
+.help-card:focus { outline: none; }
+
+/* The pointer back to the control. A border triangle, not a leader line: at one
+   card per screen the hole is the only lit thing, so there is never a question
+   which control is meant — the arc the first sketch drew was decoration that
+   had to be routed around five other cards. --arrow-x / --arrow-y are written
+   by the module, and move only when the viewport clamp has slid the card
+   sideways off its control. */
+.help-card::before {
+  content: '';
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 7px solid transparent;
+}
+.help-card[data-side="below"]::before {
+  top: -14px; left: var(--arrow-x); margin-left: -7px; border-bottom-color: var(--line-2);
+}
+.help-card[data-side="above"]::before {
+  bottom: -14px; left: var(--arrow-x); margin-left: -7px; border-top-color: var(--line-2);
+}
+.help-card[data-side="right"]::before {
+  left: -14px; top: var(--arrow-y); margin-top: -7px; border-right-color: var(--line-2);
+}
+.help-card[data-side="left"]::before {
+  right: -14px; top: var(--arrow-y); margin-top: -7px; border-left-color: var(--line-2);
+}
+
+/* The masthead: which surface you are on, in the console's own sub-line voice
+   (`// CURATED · METADATA REQUIRED`). Small, tracked, and quiet — it gives the
+   card a top edge to hang from without spending a line on saying "help". */
+.help-card-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 9px;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.help-card-eyebrow::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 5px;
+}
+.help-card-eyebrow i {
+  flex: 1;
+  height: 1px;
+  background: var(--line-1);
+  font-style: normal;
+}
+
+/* Type: the body is --t-label over a generous leading, not a micro size. This
+   is prose to be READ by someone already unsure, which is the one place in this
+   console where small type costs more than the space it saves. */
+.help-card-title {
+  margin: 0 0 7px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.005em;
+  color: var(--ink-1);
+}
+.help-card-body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--t-label);
+  line-height: 1.62;
+  color: var(--ink-2);
+}
+/* The non-result, named so it reads as a state rather than a failure. Its rule
+   is padded rather than full-bleed — hairlines terminate deliberately. */
+.help-card-note {
+  position: relative;
+  margin: 11px 0 0;
+  padding-top: 10px;
+  font-family: var(--font-body);
+  font-size: var(--t-micro);
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.help-card-note::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 34px;
+  height: 1px;
+  background: var(--accent-line);
+}
+
+/* ---- the `?`, while it is on -------------------------------------------- */
+
+/* Owner's call: it should read like the publish button and go accent while
+   engaged. `data-lit="accent"` is the console's own word for a control that is
+   currently doing something — it brings the fill, the edge and the halo, and
+   js/console/lighting.js finds it by that attribute and pools light around it
+   without needing to know this surface exists. The colour is all this adds. */
+#help-topbar-btn[data-lit] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---- the HUD line ------------------------------------------------------- */
+
+/* Under the top bar, not above the tab bar. At the bottom it covered whatever
+   sat at the foot of the screen — on the Archive form that was CARD CROP, a
+   marked control it was in the middle of telling you to press. The top strip is
+   the view's own title, which is the cheapest thing on screen to cover, and it
+   is where you just looked to press `?`. */
+/* A HUD line, and like every HUD line it lives in a corner rather than across
+   the middle. Centred under the top bar it struck through the view title at
+   every width; centred at the bottom it covered CARD CROP on the Archive form,
+   which is a control it was in the middle of telling you to press. So it docks
+   bottom-right, and the module moves it if a mark is there — the same "first
+   position that fits" the cards use, for the same reason. */
+.help-bar {
+  position: fixed;
+  z-index: 4;
+  right: 20px;
+  bottom: calc(var(--help-foot, 0px) + var(--safe-bottom) + 18px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 8px 7px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  box-shadow: var(--edge-up), var(--shadow-2);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  /* Taps pass THROUGH the line to whatever it is sitting on. It dodges marks
+     where it can (three berths, see the module), but Field Notes on a phone
+     puts marked controls at both the top and the bottom of the screen, so
+     somewhere it has to overlap one — and a mark you cannot tap is not a
+     cosmetic problem, it is a control the help has taken away. Only the button
+     catches anything. */
+  pointer-events: none;
+  white-space: nowrap;
+}
+.help-bar-btn { pointer-events: auto; }
+.help-layer.carded .help-bar { display: none; }
+/* The other two berths. Left when a mark sits under the right one; top-centre
+   when both bottom corners are taken — up there it can only cover the view
+   title, which is the cheapest thing on any of these screens. */
+.help-bar[data-dock="bl"] { right: auto; left: 20px; }
+.help-bar[data-dock="tc"] {
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  top: calc(var(--topbar-h) + var(--safe-top) + 10px);
+}
+/* The line shrinks; the button never does. Without this the label pushed DONE
+   clean off a 375px screen — `nowrap` on the bar and a flex child with an
+   implicit `min-width: auto` will happily overflow a box that is 343px wide,
+   and the only control in the whole overlay became untappable. */
+.help-bar-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.help-bar-text::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: 0 0 5px;
+}
+.help-bar-count { color: var(--ink-3); }
+.help-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 7px;
+  padding: 5px 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  color: var(--ink-1);
+  font-family: var(--font-mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.help-bar-btn:hover { border-color: var(--line-3); color: var(--ink-1); }
+.help-bar-btn kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-1);
+  background: var(--surface-0);
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--ink-3);
+}
+
+/* ---- compact ------------------------------------------------------------ */
+
+/* Under 700px the card stops chasing the control and becomes a sheet: there is
+   no side of a phone-width control with room for a 320px card beside it, and
+   the hole still says which one is meant.
+
+   WIDTH only — this also fired on `(pointer: coarse)` until 2026-09-19, which
+   made a sheet of every touchscreen, stretching two sentences across an iPad
+   Pro or a touch laptop. Must stay in step with _isSheet() in the module. */
+@media (max-width: 700px) {
+  .help-card {
+    left: 0;
+    right: 0;
+    top: auto;
+    /* --help-foot is written by the module from the tab bar's measured box, so
+       the sheet sits ON the bar rather than behind it. */
+    bottom: var(--help-foot, 0px);
+    width: 100%;
+    padding: 18px 20px calc(20px + var(--safe-bottom));
+    border-width: 1px 0 0;
+    border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  }
+  /* The same sheet, hung from the top — for a control the view pins to the
+     bottom of the screen, where a bottom sheet would sit right on top of it. */
+  .help-card[data-side="sheet-top"] {
+    top: calc(var(--topbar-h) + var(--safe-top));
+    bottom: auto;
+    padding: 18px 20px 20px;
+    border-width: 0 0 1px;
+    border-radius: 0 0 var(--r-sheet) var(--r-sheet);
+  }
+  .help-card::before { display: none; }
+  /* Two berths on a phone, both full width — there is no corner wide enough for
+     the line here. Above the tab bar by default; under the top bar when the
+     bottom of the screen is where the marked control is, which on a single
+     column is often exactly where it is. */
+  .help-bar,
+  .help-bar[data-dock="bl"] {
+    left: 16px;
+    right: 16px;
+    top: auto;
+    bottom: calc(var(--help-foot, 0px) + var(--safe-bottom) + 12px);
+    transform: none;
+    justify-content: space-between;
+  }
+  .help-bar[data-dock="tc"] {
+    left: 16px;
+    right: 16px;
+    bottom: auto;
+    top: calc(var(--topbar-h) + var(--safe-top) + 10px);
+    transform: none;
+    justify-content: space-between;
+  }
+  .help-bar-text { letter-spacing: 0.1em; }
+  /* A phone has room for the instruction or the count, not both. */
+  .help-bar-count { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-layer { transition: none; }
+  .help-mark { transition: none; }
+}

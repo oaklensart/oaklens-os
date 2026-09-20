@@ -29,7 +29,7 @@ function seedDom() {
   const navCounts = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'friends', 'library', 'audio']
     .map((k) => `<span id="nav-count-${k}"></span>`).join('');
   document.body.innerHTML = `
-    <button class="publish-btn empty" id="publish-btn" data-pending="0"><span class="pip" id="publish-pip"></span> Publish</button>
+    <button class="publish-btn publish-btn--idle" id="publish-btn" data-pending="0"><span class="pip" id="publish-pip"></span> Publish</button>
     <div id="topbar-stage-stat"></div>
     <div id="nav-stage-pip"></div>
     <button class="tab-btn" data-view="publish"><span class="tab-badge zero" id="tab-publish-badge">0</span></button>
@@ -53,7 +53,7 @@ describe('the topbar control is a light, not a counter', () => {
   it('unlit and marked clean when nothing is staged', () => {
     refreshStageIndicators();
     expect(btn().dataset.pending).toBe('0');
-    expect(btn().classList.contains('empty')).toBe(true);
+    expect(btn().classList.contains('publish-btn--idle')).toBe(true);
     expect(btn().textContent).not.toMatch(/\d/);
     expect(document.getElementById('topbar-stage-stat').textContent).toBe('NO PENDING CHANGES');
   });
@@ -64,7 +64,7 @@ describe('the topbar control is a light, not a counter', () => {
     refreshStageIndicators();
 
     expect(btn().dataset.pending).toBe('1');
-    expect(btn().classList.contains('empty')).toBe(false);
+    expect(btn().classList.contains('publish-btn--idle')).toBe(false);
     expect(btn().textContent, 'the count belongs to the strip, not the button').not.toMatch(/\d/);
   });
 
@@ -159,5 +159,49 @@ describe('the pip is not a second SYS lamp', () => {
     // state (the lamp's job), not as "you have work to publish".
     expect(pipRule).not.toMatch(/box-shadow:[^;]*rgba/);
     expect(pipRule).not.toMatch(/animation:/);
+  });
+});
+
+// A control's STATE is a modifier on that control. A block utility is a
+// layout for a whole panel. When the two share a bare word, the utility wins
+// on whatever property it declares — and nothing warns you, because the rule
+// looks authored and the markup looks fine.
+//
+// This is not hypothetical. `#publish-btn` carried `class="publish-btn empty"`
+// from launch until 2026-09-19, while `.empty { padding: 48px 20px }` is the
+// block six renderers use for "// ARCHIVE EMPTY". The button computed 112px
+// tall inside a 52px top bar and overhung it by ~30px in both directions,
+// which put a live Publish click target under the top-right of the content
+// area. It hid for months because the same state dims the border to near
+// black, so the oversized box never read against a dark console.
+describe('no control wears a block utility as its state', () => {
+  const SHELL = readFileSync(join(process.cwd(), 'dev/field-console.html'), 'utf8');
+  const CSS = readFileSync(join(process.cwd(), 'css/field-console.css'), 'utf8');
+
+  // Bare, unscoped rules — the ones that match on a word alone and so can land
+  // on anything that happens to use it.
+  const BLOCK_UTILITIES = [...CSS.matchAll(/^\.([a-z][\w-]*)\s*\{/gm)]
+    .map((m) => m[1])
+    .filter((c) => !c.includes('--'));
+
+  it('found the utilities and the buttons (scanner sanity)', () => {
+    expect(BLOCK_UTILITIES).toContain('empty');
+    expect(SHELL.match(/<button\b/g).length).toBeGreaterThan(30);
+  });
+
+  it.each(['empty', 'hint', 'hint-text', 'filename', 'count'])(
+    'keeps the "%s" block off every button in the shell', (utility) => {
+      const offenders = [...SHELL.matchAll(/<button\b[^>]*class="([^"]+)"[^>]*>/g)]
+        .filter((m) => m[1].split(/\s+/).includes(utility))
+        .map((m) => m[0].slice(0, 90));
+      expect(offenders, `"${utility}" is a block utility — a button needs its own modifier`)
+        .toEqual([]);
+    },
+  );
+
+  it('gives the publish button a namespaced idle state', () => {
+    expect(SHELL).toMatch(/class="publish-btn publish-btn--idle" id="publish-btn"/);
+    expect(CSS).toMatch(/^\.publish-btn--idle \{/m);
+    expect(CSS, 'the old bare-word modifier is gone').not.toMatch(/\.publish-btn\.empty\b/);
   });
 });

@@ -20,7 +20,7 @@ for (const fn of ['renderBuffer', 'renderArchive', 'renderFN', 'fnNewPost',
 globalThis.fetch = async () => new Response('[]', { status: 200 });
 
 const { STATE, sessionTrash, stageChange, clearStage } = await import('../js/console-state.js');
-const { renderPublish, publishToggleChanges } = await import('../js/console-ui.js');
+const { renderPublish, publishToggleChanges, _renderSyncReadout } = await import('../js/console-ui.js');
 
 const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio'];
 const TILES = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'network', 'audio', 'cards'];
@@ -141,5 +141,72 @@ describe('collapse on clear', () => {
     renderPublish();
     expect(panel().style.display).toBe('none');
     expect(document.querySelector('.changes-open')).toBeNull();
+  });
+});
+
+
+// ============================================================================
+// THE SYNC READOUT
+//
+// What a sync brought back used to be one dot-joined sentence assigned to
+// textContent — `✓ synced 4:41:31 PM · buffer:716 · archive:93 · …` for twelve
+// surfaces — which wraps wherever the panel ends, so no surface sits under the
+// one above it and reading "how many cards" means scanning a paragraph. It is
+// a grid now: the verdict on its own line, one cell per surface, name and
+// number in columns that line up because they ARE columns.
+// ============================================================================
+describe('the sync readout', () => {
+  const host = () => document.getElementById('sync-status');
+  const seed = () => { document.body.innerHTML = '<div id="sync-status"></div>'; };
+
+  it('puts the verdict on its own line and one cell per surface', () => {
+    seed();
+    _renderSyncReadout(host(), '✓ synced 4:41:31 PM',
+      [['buffer', '716'], ['archive', '93'], ['cards', '11']]);
+    expect(host().querySelector('.sync-readout-head').textContent)
+      .toBe('✓ synced 4:41:31 PM');
+    const cells = host().querySelectorAll('.sync-readout-cell');
+    expect(cells).toHaveLength(3);
+    expect([...cells].map((c) => c.querySelector('.sync-readout-k').textContent))
+      .toEqual(['buffer', 'archive', 'cards']);
+    expect([...cells].map((c) => c.querySelector('.sync-readout-v').textContent))
+      .toEqual(['716', '93', '11']);
+  });
+
+  it('still reads as one sentence to textContent and to a screen reader', () => {
+    // tests/sync-skip.test.js asserts on this element's textContent, and a
+    // screen reader walks the same tree. The SHAPE changed; the facts did not.
+    seed();
+    _renderSyncReadout(host(), '✓ up to date (29aa99c)', [['posts', '12']]);
+    expect(host().textContent).toContain('up to date (29aa99c)');
+    expect(host().textContent).toContain('posts');
+    expect(host().textContent).toContain('12');
+  });
+
+  it('rebuilds, so a second sync does not stack on the first', () => {
+    seed();
+    _renderSyncReadout(host(), 'first', [['buffer', '1'], ['archive', '2']]);
+    _renderSyncReadout(host(), 'second', [['buffer', '9']]);
+    expect(host().querySelectorAll('.sync-readout-head')).toHaveLength(1);
+    expect(host().querySelectorAll('.sync-readout-cell')).toHaveLength(1);
+    expect(host().textContent).not.toContain('first');
+  });
+
+  it('writes text, never markup — a surface name is data', () => {
+    // The names come back from the worker. They are set with textContent so a
+    // crafted one is a string on screen, not a node in the document.
+    seed();
+    _renderSyncReadout(host(), 'ok', [['<img src=x onerror=alert(1)>', '1']]);
+    expect(host().querySelector('img')).toBeNull();
+    expect(host().querySelector('.sync-readout-k').textContent)
+      .toBe('<img src=x onerror=alert(1)>');
+  });
+
+  it('survives a verdict with nothing to list, and a missing host', () => {
+    seed();
+    _renderSyncReadout(host(), '✓ up to date (29aa99c)', []);
+    expect(host().querySelector('.sync-readout-grid')).toBeNull();
+    expect(host().textContent).toContain('up to date');
+    expect(() => _renderSyncReadout(null, 'x', [['a', '1']])).not.toThrow();
   });
 });

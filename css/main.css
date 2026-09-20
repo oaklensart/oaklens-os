@@ -633,6 +633,13 @@ html {
   border-top: 1px solid var(--line);
 }
 
+/* Clear the fixed footer so the last card isn't clipped behind it. This was a
+   mobile-only rule back when the homepage footer was the only one in flow;
+   now the bar is fixed at every width and the clearance has to be too. */
+.page--home .cl-work {
+  padding-bottom: 52px;
+}
+
 .cl-head {
   display: flex;
   align-items: center;
@@ -1684,14 +1691,18 @@ html {
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Homepage: footer stays in flex column, not fixed */
-.page--home .footer {
-  position: relative;
-  background: var(--black);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  z-index: auto;
-}
+/* THE HOMEPAGE FOOTER IS THE SAME FOOTER. It used to opt out of `fixed` here
+   — `position: relative`, solid black, no blur — from when the homepage was one
+   screen tall and the bar genuinely was the bottom of it. The recent-work grid
+   made the page scroll, so the opt-out quietly turned the site's one persistent
+   piece of chrome into something you had to go looking for: every other page
+   kept its bar on screen, the front door dropped it below the fold (measured
+   2026-09-19 at 1024×768: 1051px of document, bar at y=1012).
+   Removing the override is the whole fix — the homepage now inherits the bar
+   the rest of the site has, including the blur, which is also what makes the
+   `main-footer` view transition between home and anywhere else morph one fixed
+   bar into another instead of a relative box into a fixed one.
+   `.page--home .cl-work` carries the clearance for it. */
 
 .footer-left {
   font-family: var(--font-mono);
@@ -1869,21 +1880,10 @@ html {
     padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
   }
 
-  /* Homepage mobile: footer stays fixed at the bottom of the viewport so it
-     is always visible while scrolling the recent-work grid. */
-  .page--home .footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    /* …and it has to get its stacking back. The desktop `.page--home .footer`
-       rule drops to `z-index: auto` because there the footer is `position:
-       relative` in the flex column and needs no layer of its own. This block
-       makes it fixed again but inherited that `auto`, so the bar floated at
-       level 0 and any positioned card content painted over it. A fixed bar
-       overlaying the page must outrank the page. */
-    z-index: 50;
-  }
+  /* The homepage's own fixed-footer block used to live here, re-stating
+     `position: fixed` and clawing back the `z-index: 50` that the desktop
+     override dropped. Both are the base `.footer` again at every width, so
+     there is nothing left for this breakpoint to say about it. */
 
   /* Homepage mobile — scrolls now (the recent-work grid is taller than one
      screen); the hero still fills the first viewport. */
@@ -1891,11 +1891,6 @@ html {
     min-height: 100svh;
     display: flex;
     flex-direction: column;
-  }
-
-  /* Clear the fixed footer so the last card isn't clipped behind it */
-  .page--home .cl-work {
-    padding-bottom: 52px;
   }
 
   .footer-right {
