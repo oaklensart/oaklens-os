@@ -36,7 +36,14 @@ vi.mock('../site.config.js', async (importOriginal) => {
   }) };
 });
 
-const { handleDevFeed, _internals } = await import('../src/api/devfeed.js');
+// ⚠️ IMPORTED ONCE, HERE, AND THE STORAGE BLOCK BELOW MUST USE THESE BINDINGS.
+// A test further down calls `vi.doUnmock('../site.config.js')` + `resetModules`
+// when it finishes, so any LATER `await import(...)` gets a module reading the
+// REAL config. In this tree that config has a `devFeed` block and the test
+// passes; in the extracted fork's it does not, `warmDevFeed` returns null, and
+// the test fails in every fork while staying green here. Caught by
+// `os-extract.mjs --verify`, which is why that gate exists (CLAUDE.md).
+const { handleDevFeed, warmDevFeed, _internals } = await import('../src/api/devfeed.js');
 
 const ctx = { waitUntil() {} };
 const call = async () => {
@@ -568,5 +575,284 @@ describe('/api/devfeed with no devFeed configured', () => {
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     vi.doUnmock('../site.config.js');
     vi.resetModules();
+  });
+});
+
+// ---- Where the payload LIVES ------------------------------------------------
+//
+// ⚠️ THE BUG THESE ARE WRITTEN AGAINST WAS A LIFETIME BUG, NOT A LOGIC BUG.
+// Everything above pins the stale-while-revalidate *logic*, and that logic was
+// always correct: a warm entry served without fetching, a stale one refreshed
+// in the background. What nothing tested was how long the thing being cached
+// survived. The key carried the deploy id, every push to `main` is a deploy,
+// and a changed key is a purge — so the first visitor after every deploy paid
+// for a full GitHub rebuild. Measured live on 2026-09-20: 5.2s cold against
+// 0.2s warm, and the owner, who visits /dev *because* they just deployed, hit
+// it every single time.
+//
+// A suite can hold a cache warm across a hundred assertions; only a deploy
+// throws it away, and there are no deploys in a test run. So these fake BOTH
+// tiers and change the deploy id by hand.
+// Log: docs/maintenance/2026-09-20-devfeed-cold-after-every-deploy.md
+
+/** A KV namespace that records what was read and written. */
+function fakeKV(seed = {}) {
+  const store = new Map(Object.entries(seed));
+  return {
+    puts: [],
+    async get(key, type) {
+      const raw = store.get(key);
+      if (raw === undefined) return null;
+      return type === 'json' ? JSON.parse(raw) : raw;
+    },
+    async put(key, value) {
+      this.puts.push(key);
+      store.set(key, value);
+    },
+    _raw: store,
+  };
+}
+
+/** `caches.default`, enough of it. Keys by URL, the way the real one does. */
+function fakeCaches(seed = {}) {
+  const store = new Map(Object.entries(seed));
+  const api = {
+    puts: [],
+    async match(key) {
+      const k = key && key.url ? key.url : String(key);
+      const body = store.get(k);
+      return body === undefined ? null : new Response(body);
+    },
+    async put(key, res) {
+      const k = key && key.url ? key.url : String(key);
+      api.puts.push(k);
+      store.set(k, await res.text());
+    },
+    _raw: store,
+  };
+  return api;
+}
+
+const ORIGIN = 'https://example.com';
+const COLO_KEY = _internals.CACHE_KEY(ORIGIN);
+
+/** A believable stored payload, `ageMs` old and built by deploy `deploy`. */
+function storedPayload({ ageMs = 0, deploy = 'v0', extra = {} } = {}) {
+  return JSON.stringify({
+    ok: true,
+    ts: Date.now() - ageMs,
+    deploy,
+    grid: [{ w: 1758326400, d: [1, 1, 1, 1, 1, 1, 1] }],
+    log: [{ repo: 'loud', date: '2026-09-19T00:00:00Z', msg: 'stored', url: '' }],
+    ...extra,
+  });
+}
+
+/** Collect the background work instead of dropping it, then await it. */
+function collectingCtx() {
+  const pending = [];
+  return { waitUntil: (p) => pending.push(p), settle: () => Promise.all(pending) };
+}
+
+/** A GitHub that answers only when told to.
+ *
+ * ⚠️ COUNTING CALLS DOES NOT PROVE THE RESPONSE DIDN'T WAIT. `ctx.waitUntil(p)`
+ * receives a promise that has ALREADY started — the refresh runs up to its
+ * first await before `waitUntil` is even called — so the request count is
+ * non-zero by the time the handler returns, and asserting it was zero fails
+ * against code that is behaving perfectly. The honest question is whether the
+ * response is reachable while the build is still outstanding, so this hangs
+ * every call until `release()` and the assertion is simply that the handler
+ * resolved anyway. */
+function hangingGitHub() {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let calls = 0;
+  vi.stubGlobal('fetch', async (input) => {
+    calls += 1;
+    await gate;
+    return String(input).includes('stats/commit_activity')
+      ? new Response(JSON.stringify(activity(1758326400, 2)), { status: 200 })
+      : new Response('[]', { status: 200 });
+  });
+  return { release: () => release(), get calls() { return calls; } };
+}
+
+describe('/api/devfeed storage — the payload outlives the deploy', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  // THE FIX, in one assertion. A payload in KV answers the request without a
+  // single call to GitHub, whatever this datacenter has or hasn't got.
+  it('serves the stored payload without touching GitHub when the colo is cold', async () => {
+    vi.stubGlobal('caches', { default: fakeCaches() }); // cold datacenter
+    const kv = fakeKV({ [_internals.KV_KEY]: storedPayload() });
+    let github = 0;
+    vi.stubGlobal('fetch', async () => { github += 1; return new Response('[]', { status: 200 }); });
+
+    const url = new URL(`${ORIGIN}/api/devfeed`);
+    const res = await handleDevFeed(new Request(url), { SUBSCRIBERS: kv }, url, ctx);
+    const body = await res.json();
+
+    expect(github).toBe(0);
+    expect(body.log[0].msg).toBe('stored');
+  });
+
+  // ...and the datacenter that had to fall back to KV gets its own copy, or
+  // every visitor routed there pays the KV read forever.
+  it('writes the colo cache through after a KV hit', async () => {
+    const cache = fakeCaches();
+    vi.stubGlobal('caches', { default: cache });
+    const kv = fakeKV({ [_internals.KV_KEY]: storedPayload() });
+    vi.stubGlobal('fetch', async () => new Response('[]', { status: 200 }));
+
+    const url = new URL(`${ORIGIN}/api/devfeed`);
+    const local = collectingCtx();
+    await handleDevFeed(new Request(url), { SUBSCRIBERS: kv }, url, local);
+    await local.settle();
+
+    expect(cache.puts).toContain(COLO_KEY);
+  });
+
+  // THE REGRESSION GUARD. Derived, not restated: whatever the key is, it must
+  // not change when the deploy id does — that equality IS the bug's absence.
+  it('keys the colo cache by origin alone, never by deploy id', async () => {
+    const a = _internals.CACHE_KEY(ORIGIN);
+    const b = _internals.CACHE_KEY(ORIGIN);
+    expect(a).toBe(b);
+    expect(a).not.toMatch(/deploy|version/i);
+    // And the handler agrees: the SAME entry is found under two deploy ids.
+    const cache = fakeCaches({ [COLO_KEY]: storedPayload({ deploy: 'dep-1' }) });
+    vi.stubGlobal('caches', { default: cache });
+    vi.stubGlobal('fetch', async () => new Response('[]', { status: 200 }));
+    const url = new URL(`${ORIGIN}/api/devfeed`);
+    const env = { CF_VERSION_METADATA: { id: 'dep-1' } };
+    const first = await (await handleDevFeed(new Request(url), env, url, ctx)).json();
+    env.CF_VERSION_METADATA = { id: 'dep-2' }; // a deploy happened
+    const second = await (await handleDevFeed(new Request(url), env, url, ctx)).json();
+    expect(second.log[0].msg).toBe(first.log[0].msg);
+  });
+
+  // The property the deploy-keyed key was protecting, kept — and moved off the
+  // request path. A payload built by code that is no longer running is served
+  // AS IS, instantly, and the rebuild happens behind the response.
+  it('serves a superseded payload while the rebuild is still outstanding', async () => {
+    const cache = fakeCaches({ [COLO_KEY]: storedPayload({ deploy: 'old-deploy' }) });
+    vi.stubGlobal('caches', { default: cache });
+    const kv = fakeKV();
+    const gh = hangingGitHub();
+
+    const url = new URL(`${ORIGIN}/api/devfeed`);
+    const env = { SUBSCRIBERS: kv, CF_VERSION_METADATA: { id: 'new-deploy' } };
+    const local = collectingCtx();
+
+    // GitHub has not answered and will not until we say so. The response
+    // arrives anyway — which is the entire five seconds, gone.
+    const body = await (await handleDevFeed(new Request(url), env, url, local)).json();
+    expect(body.log[0].msg).toBe('stored');
+
+    // ...and the rebuild it scheduled is real, not skipped.
+    gh.release();
+    await local.settle();
+    expect(gh.calls).toBeGreaterThan(0);
+    expect(kv.puts).toContain(_internals.KV_KEY);
+  });
+
+  // A fresh payload from the CURRENT deploy is left alone — no refresh, no
+  // redundant write. Without this the check above could pass by rebuilding on
+  // every single request, which is the old cost wearing a new shape.
+  it('leaves a current, fresh payload entirely alone', async () => {
+    const cache = fakeCaches({ [COLO_KEY]: storedPayload({ deploy: 'dep-1' }) });
+    vi.stubGlobal('caches', { default: cache });
+    const kv = fakeKV();
+    let github = 0;
+    vi.stubGlobal('fetch', async () => { github += 1; return new Response('[]', { status: 200 }); });
+
+    const url = new URL(`${ORIGIN}/api/devfeed`);
+    const local = collectingCtx();
+    await handleDevFeed(new Request(url), { SUBSCRIBERS: kv, CF_VERSION_METADATA: { id: 'dep-1' } }, url, local);
+    await local.settle();
+
+    expect(github).toBe(0);
+    expect(kv.puts).toEqual([]);
+    expect(cache.puts).toEqual([]);
+  });
+
+  // Age still triggers a rebuild, and it is still background work.
+  it('refreshes a payload older than the freshness window, behind the response', async () => {
+    const cache = fakeCaches({
+      [COLO_KEY]: storedPayload({ ageMs: _internals.FRESH_MS + 1000, deploy: 'dep-1' }),
+    });
+    vi.stubGlobal('caches', { default: cache });
+    const kv = fakeKV();
+    const gh = hangingGitHub();
+
+    const url = new URL(`${ORIGIN}/api/devfeed`);
+    const local = collectingCtx();
+    const body = await (await handleDevFeed(
+      new Request(url), { SUBSCRIBERS: kv, CF_VERSION_METADATA: { id: 'dep-1' } }, url, local
+    )).json();
+
+    expect(body.log[0].msg).toBe('stored');
+    gh.release();
+    await local.settle();
+    expect(gh.calls).toBeGreaterThan(0);
+  });
+
+  // A build writes the durable tier, which is the only reason any of the above
+  // works a day and four deploys later.
+  it('a build writes KV, not just the datacenter it happened in', async () => {
+    const cache = fakeCaches();
+    vi.stubGlobal('caches', { default: cache });
+    const kv = fakeKV();
+    vi.stubGlobal('fetch', async (input) => (
+      String(input).includes('stats/commit_activity')
+        ? new Response(JSON.stringify(activity(1758326400, 1)), { status: 200 })
+        : new Response('[]', { status: 200 })
+    ));
+
+    const url = new URL(`${ORIGIN}/api/devfeed`);
+    await handleDevFeed(new Request(url), { SUBSCRIBERS: kv }, url, ctx);
+
+    expect(kv.puts).toContain(_internals.KV_KEY);
+    expect(cache.puts).toContain(COLO_KEY);
+    expect(JSON.parse(kv._raw.get(_internals.KV_KEY)).grid.length).toBe(52);
+  });
+
+  // The daily cron is what keeps the page warm for the first visitor rather
+  // than because of them — so it has to write the copy that is still there
+  // tomorrow. Writing only the colo it ran in is what it used to do, and that
+  // entry was orphaned by the next push.
+  it('the cron warm writes the durable copy', async () => {
+    vi.stubGlobal('caches', { default: fakeCaches() });
+    const kv = fakeKV();
+    vi.stubGlobal('fetch', async (input) => (
+      String(input).includes('stats/commit_activity')
+        ? new Response(JSON.stringify(activity(1758326400, 1)), { status: 200 })
+        : new Response('[]', { status: 200 })
+    ));
+
+    await warmDevFeed({ SUBSCRIBERS: kv });
+    expect(kv.puts).toContain(_internals.KV_KEY);
+  });
+
+  // A KV binding that throws must not take the endpoint down with it — a fork
+  // mid-setup, or a namespace that has not been created yet.
+  it('still answers when KV is unavailable', async () => {
+    vi.stubGlobal('caches', { default: fakeCaches() });
+    const kv = {
+      async get() { throw new Error('no namespace'); },
+      async put() { throw new Error('no namespace'); },
+    };
+    vi.stubGlobal('fetch', async (input) => (
+      String(input).includes('stats/commit_activity')
+        ? new Response(JSON.stringify(activity(1758326400, 1)), { status: 200 })
+        : new Response('[]', { status: 200 })
+    ));
+
+    const url = new URL(`${ORIGIN}/api/devfeed`);
+    const res = await handleDevFeed(new Request(url), { SUBSCRIBERS: kv }, url, ctx);
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.grid.length).toBe(52);
   });
 });

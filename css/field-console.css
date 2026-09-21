@@ -6946,7 +6946,13 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   /* THE WELL HOLDS STILL — it is not a scroller, and `container-type: size`
      makes it the container the card measures itself against. Safe here for the
      one reason it is safe anywhere: the well's height comes from the studio
-     grid row, never from its contents. */
+     grid row, never from its contents.
+     ⚠️ WHICH MEANS IT MUST BE TURNED OFF WHERE THAT STOPS BEING TRUE. Below
+     700px the rail drops under the stage and the stage's height becomes `auto`
+     — and a size-contained box is laid out as if it were empty, so `auto`
+     resolved to bare padding and the card painted over the page. The phone band
+     restates `container-type: normal` beside that `height: auto`, and
+     tests/cards-view-css.test.js keeps the two together. */
   overflow: hidden;
   container-type: size;
   display: flex;
@@ -8908,6 +8914,22 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
     height: auto;
     min-height: 0;
     overflow: visible;
+    /* ⚠️ AND THE SIZE CONTAINER GOES WITH THEM — this line is what makes the
+       three above mean anything. The base rule makes the well a
+       `container-type: size` container so `--card-w`'s `100cqh` has a height to
+       read, and it is safe there for the reason stated: the well's height comes
+       from the studio grid row, never from its contents. Here the row is gone
+       and the height is `auto` — and SIZE CONTAINMENT MEANS AN ELEMENT IS SIZED
+       AS IF IT WERE EMPTY, so `auto` resolved to nothing: a 34px stage (its own
+       padding and border) with a 165–440px card overflowing it in both
+       directions, centred, landing ON TOP of the slot ribbon above and SLOT
+       DETAILS below. Every kind did it; a pulse card just made it unmissable,
+       being an opaque tile with a lit ground rather than a photograph that
+       reads as part of the page (owner, 2026-09-20, phone).
+       With `normal`, `100cqh` falls back to the small-viewport height, which is
+       what the base 300px cap wanted anyway — and below 640px the card takes
+       the column and the cap is `100%` regardless. */
+    container-type: normal;
   }
   /* The card sizes to its own content and the stage grows to hold it — the
      desktop "fit the well" sizing is off, because there is no fixed well any

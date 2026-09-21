@@ -42,6 +42,10 @@ describe('GET /api/subscribers/export — internal keys never travel', () => {
       'ratelimit:1.2.3.4': '2',
       'authfail:5.6.7.8': '1',
       '__oaklens_session_secret': 'deadbeef'.repeat(8),
+      // The /dev feed's cached payload shares this namespace too (2026-09-20,
+      // src/api/devfeed.js). Named here so the filter is pinned against the
+      // keys that actually exist, not just the one it was written for.
+      '__devfeed': JSON.stringify({ ok: true, grid: null, log: [] }),
     });
     const res = await handleExport(exportReq(), exportUrl, { ADMIN_KEY: 'the-admin-key', SUBSCRIBERS: kv });
     expect(res.status).toBe(200);

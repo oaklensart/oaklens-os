@@ -25,6 +25,26 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-20 (the card fits on a phone again)
+
+**Nothing to do on merge.**
+
+- **Fixed: on a phone, the card in the Cards view sat on top of the page around
+  it.** Looking at one homepage card in the console on a narrow screen, the card
+  spilled out of its well and overlapped the row of slot buttons above it and
+  the SLOT DETAILS panel below. Every kind of card did it; the plain-coloured
+  ones (a Pulse tile) made it obvious, where a photograph still looked roughly
+  like part of the page.
+
+  **Why.** On a phone the card's well is allowed to grow to whatever the card
+  needs — but the browser was also being told to measure that well *without
+  looking at what is inside it*, which is correct on a desktop, where the well
+  has a fixed size. The two instructions together left the well with no height
+  at all, so the card was drawn outside it. The console now drops the second
+  instruction at the width where the first one stops being true.
+
+---
+
 ## 2026-09-20 (the Barrel is gone from the console)
 
 **Nothing to do on merge.** One optional bit of tidying, below.
@@ -79,6 +99,17 @@ the second item.
 
   Reading a private repo needs your existing `GITHUB_TOKEN` to have access to
   it. Public repos need no token at all.
+
+  **The feed remembers its answer between deploys.** Building it means walking
+  GitHub, which can take several seconds, so it is built at most every half
+  hour, warmed once a day by the site's existing daily job, and kept in your
+  KV namespace — the same one your subscribers live in, under a key called
+  `__devfeed`. Internal keys like that one are already filtered out of your
+  subscriber export, so it will not show up in your list. Nothing for you to
+  set up; if you never switch the feed on, nothing is ever written.
+
+  Visitors never wait for GitHub: whatever was stored last is served
+  immediately, and a new copy is fetched behind the response.
 
 - **The strict security policy now covers everything under `/dev/` except the
   console itself.** Previously any page under `/dev/` was handed the console's

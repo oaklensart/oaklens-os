@@ -28,14 +28,38 @@ import siteConfig from '../shared/config.js';
 import { jsonRes } from '../shared/http.js';
 import { _deployToken } from '../edge/data.js';
 
-// THE KEY CARRIES THE DEPLOY, the same way the data-JSON cache does (see
-// src/edge/data.js). Without it a deploy cannot fix this endpoint: the cached
-// payload survives the new code and keeps serving the old answer for up to
-// FRESH_MS afterwards. That cost half an hour of this feature's debugging —
-// a fallback shipped at 18:58 was still invisible at 19:09 because the payload
-// beside it had been built at 18:54. Nothing is purged and nothing needs to
-// be; entries under the previous id are orphaned and age out on their own.
-const CACHE_KEY = (origin, env) => `${origin}/__devfeed_cache/${_deployToken(env)}`;
+// TWO TIERS, AND THE SLOW ONE IS THE SOURCE OF TRUTH.
+//
+//   KV   — global, survives deploys. This is where the payload LIVES.
+//   colo — caches.default, per-datacenter. A read-through in front of KV.
+//
+// ⚠️ THE KEY USED TO CARRY THE DEPLOY ID and that is what made this endpoint
+// feel broken. Every push to `main` is a deploy, a deploy changed the key, and
+// a changed key is a purge — so the first visitor after every push paid for a
+// full GitHub rebuild. Measured live on 2026-09-20: 5.2s cold against 0.2s
+// warm, and the person most reliably hitting it was the owner, whose visit to
+// /dev is usually *because* they just deployed. On top of that `caches.default`
+// is per-colo, so a warm entry in one datacenter does nothing for a visitor
+// routed to another, and the daily cron warm wrote one colo under one deploy
+// id and was orphaned by the next push — real work almost nothing ever read.
+//
+// The deploy id did solve something real: without it a fix to this endpoint
+// stays invisible for up to FRESH_MS because the old payload outlives the new
+// code (half an hour of this feature's own debugging went to exactly that).
+// So it is still here — it just moved OUT of the key and INTO the payload.
+// A payload built by a previous deploy is served instantly and the deploy
+// change is what schedules the background refresh. Same property, and the
+// cost is one stale response instead of five seconds for everybody.
+const CACHE_KEY = (origin) => `${origin}/__devfeed_cache`;
+
+// ⚠️ ONE KV KEY, IN THE NAMESPACE THAT ALREADY EXISTS. `SUBSCRIBERS` is the
+// engine's only KV binding, so using it costs a fork nothing — a new namespace
+// would make every fork provision storage for a feature that ships switched
+// off. The namespace already has a convention for this: a `__`-prefixed key
+// with no `@` in it is internal, and the subscriber export filters exactly
+// that shape (src/api/subscribers.js — `__oaklens_session_secret` lives here
+// the same way). tests/subscriber-export.test.js pins that it stays filtered.
+const KV_KEY = '__devfeed';
 
 // The edge cache, or null where there isn't one. `caches` is a Workers global
 // and simply does not exist under Node — so every reference has to be guarded
@@ -44,6 +68,14 @@ const CACHE_KEY = (origin, env) => `${origin}/__devfeed_cache/${_deployToken(env
 // Without a cache the endpoint still answers; it just fetches every time.
 function edgeCache() {
   return (typeof caches !== 'undefined' && caches && caches.default) || null;
+}
+
+// ...and the KV namespace, or null. Guarded for the same reason: the tests
+// call the handler with a bare `{}` env, and a fork mid-setup may not have
+// bound it yet. No KV means no persistence, which is where this started —
+// correct, just slower.
+function feedStore(env) {
+  return (env && env.SUBSCRIBERS) || null;
 }
 
 // Revalidate in the background after this long. Deliberately not tight:
@@ -347,7 +379,7 @@ async function buildLog(repos, token) {
     .slice(0, LOG_MAX);
 }
 
-// Fetch both halves and write the cache. Safe inside ctx.waitUntil.
+// Fetch both halves and write both tiers. Safe inside ctx.waitUntil.
 export async function refreshDevFeed(origin, env, previous) {
   const cfg = feedConfig();
   if (!cfg) return null;
@@ -360,7 +392,10 @@ export async function refreshDevFeed(origin, env, previous) {
       cfg.log.length ? buildLog(cfg.log, token) : [],
     ]);
     const { grid, asked, answered, contributing, computing, truncated } = gridResult;
-    const payload = { ok: true, ts: Date.now(), grid, log };
+    // `deploy` is what used to be in the cache key. Carried in the payload
+    // instead, it costs a reader nothing and still lets the handler notice
+    // that this answer was built by code that is no longer running.
+    const payload = { ok: true, ts: Date.now(), deploy: _deployToken(env), grid, log };
 
     // How many repos were asked, how many replied, and how many had anything
     // to say. COUNTS ONLY — never which — so this stays on the safe side of
@@ -380,18 +415,22 @@ export async function refreshDevFeed(origin, env, previous) {
       payload.provisional = true;
       payload.attempts = ((previous && previous.attempts) || 0) + 1;
     }
-    const cache = edgeCache();
-    if (cache) await cache.put(CACHE_KEY(origin, env), new Response(
-      JSON.stringify(payload),
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          // Long max-age so the entry stays SERVABLE; `ts` above is what
-          // decides freshness. Same split the weather cache uses.
-          'Cache-Control': 'public, max-age=86400',
-        },
+    const body = JSON.stringify(payload);
+
+    // KV FIRST, because it is the copy that has to survive. A colo cache write
+    // that succeeds while the KV write fails leaves one datacenter fast and
+    // the next deploy back where this started, so the durable tier is the one
+    // we wait on and the one whose failure is worth a log line.
+    const store = feedStore(env);
+    if (store) {
+      try {
+        await store.put(KV_KEY, body);
+      } catch (err) {
+        console.error('[devfeed] KV write failed:', err.message);
       }
-    ));
+    }
+
+    await writeColoCache(origin, body);
     return payload;
   } catch (err) {
     console.error('[devfeed] refresh failed:', err.message);
@@ -399,17 +438,62 @@ export async function refreshDevFeed(origin, env, previous) {
   }
 }
 
-async function readCache(origin, env) {
+// The per-colo copy. Long max-age so the entry stays SERVABLE; the payload's
+// own `ts` is what decides freshness. Same split the weather cache uses.
+async function writeColoCache(origin, body) {
+  const cache = edgeCache();
+  if (!cache) return;
+  try {
+    await cache.put(CACHE_KEY(origin), new Response(body, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=86400',
+      },
+    }));
+  } catch (err) {
+    console.error('[devfeed] colo cache write failed:', err.message);
+  }
+}
+
+function usable(payload) {
+  return payload && payload.ok ? payload : null;
+}
+
+// Read the fast tier only. Never touches KV, never touches GitHub — so it is
+// safe anywhere a response is already in flight.
+async function readColoCache(origin) {
   const cache = edgeCache();
   if (!cache) return null;
-  const hit = await cache.match(new Request(CACHE_KEY(origin, env)));
+  const hit = await cache.match(new Request(CACHE_KEY(origin)));
   if (!hit) return null;
   try {
-    const payload = await hit.json();
-    return payload && payload.ok ? payload : null;
+    return usable(await hit.json());
   } catch {
     return null;
   }
+}
+
+// ...and the durable tier. A KV read is slower than a colo hit and far faster
+// than GitHub, which is the whole point: this is what a deploy, a cold colo or
+// a quiet week falls back to instead of a five-second rebuild.
+async function readStore(env) {
+  const store = feedStore(env);
+  if (!store) return null;
+  try {
+    return usable(await store.get(KV_KEY, 'json'));
+  } catch (err) {
+    console.error('[devfeed] KV read failed:', err.message);
+    return null;
+  }
+}
+
+// Both tiers, fast one first. Says WHERE it came from, because a KV hit means
+// this colo has no copy yet and should be given one.
+async function readCache(origin, env) {
+  const colo = await readColoCache(origin);
+  if (colo) return { payload: colo, from: 'colo' };
+  const stored = await readStore(env);
+  return stored ? { payload: stored, from: 'kv' } : null;
 }
 
 // ---- Daily warm (cron) ----
@@ -420,15 +504,20 @@ async function readCache(origin, env) {
 export async function warmDevFeed(env) {
   const origin = String(siteConfig.url || '').replace(/\/+$/, '');
   if (!origin || !feedConfig()) return null;
-  return refreshDevFeed(origin, env, await readCache(origin, env));
+  // The previous payload only supplies `attempts`, so the KV copy is the right
+  // one to read here — it is the one that is still there a day later.
+  return refreshDevFeed(origin, env, await readStore(env));
 }
 
 // ---- GET /api/devfeed ----
 //
-// Cache-first. A warm entry answers instantly and refreshes in the background
-// past FRESH_MS; only a COLD cache waits on GitHub, and it waits here rather
-// than on any HTML response — the page fetches this after paint, so nothing
-// about the document's TTFB depends on GitHub being up.
+// Cache-first, across both tiers. A stored payload answers instantly however
+// old it is and whatever built it; refreshing is always background work. Only
+// a genuinely EMPTY store waits on GitHub — which, now that the payload
+// survives deploys, is about once in the life of an install rather than once
+// per push. And it waits here rather than on any HTML response: the page
+// fetches this after paint, so nothing about the document's TTFB depends on
+// GitHub being up.
 export async function handleDevFeed(request, env, url, ctx) {
   const cfg = feedConfig();
   if (!cfg) {
@@ -439,20 +528,30 @@ export async function handleDevFeed(request, env, url, ctx) {
   }
 
   const origin = url.origin;
-  const cached = await readCache(origin, env);
+  const hit = await readCache(origin, env);
 
-  if (cached) {
+  if (hit) {
+    const cached = hit.payload;
     const retrying = cached.provisional
       && (cached.attempts || 0) < PROVISIONAL_MAX_ATTEMPTS;
     const window = retrying ? PROVISIONAL_FRESH_MS : FRESH_MS;
-    if (Date.now() - (cached.ts || 0) > window) {
+    // Two reasons to rebuild, and NEITHER of them delays this response.
+    // The deploy check is what the old cache key did by throwing the payload
+    // away; done here it costs one stale answer instead of a cold build.
+    const aged = Date.now() - (cached.ts || 0) > window;
+    const superseded = cached.deploy !== _deployToken(env);
+    if (aged || superseded) {
       ctx.waitUntil(refreshDevFeed(origin, env, cached));
+    } else if (hit.from === 'kv') {
+      // Came from the durable tier, so this datacenter has no copy. Give it
+      // one — otherwise every visitor routed here pays the KV read forever.
+      ctx.waitUntil(writeColoCache(origin, JSON.stringify(cached)));
     }
     return jsonRes(cached, 200);
   }
 
   const fresh = await refreshDevFeed(origin, env, null);
-  // Upstream unreachable on a cold cache: an honest empty, not a 500. The page
+  // Upstream unreachable on a cold store: an honest empty, not a 500. The page
   // renders its quiet state and the next visitor probably gets the real thing.
   return jsonRes(fresh || { ok: true, ts: Date.now(), grid: null, log: [] }, 200);
 }
@@ -462,4 +561,7 @@ export const _internals = {
   feedConfig, buildGrid, buildLog,
   LOG_MAX, SUBJECT_MAX, FRESH_MS, PROVISIONAL_FRESH_MS, PROVISIONAL_MAX_ATTEMPTS,
   COMMIT_BUDGET_WITH_TOKEN, COMMIT_BUDGET_ANONYMOUS,
+  // The two storage addresses, so a test can DERIVE where it expects to find
+  // the payload instead of restating the string and drifting from it.
+  CACHE_KEY, KV_KEY,
 };

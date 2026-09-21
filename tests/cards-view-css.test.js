@@ -577,4 +577,45 @@ describe('the overlay layout is described wherever its card is drawn', () => {
     expect(MAIN).toMatch(/\.wk-card\s*\{[\s\S]*?isolation:\s*isolate/);
     expect(CSS).toMatch(/\.card-face \.wk-card\s*\{[\s\S]*?isolation:\s*isolate/);
   });
+
+  it('turns size containment OFF wherever the well stops being a fixed box', () => {
+    // ⚠️ SIZE CONTAINMENT AND `height: auto` ARE A CONTRADICTION, and CSS
+    // resolves it in favour of the containment: a `container-type: size` box is
+    // laid out AS IF IT WERE EMPTY, so `auto` comes out as nothing but padding.
+    //
+    // That is what shipped on the phone (owner, 2026-09-20). The studio well is
+    // a size container so `--card-w`'s `100cqh` has a height to read — safe
+    // while the well's height comes from the studio grid row — but below 700px
+    // the rail drops under the stage, the view unbinds and the stage's height
+    // becomes `auto`. The containment stayed, the stage collapsed to 34px, and
+    // every card overflowed it in both directions and painted OVER the slot
+    // ribbon above and SLOT DETAILS below. A pulse card made it unmissable: an
+    // opaque tile with a lit ground rather than a photograph that reads as part
+    // of the page.
+    //
+    // `.cards-grid` got this pairing right at its own breakpoint from the
+    // start, which is why this asserts both: the rule is the pattern, not the
+    // one box that forgot it.
+    const band = (open, close) => {
+      const a = CSS.indexOf(open);
+      expect(a, `the ${open} band moved`).toBeGreaterThan(-1);
+      const b = CSS.indexOf(close, a);
+      expect(b, `the band after ${open} moved`).toBeGreaterThan(a);
+      return CSS.slice(a, b);
+    };
+
+    const unbound = band('@media (max-width: 699px)', '@media (max-width: 640px)');
+    // The stage takes its own height here …
+    expect(unbound).toMatch(/\.studio-stage[\s\S]*?\{[^}]*height: auto/);
+    // … so it must stop being a size container in the same rule.
+    expect(
+      unbound,
+      'the phone stage takes height:auto but is still container-type:size — '
+      + 'it will collapse to its padding and the card will paint over the page',
+    ).toMatch(/\.studio-stage[\s\S]*?\{[^}]*container-type: normal/);
+
+    // The grid does the same thing at 900px, where its rows go natural.
+    const grid = band('@media (max-width: 900px)', '@media (max-width: 560px)');
+    expect(grid).toMatch(/\.cards-grid\s*\{[^}]*container-type: normal/);
+  });
 });
