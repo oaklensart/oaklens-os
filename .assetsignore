@@ -72,6 +72,15 @@ dev/*.md
 # never a web asset. dev/manifest.webmanifest is a different extension and still
 # serves; nothing under dev/ fetches a .json.
 dev/*.json
+# Design prototypes under /dev/ — repo-only, never a web asset. The console
+# and the two project pages are the only HTML down here that is meant to be
+# reachable; a mockup is a thing you open locally while deciding something.
+# A lighting mockup sat here untracked on 2026-09-20, and committed it would
+# have been a live page at /dev/lighting-mockup.html — HUD sliders, debug
+# controls and all — because the assets dir is the repo root and serves by
+# default. Glob, not a filename: the next prototype will have another name.
+dev/*-mockup.html
+dev/*-prototype.html
 # Tooling / build output / CI — never served.
 tests
 vitest.config.js

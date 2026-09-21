@@ -2,9 +2,11 @@
 // Set per-response in the Worker (not in _headers) so it can be config-derived
 // and differ by surface. The public site runs a strict script-src: no
 // 'unsafe-inline', with the one inline block every page needs — the pre-paint
-// mode-resolution script in <head> — allowed by its sha256 hash. /dev (the
-// Field Console) and /c/ (the portal) still carry inline logic, so they get a
-// relaxed policy that keeps 'unsafe-inline'.
+// mode-resolution script in <head> — allowed by its sha256 hash. Only the
+// Field Console documents and /c/ (the portal) still carry inline logic, so
+// only those get a relaxed policy that keeps 'unsafe-inline'. The rest of
+// /dev/ — the public project pages — is strict like any other public page
+// (see isAdminSurface at the foot of this file).
 //
 // PREPAINT_CSP_HASH must match the byte-exact contents of that inline block;
 // tests/csp.test.js recomputes it from the served pages and fails if it drifts.
@@ -15,7 +17,7 @@ import { cdnBase } from './site.js';
 export const PREPAINT_CSP_HASH = "'sha256-eKGihvdTeSS/Kojs21/kofBNpwKQjXgvZtiAkYR2Z4c='";
 
 // The console's two pinned, SRI'd libraries (exifr + jszip) load from jsDelivr.
-// That is a /dev need only — the published site ships zero third-party runtime
+// That is a console need only — the published site ships zero third-party runtime
 // JS — so the host belongs on the relaxed policy and nowhere else. It sat in
 // the strict policy until 2026-08-06, quietly pre-authorizing a CDN for every
 // public page that has no business calling one.
@@ -118,23 +120,31 @@ export const STATIC_SECURITY_HEADERS = Object.freeze({
  * headers plus the surface-appropriate CSP. Spread it into a `headers` object
  * literal, or iterate it onto an existing Response.
  * @param {string} origin request origin (the CSP's CDN host is derived from it)
- * @param {boolean} strict false only for the admin surfaces (/dev, /c/)
+ * @param {boolean} strict false only for the admin surfaces (the console
+ *   documents under /dev/, and /c/) — see isAdminSurface
  */
 export function securityHeaders(origin, strict) {
   return { ...STATIC_SECURITY_HEADERS, 'Content-Security-Policy': buildCsp(origin, strict) };
 }
 
 // Copy a response and stamp the surface-appropriate CSP plus the static
-// security headers. /dev + /c/ keep 'unsafe-inline'; everything else is strict.
+// security headers. The console and the portal keep 'unsafe-inline'; every
+// other surface — including everything else under /dev/ — is strict.
 //
-// ⚠️ SEGMENT MATCH, NOT PREFIX MATCH. This was `startsWith('/dev')` until
-// 2026-09-16, which is true of `/devlog`, `/developer` and anything else a
-// future page might be called — and each would have been handed the ADMIN
-// CSP, quietly re-allowing 'unsafe-inline' on a public page. Nothing named
-// that exists today; the point is that adding one would have been silent.
-// `/c/` was always written with its slash and was never exposed.
+// ⚠️ NAMED DOCUMENTS, NOT A PREFIX. This matched the whole `/dev` subtree
+// until 2026-09-20, on the reasoning that /dev WAS the console. It stopped
+// being true the moment /dev became a public landing page: a marketing page
+// with no inline script of its own was being served 'unsafe-inline' plus a
+// pre-authorised third-party CDN, purely because of where it sat in the URL
+// space. The relaxed policy exists for two documents that genuinely carry
+// inline logic; naming them is the only way the list cannot quietly grow.
+//
+// (The earlier fix here — a segment match, so `/devlog` and `/developer`
+// could not inherit the admin policy — is subsumed: nothing inherits it now.)
 const isAdminSurface = (pathname) =>
-  pathname === '/dev' || pathname.startsWith('/dev/');
+  pathname === '/dev/field-console'
+  || pathname === '/dev/field-console.html'
+  || pathname === '/dev/console-gate.html';
 
 export function withCsp(resp, origin, pathname) {
   const strict = !isAdminSurface(pathname);

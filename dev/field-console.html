@@ -44,14 +44,14 @@ try {
      else. It is a <script src>, not a module, so its version lives on this tag;
      the import-map entry beside the console modules exists so dev/sw.js and
      index.html can never disagree with it (tests/guards.test.js). -->
-<script src="/js/recent-index.js?v=33" defer></script>
+<script src="/js/recent-index.js?v=34" defer></script>
 <!-- The shared audio module, loaded for the same reason and on the same terms:
      the SETS shelf resolves "what does this set play" through
      AudioPlayer.resolveSetTracks rather than carrying a second copy of it. Its
      DOM half bails here too — no player is mounted in this document. -->
 <script src="/js/audio-player.js?v=9" defer></script>
 
-<link rel="stylesheet" href="/css/field-console.css?v=99">
+<link rel="stylesheet" href="/css/field-console.css?v=100">
 </head>
 <body>
 
@@ -117,10 +117,6 @@ try {
       <button class="nav-btn" data-view="wall" onclick="showView('wall')">
         <span class="nav-icon">▤</span> Wall
         <span class="nav-count" id="nav-count-wall">0</span>
-      </button>
-      <button class="nav-btn" data-view="barrel" onclick="showView('barrel')">
-        <span class="nav-icon">◈</span> Barrel
-        <span class="nav-count" id="nav-count-barrel">0</span>
       </button>
       <button class="nav-btn" data-view="friends" onclick="showView('friends')">
         <span class="nav-icon">⬡</span> Network
@@ -593,39 +589,6 @@ try {
       <div class="list-table" id="wall-list"></div>
     </section>
 
-    <section class="view" id="view-barrel">
-      <div class="view-header">
-        <div>
-          <div class="view-title">CHANGELOG <em>BARREL</em></div>
-          <div class="view-sub">// HORIZONTAL TIMELINE · EXPORTS TO /data/barrel.json</div>
-        </div>
-        <div class="view-meta">
-          <div><span class="accent">SORTED BY DATE</span></div>
-          <div id="barrel-stats">— entries</div>
-        </div>
-      </div>
-
-      <div class="entry-form-card">
-        <div class="entry-form-title">
-          ✦ ADD MANUAL ENTRY
-          <span class="entry-form-note">// MILESTONES · THROWBACKS · COLLABS · OUTBOUND LINKS</span>
-        </div>
-        <div class="entry-form-row barrel-cols">
-          <input class="field-input" id="barrel-date" placeholder="MM.DD">
-          <input class="field-input" id="barrel-title" placeholder="✦ Two years on the platform">
-          <input class="field-input" id="barrel-url" placeholder="/field-notes/post?slug=fn-008  or  https://...">
-          <button class="btn btn-stage" onclick="barrelAdd()">+ Add</button>
-          <button class="btn btn-ghost btn-sm" id="barrel-cancel-btn" onclick="barrelClearEdit()" style="display:none;">Cancel</button>
-        </div>
-        <div class="hint-text">
-          External URLs (https://...) get an outbound <span class="accent">↗</span> glyph automatically.
-          Auto-entries from FN// posts and Archive frames appear below — they have an <span style="color: var(--text-dim);">AUTO</span> tag.
-        </div>
-      </div>
-
-      <div class="list-table" id="barrel-list"></div>
-    </section>
-
     <section class="view" id="view-friends">
       <div class="view-header">
         <div>
@@ -882,11 +845,6 @@ try {
           <div class="label">Wall</div>
           <div class="count" id="sum-count-wall">0</div>
           <div class="delta" id="sum-delta-wall"></div>
-        </div>
-        <div class="summary-card" id="sum-barrel" onclick="publishToggleChanges('barrel')">
-          <div class="label">Barrel</div>
-          <div class="count" id="sum-count-barrel">0</div>
-          <div class="delta" id="sum-delta-barrel"></div>
         </div>
         <div class="summary-card" id="sum-network" onclick="publishToggleChanges('network')">
           <div class="label">Network</div>
@@ -1145,10 +1103,6 @@ try {
     <button class="sheet-item" data-view="wall" onclick="sheetGo('wall')">
       <span class="sheet-icon">▤</span> Wall
       <span class="sheet-count" id="sheet-count-wall">0</span>
-    </button>
-    <button class="sheet-item" data-view="barrel" onclick="sheetGo('barrel')">
-      <span class="sheet-icon">◈</span> Barrel
-      <span class="sheet-count" id="sheet-count-barrel">0</span>
     </button>
     <button class="sheet-item" data-view="friends" onclick="sheetGo('friends')">
       <span class="sheet-icon">⬡</span> Network
@@ -1532,40 +1486,40 @@ try {
   "imports": {
     "/js/console-telemetry.js": "/js/console-telemetry.js?v=2",
     "/js/console-api.js":       "/js/console-api.js?v=12",
-    "/js/console-state.js":     "/js/console-state.js?v=16",
-    "/js/console-ui.js":        "/js/console-ui.js?v=66",
-    "/js/console/chrome.js":    "/js/console/chrome.js?v=18",
+    "/js/console-state.js":     "/js/console-state.js?v=17",
+    "/js/console-ui.js":        "/js/console-ui.js?v=67",
+    "/js/console/chrome.js":    "/js/console/chrome.js?v=19",
     "/js/console/lighting.js":  "/js/console/lighting.js?v=2",
-    "/js/console/help.js":      "/js/console/help.js?v=6",
+    "/js/console/help.js":      "/js/console/help.js?v=7",
     "/js/console/assets.js":    "/js/console/assets.js?v=5",
     "/js/console/utils.js":     "/js/console/utils.js?v=3",
     "/js/console/sync.js":      "/js/console/sync.js?v=1",
     "/js/console/upload.js":    "/js/console/upload.js?v=4",
-    "/js/console/more-views.js": "/js/console/more-views.js?v=5",
-    "/js/console/archive.js":   "/js/console/archive.js?v=4",
+    "/js/console/more-views.js": "/js/console/more-views.js?v=6",
+    "/js/console/archive.js":   "/js/console/archive.js?v=5",
     "/js/console/buffer.js":    "/js/console/buffer.js?v=5",
-    "/js/console/fn-editor.js": "/js/console/fn-editor.js?v=8",
+    "/js/console/fn-editor.js": "/js/console/fn-editor.js?v=9",
     "/js/console/card-paint.js": "/js/console/card-paint.js?v=7",
     "/js/console/focal.js":     "/js/console/focal.js?v=15",
     "/js/console/share.js":     "/js/console/share.js?v=4",
     "/js/console/asset-library.js": "/js/console/asset-library.js?v=3",
     "/js/console/audio.js":     "/js/console/audio.js?v=16",
     "/js/console/cards.js":     "/js/console/cards.js?v=33",
-    "/js/console/publish.js":   "/js/console/publish.js?v=30",
+    "/js/console/publish.js":   "/js/console/publish.js?v=31",
     "/js/console/session.js":   "/js/console/session.js?v=9",
     "/js/console/bench.js":     "/js/console/bench.js?v=1",
     "/js/pulse-packs.js":       "/js/pulse-packs.js?v=3",
     "/js/console/pulse.js":     "/js/console/pulse.js?v=4",
-    "/js/console/init.js":      "/js/console/init.js?v=14",
+    "/js/console/init.js":      "/js/console/init.js?v=15",
     "/js/markdown-engine.js":   "/js/markdown-engine.js?v=5",
-    "/js/recent-index.js":      "/js/recent-index.js?v=33",
+    "/js/recent-index.js":      "/js/recent-index.js?v=34",
     "/js/audio-player.js":      "/js/audio-player.js?v=9",
     "/js/jpeg-privacy.js":      "/js/jpeg-privacy.js?v=1",
     "/js/raw-lens.js":          "/js/raw-lens.js?v=5",
     "/js/raw-extract.js":       "/js/raw-extract.js?v=4",
     "/js/site-export.js":       "/js/site-export.js?v=4",
     "/js/site-export-core.js":  "/js/site-export-core.js?v=3",
-    "/js/export-manifest.js":   "/js/export-manifest.js?v=19"
+    "/js/export-manifest.js":   "/js/export-manifest.js?v=20"
   }
 }
 </script>

@@ -31,7 +31,7 @@ vi.mock('../js/console/fn-editor.js', async (importOriginal) => ({
 }));
 vi.mock('../js/console/more-views.js', async (importOriginal) => ({
   ...(await importOriginal()),
-  renderWall: () => {}, renderBarrel: () => {}, renderNetwork: () => {}, renderLibrary: () => {},
+  renderWall: () => {}, renderNetwork: () => {}, renderLibrary: () => {},
 }));
 vi.mock('../js/console/audio.js', async (importOriginal) => ({
   ...(await importOriginal()), renderAudio: () => {},
@@ -41,7 +41,7 @@ vi.mock('../js/console/audio.js', async (importOriginal) => ({
 globalThis.refreshStageIndicators = () => {};
 globalThis.renderTrash = () => {};
 for (const fn of ['renderBuffer', 'renderArchive', 'renderFN', 'fnNewPost',
-  'renderWall', 'renderBarrel', 'renderNetwork', 'renderLibrary', 'renderAudio']) {
+  'renderWall', 'renderNetwork', 'renderLibrary', 'renderAudio']) {
   globalThis[fn] = () => {};
 }
 globalThis.fetch = async () => new Response('[]', { status: 200 });
@@ -50,7 +50,7 @@ const { STATE, sessionTrash, stageChange, clearStage, trashItem } =
   await import('../js/console-state.js');
 const { importIntoSurface, clearImported } = await import('../js/console-ui.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'friends', 'library', 'audio', 'cards'];
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="toast-host"></div>';
@@ -144,7 +144,7 @@ describe('importIntoSurface — local dirty edits survive the replace', () => {
 describe('clearImported — the same protection', () => {
   it('keeps a dirty imported entry when imported data is cleared', () => {
     document.body.innerHTML += '<div id="sync-status"></div>';
-    const sumCards = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'network', 'audio', 'cards']
+    const sumCards = ['buffer', 'archive', 'fn', 'wall', 'network', 'audio', 'cards']
       .map((k) => `<div id="sum-${k}"><span id="sum-count-${k}"></span><span id="sum-delta-${k}"></span></div>`)
       .join('');
     document.body.innerHTML += `${sumCards}<span id="sum-count-library"></span>`;

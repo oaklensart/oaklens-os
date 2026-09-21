@@ -366,7 +366,6 @@ export async function handleSync(request, env) {
     'data/archive.json',
     'data/posts.json',
     'data/wallpapers.json',
-    'data/barrel.json',
     'data/friends.json',
     'data/library.json',
     // audio was missing here until 2026-08-31. Latent, because the console

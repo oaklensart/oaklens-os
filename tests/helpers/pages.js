@@ -42,11 +42,15 @@ export const CHROME_PAGES = [
 /**
  * Every served page with a themed <head> — the chrome pages plus the
  * sub-pages that render their own layout (buffer, single post) and the
- * `/dev` landing page where one is shipped.
+ * `/dev` project pages where they are shipped.
  */
 export const THEMED_PAGES = [
   ...CHROME_PAGES,
   'archive/buffer/index.html',
   'field-notes/post.html',
+  // The two public pages under /dev/: the project index and the Fixxer page it
+  // links to. Neither ships in the extracted tree (both are OAKLENS marketing,
+  // not engine), which is exactly what `present` is for.
   'dev/index.html',
+  'dev/fixxer/index.html',
 ].filter(present);

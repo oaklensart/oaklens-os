@@ -104,7 +104,7 @@ const post = (fnId, over) => ({
 });
 
 const emptyStaged = () => ({
-  buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0,
+  buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0, audio: 0,
 });
 
 beforeEach(() => {
@@ -123,7 +123,6 @@ beforeEach(() => {
   STATE.posts = [];
   STATE.audio = [];
   STATE.wallpapers = [];
-  STATE.barrel = [];
   STATE.friends = [];
   STATE.library = [];
   STATE.staged = emptyStaged();

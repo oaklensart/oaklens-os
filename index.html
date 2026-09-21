@@ -22,12 +22,12 @@
   if (light) d.setAttribute('data-theme', 'light');
 })();
 </script>
-<link rel="stylesheet" href="css/main.css?v=42">
+<link rel="stylesheet" href="css/main.css?v=43">
 <script src="/js/mode-toggle.js?v=1" defer></script>
 <!-- Loaded before recent-index so the audio card can build its player. Both
      are defer'd, so they run in document order. -->
 <script src="/js/audio-player.js?v=9" defer></script>
-<script src="/js/recent-index.js?v=33" defer></script>
+<script src="/js/recent-index.js?v=34" defer></script>
 <link rel="sitemap" type="application/xml" href="/sitemap.xml">
 <!-- Split-hero LCP image is preloaded by the worker from site.config.js splitHero. -->
 <style>
@@ -481,10 +481,10 @@
   </section>
 
   <!-- ============ RECENT WORK ============
-       Replaces the barrel ticker (decision 2). Archive frames render as photo
-       cards, Field Notes as typographic text cards — newest first, rendered by
-       js/recent-index.js into #recent-index. Shows on all presets. barrel.json
-       stays for the console/manifest; the homepage just no longer renders it. -->
+       Archive frames render as photo cards, Field Notes as typographic text
+       cards — newest first, rendered by js/recent-index.js into #recent-index.
+       Shows on all presets. Replaced the changelog ticker, whose data file and
+       console surface were retired outright on 2026-09-20. -->
   <section class="cl-work">
     <div class="cl-head">
       <span class="cl-eyebrow">Recent work</span>

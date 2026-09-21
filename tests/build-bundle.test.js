@@ -70,7 +70,6 @@ function seedState() {
     { id: 'w-2', title: 'W2', added_at: '2026-04-02' },
     { id: 'w-err', _uploading: true },                                // filtered
   ];
-  STATE.barrel = [{ id: 'b-1', date: '2026-05-01', title: 'B1', url: 'https://example.test/1', _imported: true }];
   STATE.friends = [
     { id: 'fr-1', name: 'N1', tag: 'T', location: 'L', url: 'https://example.test/f', added_at: '2026-06-01' },
     { id: 'fr-2', name: 'N2' },
@@ -116,7 +115,7 @@ function seedState() {
       title: 'Should not publish', media: 'gone.webp', _imported: true,
     },
   ];
-  STATE.staged = { buffer: 1, archive: 1, posts: 1, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 1 };
+  STATE.staged = { buffer: 1, archive: 1, posts: 1, wallpapers: 0, friends: 0, library: 0, audio: 1 };
 }
 
 const parse = (name) => JSON.parse(bundle[name]);
@@ -136,7 +135,6 @@ describe('buildBundle()', () => {
       'data/archive.json',
       'data/audio-sets.json',
       'data/audio.json',
-      'data/barrel.json',
       'data/buffer.json',
       'data/cards.json',
       'data/friends.json',
@@ -283,10 +281,6 @@ describe('buildBundle()', () => {
   it('a minimal composed card emits nothing it was not given', () => {
     const [, minimal] = parse('data/cards.json');
     expect(Object.keys(minimal).sort()).toEqual(['added_at', 'id', 'order', 'title']);
-  });
-
-  it('barrel passes entries through, minus the _imported marker', () => {
-    expect(keysOf('data/barrel.json')).toEqual(['date', 'id', 'title', 'url']);
   });
 
   // ---- filters ----

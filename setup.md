@@ -260,7 +260,7 @@ npx wrangler secret put ADMIN_KEY
 
 **Then prove the pair works, end to end — thirty seconds.** In the Field
 Console, open **Publish** and press **↓ Sync from GitHub**. Green with a list
-like `buffer:0 · barrel:0 · …` means token and repo name both work. A red
+like `buffer:0 · archive:0 · …` means token and repo name both work. A red
 message naming a repo means `GITHUB_REPO` has a typo — the message shows
 exactly what the worker asked for, so compare it against your repo's address
 and re-run the command. "Bad credentials" means the token itself — re-run

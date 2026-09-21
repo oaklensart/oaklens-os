@@ -41,7 +41,7 @@ vi.mock('../js/console/fn-editor.js', async (importOriginal) => ({
 }));
 vi.mock('../js/console/more-views.js', async (importOriginal) => ({
   ...(await importOriginal()),
-  renderWall: () => {}, renderBarrel: () => {}, renderNetwork: () => {}, renderLibrary: () => {},
+  renderWall: () => {}, renderNetwork: () => {}, renderLibrary: () => {},
 }));
 vi.mock('../js/console/audio.js', async (importOriginal) => ({
   ...(await importOriginal()), renderAudio: () => {},
@@ -62,7 +62,7 @@ const { syncFromServer, _setLastImportedSha, _getLastImportedSha } =
 // that had nothing to do with what it tests.
 const MANIFEST = {
   buffer: 'data/buffer.json', archive: 'data/archive.json', posts: 'data/posts.json',
-  wallpapers: 'data/wallpapers.json', barrel: 'data/barrel.json', friends: 'data/friends.json',
+  wallpapers: 'data/wallpapers.json', friends: 'data/friends.json',
   library: 'data/library.json', audio: 'data/audio.json',
   audioSets: 'data/audio-sets.json', cards: 'data/cards.json',
 };
@@ -99,7 +99,7 @@ function stubFetch(syncBody) {
 
 // renderPublish() runs on the import path and getElementById's these unguarded.
 function seedDom() {
-  const sumCards = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'network', 'audio', 'cards']
+  const sumCards = ['buffer', 'archive', 'fn', 'wall', 'network', 'audio', 'cards']
     .map((k) => `<div id="sum-${k}"><span id="sum-count-${k}"></span><span id="sum-delta-${k}"></span></div>`)
     .join('');
   document.body.innerHTML = `

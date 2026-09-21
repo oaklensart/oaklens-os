@@ -63,7 +63,7 @@ beforeEach(() => {
   `;
   STATE.audio = TRACKS();
   STATE.audioSets = [];
-  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0,
+  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0,
     library: 0, audio: 0, audioSets: 0, cards: 0 };
   STATE.stagedLog = [];
   sessionTrash.length = 0;

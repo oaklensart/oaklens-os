@@ -254,7 +254,7 @@
   }
 
   // ---- selection: newest first, but keep the row mixed ----
-  // The barrel this replaces was a mixed "Latest" feed; the owner wants the
+  // The changelog ticker this replaced was a mixed "Latest" feed; the owner wants the
   // recent-work grid to surface both the photography and the writing. So when
   // both datasets are non-empty but the top-N came out single-type, trade the
   // oldest pick for the newest item of the missing type, then re-sort by date.

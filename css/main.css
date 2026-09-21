@@ -621,7 +621,7 @@ html {
 }
 
 /* ============================================
-   RECENT WORK — homepage 3-up grid (replaces the barrel ticker)
+   RECENT WORK — homepage 3-up grid
    Archive frames render as photo cards, Field Notes as typographic text cards.
    4:5 tiles, 9px radius — proportions match docs/starter-template/preview.html.
    Filled at runtime by js/recent-index.js; themes across presets via tokens.

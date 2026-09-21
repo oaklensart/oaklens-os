@@ -30,7 +30,6 @@ export const STATE = {
   archive:    [],   // {id, image, filename, title, sub, location, camera, lens, medium, hash, slug, added_at}
   posts:      [],   // {id, fn_id, title, location, date, body (markdown), added_at}
   wallpapers: [],   // {id, src, filename, title, desc, isNew}
-  barrel:     [],   // {id, date, title, url}
   friends:    [],   // {id, name, tag, location, url, added_at} — About §004 NETWORK / FRIENDS OF
   library:    [],   // {id, filename, hash, added_at, _uploaded, _uploading, _uploadError} — pre-staged, never published
   audio:      [],   // {id, slug, filename, title, sub, duration, peaks, featured, episode, download, added_at}
@@ -46,7 +45,7 @@ export const STATE = {
   // {id, order, source, media, folder, focus, cardFocus, title, tease, label, link, card, img, added_at}
   cards:      [],
   staged:     {     // tracks unpublished changes per surface
-    buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0,
+    buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0, audio: 0,
     audioSets: 0, cards: 0
   },
   stagedLog:  []    // per-ITEM ledger of those changes — see STAGE TRACKING below
@@ -123,7 +122,6 @@ export function save() {
     lean.buffer = lean.buffer.filter(keep('buffer'));
     lean.archive = lean.archive.filter(keep('archive'));
     lean.wallpapers = lean.wallpapers.filter(keep('wallpapers'));
-    lean.barrel = lean.barrel.filter(keep('barrel'));
     lean.friends = lean.friends.filter(keep('friends'));
     lean.posts = lean.posts.filter(keep('posts'));
     lean.library = lean.library.filter(keep('library'));
@@ -189,6 +187,16 @@ export function load() {
   // audioSets key (Object.assign leaves the default standing), but a corrupted
   // or hand-edited one could put a non-array where every reader assumes one.
   if (!Array.isArray(STATE.audioSets)) STATE.audioSets = [];
+
+  // The barrel was retired 2026-09-20. Object.assign above copies whatever the
+  // saved blob holds, so a session saved before that date puts `barrel` and
+  // `staged.barrel` BACK onto a STATE that no longer declares them — and a
+  // non-zero counter there is a pending-changes badge for a surface that can
+  // never publish and so can never clear. Drop all three shapes; the next
+  // save() writes the state without them and this stops mattering per browser.
+  delete STATE.barrel;
+  if (STATE.staged) delete STATE.staged.barrel;
+  STATE.stagedLog = STATE.stagedLog.filter(r => r && r.surface !== 'barrel');
 
   // Restore the session trash BEFORE anything reads it — importIntoSurface's
   // resurrection guard and _vouchedEmptyManifests both consult it, and a login
@@ -522,7 +530,6 @@ export function trashItem(surface, id) {
     archive: R.renderArchive,
     posts: () => { R.renderFN?.(); R.fnNewPost?.(); },
     wallpapers: R.renderWall,
-    barrel: R.renderBarrel,
     friends: R.renderNetwork,
     library: R.renderLibrary,
     audio: R.renderAudio,
@@ -578,7 +585,7 @@ export function trashRestore(trashIndex) {
   save();
   if (trashed.surface === 'library') scheduleLibrarySync();
   renderBuffer(); renderArchive(); renderFN();
-  renderWall(); renderBarrel(); renderNetwork(); renderLibrary(); renderAudio(); renderTrash();
+  renderWall(); renderNetwork(); renderLibrary(); renderAudio(); renderTrash();
   globalThis.renderCards?.();
   showToast("Restored: " + trashed.label, { kind: 'success' });
 }
@@ -591,7 +598,7 @@ export function trashClearAll() {
   // - Non-imported items: safe to delete now (no live JSON reference).
   // - Imported LIBRARY items: also safe — library is never rendered on the live site,
   //   and autoSyncLibrary() already committed the updated index.
-  // - Imported non-library items (archive/buffer/wall/barrel): defer to publish —
+  // - Imported non-library items (archive/buffer/wall): defer to publish —
   //   their R2 files are still referenced by the live site until the JSON is committed.
   if (_pendingR2Deletes.length && isLoggedIn()) {
     const immediateIds = new Set(
@@ -724,9 +731,9 @@ export function resetConsole() {
   sessionTrash.length = 0;
   setPendingR2Deletes([]);
   Object.assign(STATE, {
-    buffer: [], archive: [], posts: [], wallpapers: [], barrel: [], friends: [], library: [], audio: [],
+    buffer: [], archive: [], posts: [], wallpapers: [], friends: [], library: [], audio: [],
     audioSets: [], cards: [],
-    staged: { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0,
+    staged: { buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0, audio: 0,
       audioSets: 0, cards: 0 },
     stagedLog: []
   });

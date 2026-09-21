@@ -72,18 +72,20 @@ const PLAN = [
   // queue repaints, which is a two-way coupling until the repaint goes through
   // refreshSurface() — see the surface refresh registry seam below.
   ['upload', ['UPLOAD QUEUE']],
-  // The four surfaces reachable only through the More sheet — precisely the
+  // The surfaces reachable only through the More sheet — precisely the
   // MORE_VIEWS constant in VIEW ROUTING, minus bench (which is big enough and
   // self-contained enough to stand alone). They are read-mostly and change
-  // rarely, so they ride together rather than paying four modules' overhead.
+  // rarely, so they ride together rather than paying a module each.
   // LIST DRAG-REORDER is here, not in chrome, despite reading like a generic UI
   // primitive: both functions mutate STATE[listKey] and then re-render the
-  // surface that owns the list — `listKey === "wallpapers" ? renderWall :
-  // renderBarrel`. That is a ternary rather than a call, so the original scanner
-  // never saw it and chrome looked like a leaf when it was reaching two layers
-  // up. Here, renderWall ↔ wireListDrag is an ordinary cycle inside one module.
+  // surface that owns the list. That re-render used to be a ternary rather than
+  // a call — `listKey === "wallpapers" ? renderWall : renderBarrel` — which the
+  // original scanner never saw, so chrome looked like a leaf when it was
+  // reaching two layers up. The barrel was retired 2026-09-20 and the wall is
+  // the only reorderable list left, so it is now a plain renderWall() call;
+  // renderWall ↔ wireListDrag remains an ordinary cycle inside one module.
   ['more-views', [
-    'LIBRARY (PRE-STAGE)', 'BARREL', 'NETWORK · FRIENDS OF (About §004)', 'WALL',
+    'LIBRARY (PRE-STAGE)', 'NETWORK · FRIENDS OF (About §004)', 'WALL',
     'LIST DRAG-REORDER',
   ]],
   ['archive', ['ARCHIVE']],

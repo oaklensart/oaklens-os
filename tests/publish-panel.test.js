@@ -14,7 +14,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 globalThis.refreshStageIndicators = () => {};
 globalThis.renderTrash = () => {};
 for (const fn of ['renderBuffer', 'renderArchive', 'renderFN', 'fnNewPost',
-  'renderWall', 'renderBarrel', 'renderNetwork', 'renderLibrary', 'renderAudio']) {
+  'renderWall', 'renderNetwork', 'renderLibrary', 'renderAudio']) {
   globalThis[fn] = () => {};
 }
 globalThis.fetch = async () => new Response('[]', { status: 200 });
@@ -22,8 +22,8 @@ globalThis.fetch = async () => new Response('[]', { status: 200 });
 const { STATE, sessionTrash, stageChange, clearStage } = await import('../js/console-state.js');
 const { renderPublish, publishToggleChanges, _renderSyncReadout } = await import('../js/console-ui.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio'];
-const TILES = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'network', 'audio', 'cards'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'friends', 'library', 'audio'];
+const TILES = ['buffer', 'archive', 'fn', 'wall', 'network', 'audio', 'cards'];
 
 function seedDom() {
   const sumCards = TILES
@@ -91,18 +91,18 @@ describe('publishToggleChanges', () => {
 
   it('switching cards swaps the list in place', () => {
     stageChange('buffer', { id: 'f1', label: 'f#1 — focal point' });
-    stageChange('barrel', { id: 'b1', label: 'Show announcement — new' });
+    stageChange('friends', { id: 'n1', label: 'Show announcement — new' });
     renderPublish();
     publishToggleChanges('buffer');
-    publishToggleChanges('barrel');
+    publishToggleChanges('network');
     expect(panel().textContent).toContain('Show announcement');
     expect(panel().textContent).not.toContain('focal point');
   });
 
   it('escapes labels — a title is text, never markup', () => {
-    stageChange('barrel', { id: 'b1', label: '<img src=x onerror=alert(1)> — new' });
+    stageChange('friends', { id: 'n1', label: '<img src=x onerror=alert(1)> — new' });
     renderPublish();
-    publishToggleChanges('barrel');
+    publishToggleChanges('network');
     expect(panel().innerHTML).not.toContain('<img');
     expect(panel().textContent).toContain('<img src=x onerror=alert(1)>');
   });

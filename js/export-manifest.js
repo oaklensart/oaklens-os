@@ -133,7 +133,6 @@ export const EXPORT_MANIFEST = {
     'data/archive.json',
     'data/posts.json',
     'data/wallpapers.json',
-    'data/barrel.json',
     'data/friends.json',
     'data/library.json',
     'data/audio.json',

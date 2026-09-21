@@ -1827,22 +1827,6 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
   object-fit: contain;
 }
 
-.barrel-source-badge {
-  display: inline-block;
-  font-size: var(--t-micro);
-  letter-spacing: 0.13em;
-  color: var(--text-faint);
-  padding: 1px 6px;
-  border: 1px solid var(--border-strong);
-  margin-right: 8px;
-  text-transform: uppercase;
-}
-.barrel-source-badge.post     { color: var(--text); border-color: var(--border-strong); }
-.barrel-source-badge.archive  { color: var(--text); border-color: var(--border-strong); }
-.list-row.manual .l-title { color: var(--accent); }
-.list-row.manual .l-title::before { content: "✦ "; color: var(--accent); margin-right: 4px; }
-.list-row.manual .l-sub::after { content: " · MANUAL"; color: var(--accent-dim); letter-spacing: 0.13em; }
-.list-row.auto .l-sub::after { content: " · AUTO"; color: var(--text-ghost); letter-spacing: 0.13em; }
 .external-glyph { color: var(--accent); margin-left: 4px; font-size: 0.7em; }
 
 .fn-render { color: var(--text); font-size: 0.85rem; line-height: 1.65; }
@@ -1904,7 +1888,7 @@ body.fn-focus .fn-dock:focus-within { opacity: 1; }
 .apple-music-embed { margin: 24px 0; }
 .apple-music-embed iframe { width: 100%; max-width: 660px; height: 175px; border: none; border-radius: 8px; }
 
-/* ============ WALL & BARREL TABLES ============ */
+/* ============ LIST TABLES ============ */
 .list-table { background: var(--bg-elev-1); border: 1px solid var(--border); margin-top: 18px; }
 .list-row {
   display: flex;
@@ -2601,7 +2585,7 @@ body.buffer-link-mode .buffer-frame.burst-selected::before { background: rgba(va
   /* Rigid metadata grids → wrap instead of clipping their inputs/selects. */
   .field-row.cols-3 { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
 
-  /* The wall/barrel/friends "add" rows (.entry-form-row, Phase 4) carry fixed
+  /* The wall/friends "add" rows (.entry-form-row, Phase 4) carry fixed
      track lists at desktop width. Flex here lets them wrap naturally: inputs
      share the row and reflow; buttons trail. */
   .entry-form-row {
@@ -4471,8 +4455,8 @@ body.fn-bar-hidden:has(#view-fn.active) .tabbar {
 }
 
 /* ============ PHASE 4: TOUCH HONESTY ============ */
-/* -- 4a. Entry form card: ONE pattern for the wall/barrel/friends add-rows
-      (replaces three inline-styled variants — the "bolted together" fix). -- */
+/* -- 4a. Entry form card: ONE pattern for the wall/friends add-rows
+      (replaces the inline-styled variants — the "bolted together" fix). -- */
 .entry-form-card {
   background: var(--bg-elev-1);
   border: 1px solid var(--border);
@@ -4490,7 +4474,6 @@ body.fn-bar-hidden:has(#view-fn.active) .tabbar {
 .entry-form-note { color: var(--text-faint); margin-left: 8px; }
 .entry-form-row { display: grid; gap: 8px; align-items: center; }
 .entry-form-row.wall-cols    { grid-template-columns: 2fr 1fr 1fr auto auto; }
-.entry-form-row.barrel-cols  { grid-template-columns: 90px 1fr 1fr auto auto; }
 .entry-form-row.friends-cols { grid-template-columns: 1fr 120px 1fr 1fr auto auto; }
 
 /* Session trash + danger zone (were inline-styled) */

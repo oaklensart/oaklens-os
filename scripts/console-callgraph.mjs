@@ -226,9 +226,10 @@ for (const fn of functions) {
   // but `name(` never matches it. These count as direct calls for that reason.
   //
   // Missing them is how a module gets extracted with a dangling reference that
-  // only fails in the browser: listNudge() picked its renderer with
-  // `listKey === "wallpapers" ? renderWall : renderBarrel`, so chrome looked
-  // like a leaf when it was really reaching two layers up. `body` has already
+  // only fails in the browser: listNudge() once picked its renderer with
+  // `listKey === "wallpapers" ? renderWall : renderBarrel` (the barrel was
+  // retired 2026-09-20 and the ternary with it), so chrome looked like a leaf
+  // when it was really reaching two layers up. `body` has already
   // had string literals blanked, so a name inside a message or an on*= handler
   // is not mistaken for a reference.
   for (const m of body.matchAll(/(^|[^.\w$])([A-Za-z_$][\w$]*)\b(?!\s*\()/g)) {

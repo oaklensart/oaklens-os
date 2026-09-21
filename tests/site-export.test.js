@@ -333,7 +333,7 @@ describe('generated offline runtime', () => {
     // statement (module-only syntax) would throw right here.
     expect(() => new Function(src)).not.toThrow();
     expect(src).toContain('"/archive":"archive/index.html"');
-    // Runtime-built post links (barrel entries store the canonical
+    // Runtime-built post links (published entries store the canonical
     // extensionless URL) must resolve offline via the shim's route table.
     expect(src).toContain('"/field-notes/post":"field-notes/post.html"');
   });

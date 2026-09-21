@@ -35,9 +35,15 @@ const { buildCsp, PREPAINT_CSP_HASH } = await import('../src/shared/csp.js');
 const ROOT = join(import.meta.dirname, '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
-// Derived from what this checkout ships — see tests/helpers/pages.js. `/dev`
-// is excluded: it is an admin surface and keeps the relaxed policy.
-const PUBLIC = THEMED_PAGES.filter((p) => !p.startsWith('dev/'));
+// Derived from what this checkout ships — see tests/helpers/pages.js.
+//
+// The /dev pages used to be excluded here, because the whole /dev subtree was
+// an admin surface on the relaxed policy. Since 2026-09-20 only the console
+// documents are (src/shared/csp.js → isAdminSurface), so the public project
+// pages under /dev/ are swept like any other public page — which is the point
+// of narrowing it, and the guard that keeps an inline handler from creeping
+// back onto one.
+const PUBLIC = THEMED_PAGES;
 
 // The browser hashes the exact text between the tags of the first <script>
 // (the pre-paint block). Reproduce that and format as a CSP source token.
@@ -166,10 +172,21 @@ describe('CSP is worker-owned and strict for the public site', () => {
       return scriptSrc.includes("'unsafe-inline'");
     };
 
-    it('relaxes the console surfaces', () => {
-      expect(isRelaxed('/dev'), '/dev').toBe(true);
+    it('relaxes the console documents, and only those', () => {
       expect(isRelaxed('/dev/field-console'), '/dev/field-console').toBe(true);
-      expect(isRelaxed('/dev/sw.js'), '/dev/sw.js').toBe(true);
+      expect(isRelaxed('/dev/field-console.html'), '/dev/field-console.html').toBe(true);
+      expect(isRelaxed('/dev/console-gate.html'), '/dev/console-gate.html').toBe(true);
+    });
+
+    // The 2026-09-20 narrowing. /dev is a public landing page for the three
+    // projects and /dev/fixxer is one of them; both were being served
+    // 'unsafe-inline' plus a pre-authorised CDN purely for sitting under /dev/.
+    // Neither carries an inline script — the sweep above proves that — so
+    // neither has any business on the admin policy.
+    it('does NOT relax the public pages that live under /dev/', () => {
+      for (const p of ['/dev', '/dev/', '/dev/fixxer', '/dev/fixxer/']) {
+        expect(isRelaxed(p), `${p} must stay strict`).toBe(false);
+      }
     });
 
     it('does NOT relax a public path that merely starts with the letters "dev"', () => {

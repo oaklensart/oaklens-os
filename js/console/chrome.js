@@ -220,7 +220,7 @@ export function _initKeyboardInsets() {
 // ============== VIEW ROUTING ==============
 // Views reachable only through the More sheet — the More tab lights up as
 // their proxy in the tab bar.
-const MORE_VIEWS = ["wall", "barrel", "friends", "library", "audio", "cards", "pulse", "bench"];
+const MORE_VIEWS = ["wall", "friends", "library", "audio", "cards", "pulse", "bench"];
 
 // Surfaces register themselves; the router does not know them by name. Each
 // entry is { render, onLeave? } — `render` draws the view, `onLeave` cleans up
@@ -427,7 +427,6 @@ export function refreshStageIndicators() {
   document.getElementById("nav-count-archive").textContent = STATE.archive.length;
   document.getElementById("nav-count-fn").textContent      = STATE.posts.length;
   document.getElementById("nav-count-wall").textContent    = STATE.wallpapers.length;
-  document.getElementById("nav-count-barrel").textContent  = STATE.barrel.length;
   document.getElementById("nav-count-friends").textContent = STATE.friends.length;
   document.getElementById("nav-count-library").textContent = STATE.library.length;
   const navAudio = document.getElementById("nav-count-audio");
@@ -445,7 +444,6 @@ export function refreshStageIndicators() {
   setTxt("tab-count-fn",      STATE.posts.length   || "");
   setTxt("tab-count-archive", STATE.archive.length || "");
   setTxt("sheet-count-wall",    STATE.wallpapers.length);
-  setTxt("sheet-count-barrel",  STATE.barrel.length);
   setTxt("sheet-count-friends", STATE.friends.length);
   setTxt("sheet-count-library", STATE.library.length);
   setTxt("sheet-count-audio",   (STATE.audio || []).length);

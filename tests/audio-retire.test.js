@@ -21,7 +21,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // console-state.js reaches its renderers through the global scope at call time.
 for (const fn of [
   'refreshStageIndicators', 'renderTrash', 'renderBuffer', 'renderArchive',
-  'renderFN', 'fnNewPost', 'renderWall', 'renderBarrel', 'renderNetwork',
+  'renderFN', 'fnNewPost', 'renderWall', 'renderNetwork',
   'renderLibrary', 'showView', 'scheduleLibrarySync', 'updatePurgeR2Button',
   'isVideoAsset', 'renderAudio',
 ]) globalThis[fn] = () => {};
@@ -56,8 +56,8 @@ beforeEach(() => {
   STATE.audio = [];
   STATE.audioSets = [];
   STATE.posts = []; STATE.buffer = []; STATE.archive = [];
-  STATE.wallpapers = []; STATE.barrel = []; STATE.friends = []; STATE.library = [];
-  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0,
+  STATE.wallpapers = []; STATE.friends = []; STATE.library = [];
+  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0,
     audio: 0, audioSets: 0, cards: 0 };
   STATE.stagedLog = [];
   sessionTrash.length = 0;

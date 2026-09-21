@@ -179,19 +179,6 @@ export const HELP = [
     body: 'If a picture is already stored with your site, type its filename here instead of dropping the file again.',
   },
 
-  // ---- barrel ----
-  {
-    sel: '#barrel-title', view: 'barrel',
-    title: "Your site's timeline",
-    body: 'A running list of moments — milestones, older work, things made with other people. It shows as a strip you scroll sideways.',
-    note: 'Anything with a web address gets an outbound arrow on its own.',
-  },
-  {
-    sel: '#barrel-list', view: 'barrel',
-    title: 'The ones that write themselves',
-    body: 'Notes you publish and pieces you archive appear here on their own, marked AUTO. You only add the rest by hand.',
-  },
-
   // ---- network ----
   {
     sel: '#ring-card', view: 'friends',
@@ -811,7 +798,7 @@ function _placeCard(card, rect) {
 
 const VIEW_LABEL = {
   buffer: 'Buffer', archive: 'Archive', fn: 'Field Notes', wall: 'Wall',
-  barrel: 'Barrel', friends: 'Network', library: 'Library', audio: 'Audio',
+  friends: 'Network', library: 'Library', audio: 'Audio',
   cards: 'Cards', pulse: 'Pulse', bench: 'Bench', publish: 'Publish',
 };
 

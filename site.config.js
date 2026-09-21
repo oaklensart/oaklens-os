@@ -180,6 +180,25 @@ export default Object.freeze({
   // change or remove your listing later without an email round-trip, and what
   // protects your seat if the domain ever lapses.
   // webring: { node: 7, slug: 'your-slug' },
+  // A COMMIT FEED at /api/devfeed, for a page of your own that wants to show
+  // what you have been building. OFF by default — with no block here the
+  // endpoint 404s and nothing calls GitHub. Two lists, and the difference
+  // between them is a privacy boundary:
+  //
+  //   grid — repos whose commit COUNTS are summed into a 52-week activity
+  //          grid. The response never names them, so a PRIVATE repo is safe
+  //          here, and including the one where you actually work is usually
+  //          the difference between an honest grid and an empty-looking one.
+  //   log  — repos whose commit SUBJECTS are quoted back. Those are content:
+  //          only list repos that are already public.
+  //
+  // Reading a private repo needs GITHUB_TOKEN (the same secret publishing
+  // uses) to have access to it; public repos need no token at all. Results
+  // are cached at the edge and refreshed in the background.
+  // devFeed: {
+  //   grid: ['you/private-work', 'you/public-thing'],
+  //   log: ['you/public-thing'],
+  // },
   // Podcast channel details for /podcast.xml — the RSS 2.0 feed carrying every
   // track you marked as an EPISODE on the Audio shelf. The feed serves with or
   // without this block (title and description fall back to your site name and

@@ -22,11 +22,11 @@ globalThis.fetch = async () => new Response('[]', { status: 200 });
 const { STATE } = await import('../js/console-state.js');
 const { refreshStageIndicators } = await import('../js/console-ui.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'friends', 'library', 'audio', 'cards'];
 
 // Everything refreshStageIndicators writes, unguarded ids included.
 function seedDom() {
-  const navCounts = ['buffer', 'archive', 'fn', 'wall', 'barrel', 'friends', 'library', 'audio']
+  const navCounts = ['buffer', 'archive', 'fn', 'wall', 'friends', 'library', 'audio']
     .map((k) => `<span id="nav-count-${k}"></span>`).join('');
   document.body.innerHTML = `
     <button class="publish-btn publish-btn--idle" id="publish-btn" data-pending="0"><span class="pip" id="publish-pip"></span> Publish</button>
@@ -35,7 +35,7 @@ function seedDom() {
     <button class="tab-btn" data-view="publish"><span class="tab-badge zero" id="tab-publish-badge">0</span></button>
     ${navCounts}
     <span id="tab-count-buffer"></span><span id="tab-count-fn"></span><span id="tab-count-archive"></span>
-    <span id="sheet-count-wall"></span><span id="sheet-count-barrel"></span>
+    <span id="sheet-count-wall"></span>
     <span id="sheet-count-friends"></span><span id="sheet-count-library"></span><span id="sheet-count-audio"></span>
   `;
 }
@@ -87,7 +87,7 @@ describe('the topbar control is a light, not a counter', () => {
   it('announces the pending state to screen readers, where the number belongs', () => {
     refreshStageIndicators();
     expect(btn().getAttribute('aria-label')).toMatch(/no pending changes/i);
-    STATE.staged.barrel = 1;
+    STATE.staged.friends = 1;
     refreshStageIndicators();
     expect(btn().getAttribute('aria-label')).toMatch(/1 pending change\b/i);
   });

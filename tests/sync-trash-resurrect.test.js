@@ -23,7 +23,7 @@ globalThis.refreshStageIndicators = () => {};
 globalThis.renderTrash = () => {};
 // trashItem repaints the affected surface through the same globals.
 for (const fn of ['renderBuffer', 'renderArchive', 'renderFN', 'fnNewPost',
-  'renderWall', 'renderBarrel', 'renderNetwork', 'renderLibrary', 'renderAudio']) {
+  'renderWall', 'renderNetwork', 'renderLibrary', 'renderAudio']) {
   globalThis[fn] = () => {};
 }
 globalThis.fetch = async () => new Response('[]', { status: 200 });
@@ -31,7 +31,7 @@ globalThis.fetch = async () => new Response('[]', { status: 200 });
 const { STATE, sessionTrash, trashItem } = await import('../js/console-state.js');
 const { importIntoSurface, _vouchedEmptyManifests } = await import('../js/console-ui.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'friends', 'library', 'audio', 'cards'];
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="toast-host"></div>';
@@ -69,8 +69,8 @@ describe('importIntoSurface vs. the session trash', () => {
     STATE.audio = [track('t1')];
     trashItem('audio', 't1');
 
-    importIntoSurface('barrel', [{ id: 't1', name: 'coincidence' }]);
-    expect(STATE.barrel).toHaveLength(1);
+    importIntoSurface('friends', [{ id: 't1', name: 'coincidence' }]);
+    expect(STATE.friends).toHaveLength(1);
   });
 });
 

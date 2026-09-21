@@ -38,7 +38,7 @@ beforeEach(() => {
     <div id="toast-host"></div>
   `;
   STATE.audio = [];
-  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0 };
+  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0, audio: 0 };
   STATE.stagedLog = [];
   sessionTrash.length = 0;
   // CLEAR CARD asks before taking up to six tracks down (2026-08-31); happy-dom

@@ -62,8 +62,8 @@ function seedDom() {
 
 function resetState() {
   STATE.buffer = []; STATE.archive = []; STATE.posts = [];
-  STATE.wallpapers = []; STATE.barrel = []; STATE.friends = []; STATE.library = [];
-  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0 };
+  STATE.wallpapers = []; STATE.friends = []; STATE.library = [];
+  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0 };
   setPendingR2Deletes([]);
 }
 
@@ -259,12 +259,12 @@ describe('R2 cleanup messages claim only what the code verified', () => {
 // verdict helper is the pure decision syncFromServer now renders from.
 
 describe('_syncVerdict: what a sync response actually proves', () => {
-  const FILES = ['data/buffer.json', 'data/archive.json', 'data/barrel.json'];
+  const FILES = ['data/buffer.json', 'data/archive.json', 'data/friends.json'];
   const nf = { ok: false, error: 'Not Found' };
 
   it('all files failed + no HEAD → the GitHub link itself is down', () => {
     const v = ui._syncVerdict({
-      files: { 'data/buffer.json': nf, 'data/archive.json': nf, 'data/barrel.json': nf },
+      files: { 'data/buffer.json': nf, 'data/archive.json': nf, 'data/friends.json': nf },
       headSha: null, headShaError: 'Not Found',
     }, FILES);
     expect(v.mode).toBe('github-down');
@@ -275,7 +275,7 @@ describe('_syncVerdict: what a sync response actually proves', () => {
     // archive/posts/wallpapers are deliberately absent on a new fork (missing
     // file → bundled samples render), so per-file 404s alone must not alarm.
     const v = ui._syncVerdict({
-      files: { 'data/buffer.json': { ok: true, content: [] }, 'data/archive.json': nf, 'data/barrel.json': { ok: true, content: [] } },
+      files: { 'data/buffer.json': { ok: true, content: [] }, 'data/archive.json': nf, 'data/friends.json': { ok: true, content: [] } },
       headSha: 'HEAD_SHA',
     }, FILES);
     expect(v.mode).toBe('ok');
@@ -283,7 +283,7 @@ describe('_syncVerdict: what a sync response actually proves', () => {
 
   it('files arrived but HEAD did not → guard-disarmed warning, not an outage', () => {
     const v = ui._syncVerdict({
-      files: { 'data/buffer.json': { ok: true, content: [] }, 'data/archive.json': nf, 'data/barrel.json': { ok: true, content: [] } },
+      files: { 'data/buffer.json': { ok: true, content: [] }, 'data/archive.json': nf, 'data/friends.json': { ok: true, content: [] } },
       headSha: null, headShaError: 'API rate limit exceeded',
     }, FILES);
     expect(v.mode).toBe('no-head');
@@ -291,7 +291,7 @@ describe('_syncVerdict: what a sync response actually proves', () => {
 
   it('falls back to a file\'s error when the HEAD read gave none', () => {
     const v = ui._syncVerdict({
-      files: { 'data/buffer.json': nf, 'data/archive.json': nf, 'data/barrel.json': nf },
+      files: { 'data/buffer.json': nf, 'data/archive.json': nf, 'data/friends.json': nf },
       headSha: null,
     }, FILES);
     expect(v.mode).toBe('github-down');

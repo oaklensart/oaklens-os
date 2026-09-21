@@ -38,3 +38,6 @@ bench-migrate.sql
 
 # wrangler dry-run build output
 dist/
+
+docs/capture/node_modules/
+docs/capture/output/

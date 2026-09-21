@@ -31,7 +31,6 @@ import { renderMarkdown } from '../markdown-engine.js';
 import { toast, escapeHTML, openSheet, closeSheet } from './chrome.js';
 import { CDN_BASE, SITE_LOCATION, _resizeToWebP, generateVariants } from './assets.js';
 import { cleanFilename, readFileAsDataURL, todayISO, uid, ymd } from './utils.js';
-import { upsertAutoBarrel, barrelDateFromYMD } from './more-views.js';
 
 let fnCurrentBufferDates = [];   // selected dates for current post's buffer_dates field
 let fnSelectedFrameIds = new Set(); // selected frames in frame browser
@@ -129,20 +128,9 @@ export function fnDeletePost() {
   const p = STATE.posts.find(x => x.id === fnCurrentId);
   if (!p) return;
   if (!confirm(`Delete ${p.fn_id || "post"}: ${p.title || "Untitled"}?`)) return;
-  // The post's auto-barrel entry keys off this slug via `ref` (and embeds it in the
-  // timeline URL as ?slug=...) — capture it before the post is spliced out.
-  const deletedSlug = p.fn_id || p.id;
   // Drop its cloud draft row too, so a deleted draft doesn't resurrect on next sync.
   if (p.status === "draft") { fnCloudDeleteDraft(fnCurrentId); _setCloudStatus(''); }
   trashItem("posts", fnCurrentId);
-  // Drop the matching auto-barrel entry too, or the homepage timeline keeps an orphan
-  // link to the now-deleted post. Route through trashItem (like barrelRemove) so the
-  // removal stages with the right sign, saves, re-renders the barrel, and stays
-  // restorable just like every other deletion. filter() snapshots the matches first,
-  // so splicing STATE.barrel inside the loop is safe.
-  STATE.barrel
-    .filter(b => b.type === "auto" && b.source === "post" && b.ref === deletedSlug)
-    .forEach(b => trashItem("barrel", b.id));
   // No reset needed here: trashItem's `posts` renderer already runs
   // `renderFN(); fnNewPost()`, which rebuilds the picker without the deleted
   // note and leaves a blank one open.
@@ -366,14 +354,6 @@ export function fnStage(explicitStatus = null) {
       label: `${post.fn_id ? post.fn_id.toUpperCase() + ': ' : ''}${post.title}`
         + `${post.card?.layout === 'hero' ? ' — hero layout' : ''}`,
       kind: existingPost && existingPost._imported ? 'edit' : 'add',
-    });
-    // Auto-barrel entry
-    upsertAutoBarrel({
-      source: "post",
-      ref: post.fn_id || post.id,
-      date: barrelDateFromYMD(post.date),
-      title: `${post.fn_id ? post.fn_id.toUpperCase() + ": " : ""}${post.title}`,
-      url: `/field-notes/post?slug=${post.fn_id || post.id}`,
     });
     toast(`✓ ${fn_id || "post"} staged for publish`, "success");
   } else {

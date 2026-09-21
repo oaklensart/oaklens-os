@@ -25,6 +25,83 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-20 (the Barrel is gone from the console)
+
+**Nothing to do on merge.** One optional bit of tidying, below.
+
+- **Removed: the Barrel.** The console had a surface called Barrel — a
+  changelog timeline you could add dated entries to, and which also filled
+  itself in whenever you published a field note or archived a frame. It has
+  been removed: the sidebar item, the view, and the `data/barrel.json` file it
+  wrote to.
+
+  **Why.** The homepage stopped showing it a while ago — the recent-work grid
+  replaced it — and nothing else ever picked it up. So every note you published
+  wrote a row into a file that no page read. It was the only room in the
+  console that did nothing, and on a fresh install it was the first thing a new
+  owner found that led nowhere.
+
+  **What you lose.** Nothing anyone could see. If you never used the Barrel,
+  you will not notice. If you did, its entries were not on your site either —
+  they are still in your git history, and `git log` will hand them back.
+
+  **Optional tidying.** If you have a `data/barrel.json` in your repo, nothing
+  writes to it or reads it any more. You can delete it, or leave it; either is
+  fine and neither affects your site.
+
+  Publishing, syncing and the Site-in-a-ZIP export all stop carrying that file.
+  Everything else about them is unchanged.
+
+---
+
+## 2026-09-20 (a tighter policy on `/dev`, and a commit feed you can switch on)
+
+**Nothing to do on merge**, unless you have put your own page at `/dev` — see
+the second item.
+
+- **New: a commit feed at `/api/devfeed`, off unless you ask for it.** If you
+  want a page of your own that shows what you have been building, this gives
+  you the data: a 52-week activity grid and a short list of recent commit
+  subjects, drawn from GitHub and cached at the edge. With nothing configured
+  the endpoint answers 404 and never calls GitHub, so merging this changes
+  nothing.
+
+  To switch it on, add a `devFeed` block to `site.config.js` —
+  [`site.config.example.js`](site.config.example.js) has the shape. It takes
+  **two** lists, and the difference between them matters:
+
+  - `grid` — repos whose commit **counts** feed the squares. The response never
+    says which repos they were, so a **private** repo is safe here. Usually you
+    want the one where you actually work, or the grid shows a fraction of your
+    year.
+  - `log` — repos whose commit **messages** get quoted on the page. Those are
+    content: list only repos that are already public.
+
+  Reading a private repo needs your existing `GITHUB_TOKEN` to have access to
+  it. Public repos need no token at all.
+
+- **The strict security policy now covers everything under `/dev/` except the
+  console itself.** Previously any page under `/dev/` was handed the console's
+  relaxed policy — inline scripts allowed, plus a third-party CDN
+  pre-authorised. That was fine while `/dev` *was* the console; it is a hole if
+  you put an ordinary page there. Now only `/dev/field-console`,
+  `/dev/field-console.html` and `/dev/console-gate.html` get the relaxed
+  policy, and the console is unaffected.
+
+  ⚠️ **If you have added your own page under `/dev/`, check it after merging.**
+  Any inline `<script>` block or `onclick=`/`onerror=` attribute on it will now
+  be blocked, exactly as it would be on any other page of your site. The fix is
+  the same one the rest of the site uses: move the code into a file under `js/`
+  and load it with `<script src="…">`.
+
+- **Fixed: a page title containing an HTML entity came out mangled.** A title
+  written `<title data-site-title>Tom &amp; Jerry</title>` was served as
+  `Tom &amp;amp; Jerry`, so the browser tab showed the raw entity. Titles now
+  decode before the site name is joined on. If you were working around this by
+  avoiding entities in titles, you no longer need to.
+
+---
+
 ## 2026-09-19 (the footer stays put, and Publish fits on one screen)
 
 **Nothing to do on merge.** Two layout fixes, both visible the moment you load.

@@ -106,6 +106,15 @@ export const SHAPE = Object.freeze({
   entity: { name: '', logo: '/favicon.svg', sameAs: [], codeRepository: '', codeName: '' },
   support: { blurb: '', tiers: [], note: '', disclaimer: '' },
   webring: { node: null, slug: '' },
+  // The /dev page's commit feed (src/api/devfeed.js). Absence means the
+  // endpoint 404s and the page shows nothing — which is the right default,
+  // because a fork's dev page is not this instance's.
+  //
+  // TWO LISTS, and the difference is a privacy boundary, not a convenience:
+  // `grid` repos contribute COUNTS (the response never names them, so a
+  // private repo can safely sit here), `log` repos contribute commit
+  // SUBJECTS to a public page and must therefore be public themselves.
+  devFeed: { grid: [], log: [] },
   // Channel-level fields for /podcast.xml. SHAPE, not BACKFILL: omitting the
   // block means "this show is just the site" — title and description fall back
   // to the site's own name and tagline, and every submission-gating tag is

@@ -33,7 +33,7 @@ import { getSyncedSha, setSyncedSha } from './assets.js';
 import { ymd } from './utils.js';
 import { scheduleLibrarySync, updatePurgeR2Button, _librarySyncFailed } from './sync.js';
 import { _uploadsPending, _failedUploads, _requeueNetFailedUploads } from './upload.js';
-import { renderWall, renderBarrel, renderNetwork, renderLibrary } from './more-views.js';
+import { renderWall, renderNetwork, renderLibrary } from './more-views.js';
 import { renderAudio } from './audio.js';
 import { renderCards } from './cards.js';
 import { renderArchive } from './archive.js';
@@ -74,7 +74,6 @@ export function renderPublish() {
     archive: STATE.archive.length,
     fn: STATE.posts.length,
     wall: STATE.wallpapers.length,
-    barrel: STATE.barrel.length,
     network: STATE.friends.length,
     // Audio was missing from both maps, so a staged track change moved the
     // total badge and showed `+n ▲` on no card at all — the publish screen
@@ -87,7 +86,6 @@ export function renderPublish() {
     archive: STATE.staged.archive,
     fn: STATE.staged.posts,
     wall: STATE.staged.wallpapers,
-    barrel: STATE.staged.barrel,
     network: STATE.staged.friends,
     audio: STATE.staged.audio,
     cards: STATE.staged.cards,
@@ -124,7 +122,7 @@ export function renderPublish() {
 // the ids are load-bearing in tests and markup.
 const SURFACE_BY_TILE = {
   buffer: 'buffer', archive: 'archive', fn: 'posts',
-  wall: 'wallpapers', barrel: 'barrel', network: 'friends', audio: 'audio',
+  wall: 'wallpapers', network: 'friends', audio: 'audio',
   cards: 'cards',
 };
 const _KIND_GLYPH = { add: '+', edit: 'Δ', remove: '×', feature: '★' };
@@ -266,10 +264,6 @@ export function buildBundle() {
       hash: w.hash || null,
       ...(w.focus ? { focus: w.focus } : {}),
     })), null, 2),
-    "data/barrel.json":    JSON.stringify(STATE.barrel.map(b => {
-      const { _imported, ...rest } = b;
-      return rest;
-    }), null, 2),
     "data/friends.json":   JSON.stringify(STATE.friends.map(f => ({
       id: f.id,
       name: f.name,
@@ -455,7 +449,6 @@ CONTENTS:
   data/archive.json    ${STATE.archive.length} entries (${STATE.archive.filter(e=>e._imported).length} imported + ${STATE.archive.filter(e=>!e._imported).length} new)
   data/posts.json      ${STATE.posts.length} entries (${STATE.posts.filter(e=>e._imported).length} imported + ${STATE.posts.filter(e=>!e._imported).length} new)
   data/wallpapers.json ${STATE.wallpapers.length} entries
-  data/barrel.json     ${STATE.barrel.length} entries
   data/friends.json    ${STATE.friends.length} nodes
   data/library.json    ${STATE.library.length} entries
   data/audio.json      ${(STATE.audio || []).length} tracks
@@ -529,7 +522,6 @@ export function publishExportJSON() {
     archive: strip(STATE.archive),
     posts: strip(STATE.posts),
     wallpapers: strip(STATE.wallpapers),
-    barrel: strip(STATE.barrel),
     exported_at: new Date().toISOString(),
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -583,9 +575,6 @@ export async function handleImportFiles(fileList) {
       } else if (name.includes("wallpaper")) {
         importIntoSurface("wallpapers", data);
         results.push(`wallpapers: ${data.length} entries`);
-      } else if (name.includes("barrel")) {
-        importIntoSurface("barrel", data);
-        results.push(`barrel: ${data.length} entries`);
       } else if (name.includes("library")) {
         importIntoSurface("library", data);
         results.push(`library: ${data.length} entries`);
@@ -618,7 +607,6 @@ export async function handleImportFiles(fileList) {
     renderArchive();
     renderFN();
     renderWall();
-    renderBarrel();
     renderLibrary();
     renderAudio();
     renderPublish();
@@ -640,7 +628,7 @@ export async function handleImportFiles(fileList) {
 const SURFACE_MANIFEST = {
   buffer: 'data/buffer.json', archive: 'data/archive.json',
   posts: 'data/posts.json', wallpapers: 'data/wallpapers.json',
-  barrel: 'data/barrel.json', friends: 'data/friends.json',
+  friends: 'data/friends.json',
   library: 'data/library.json', audio: 'data/audio.json',
   audioSets: 'data/audio-sets.json', cards: 'data/cards.json',
 };
@@ -683,7 +671,7 @@ export function importIntoSurface(surface, data) {
 }
 
 export function clearImported() {
-  ["buffer", "archive", "posts", "wallpapers", "barrel", "friends", "library", "audio", "audioSets", "cards"].forEach(surface => {
+  ["buffer", "archive", "posts", "wallpapers", "friends", "library", "audio", "audioSets", "cards"].forEach(surface => {
     // Same dirty-entry protection as importIntoSurface: "clear imported data"
     // means "drop what main can give back", and main cannot give back an
     // unpublished local edit.
@@ -696,7 +684,6 @@ export function clearImported() {
   renderArchive();
   renderFN();
   renderWall();
-  renderBarrel();
   renderNetwork();
   renderLibrary();
   renderAudio();
@@ -735,7 +722,7 @@ export function _resumeAfterReconnect() {
 // Summarize exactly what's about to hit main (per-surface staged counts + any
 // queued R2 cleanup) before the atomic commit fires. Returns false to abort.
 export function confirmPublish() {
-  const labels = { buffer: 'Buffer', archive: 'Archive', posts: 'Field Notes', wallpapers: 'Wallpapers', barrel: 'Barrel', friends: 'Network', audio: 'Audio', audioSets: 'Audio sets', cards: 'Cards' };
+  const labels = { buffer: 'Buffer', archive: 'Archive', posts: 'Field Notes', wallpapers: 'Wallpapers', friends: 'Network', audio: 'Audio', audioSets: 'Audio sets', cards: 'Cards' };
   const lines = Object.entries(STATE.staged)
     .filter(([surface, n]) => surface !== 'library' && n > 0)
     .map(([surface, n]) => `  · ${labels[surface] || surface}: ${n} change${n !== 1 ? 's' : ''}`);
@@ -865,7 +852,6 @@ export async function syncFromServer() {
     { file: 'data/archive.json',    surface: 'archive' },
     { file: 'data/posts.json',      surface: 'posts' },
     { file: 'data/wallpapers.json', surface: 'wallpapers' },
-    { file: 'data/barrel.json',     surface: 'barrel' },
     { file: 'data/friends.json',    surface: 'friends' },
     { file: 'data/library.json',    surface: 'library' },
     { file: 'data/audio.json',      surface: 'audio' },
@@ -953,7 +939,7 @@ export async function syncFromServer() {
         save();
         refreshStageIndicators();
         renderBuffer(); renderArchive(); renderFN();
-        renderWall(); renderBarrel(); renderNetwork(); renderLibrary(); renderAudio(); renderPublish();
+        renderWall(); renderNetwork(); renderLibrary(); renderAudio(); renderPublish();
       }
       const asked = data.repo ? ` — the worker asked for github.com/${data.repo}` : '';
       if (statusEl) statusEl.textContent = `✕ nothing synced from GitHub (${verdict.error})`;
@@ -965,7 +951,7 @@ export async function syncFromServer() {
       save();
       refreshStageIndicators();
       renderBuffer(); renderArchive(); renderFN();
-      renderWall(); renderBarrel(); renderNetwork(); renderLibrary(); renderAudio(); renderPublish();
+      renderWall(); renderNetwork(); renderLibrary(); renderAudio(); renderPublish();
       // An up-to-date sync that still lands here only merged drafts (D1) —
       // say that, not "synced from main": no GitHub-backed surface moved.
       const flat = results.map(([k, v]) => `${k}:${v}`).join(' · ');

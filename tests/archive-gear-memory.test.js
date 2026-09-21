@@ -68,8 +68,8 @@ beforeEach(() => {
   localStorage.clear();
   seedDom();
   STATE.buffer = []; STATE.archive = []; STATE.posts = [];
-  STATE.wallpapers = []; STATE.barrel = []; STATE.friends = []; STATE.library = [];
-  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0 };
+  STATE.wallpapers = []; STATE.friends = []; STATE.library = [];
+  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0 };
   setPendingR2Deletes([]);
   ui.archiveClear();   // also drops archiveEditId, which outlives a test otherwise
 });

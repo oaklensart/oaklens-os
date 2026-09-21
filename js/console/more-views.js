@@ -1,17 +1,18 @@
 // OAKLENS Field Console — more-views.
 //
-// The four surfaces reachable only through the More sheet — Library
-// (pre-stage), Wall, Barrel, Network — plus LIST DRAG-REORDER. Precisely the
+// The three surfaces reachable only through the More sheet — Library
+// (pre-stage), Wall, Network — plus LIST DRAG-REORDER. Precisely the
 // MORE_VIEWS constant in the router, minus bench (self-contained enough to
 // stand alone). Read-mostly surfaces that change rarely, so they ride
-// together rather than paying four modules' overhead.
+// together rather than paying three modules' overhead.
 //
 // LIST DRAG-REORDER lives here, not in chrome, despite reading like a generic
 // UI primitive: listNudge()/wireListDrag() mutate STATE[listKey] and then
-// re-render the surface that owns the list — `listKey === "wallpapers" ?
-// renderWall : renderBarrel`. That is a bare function reference rather than a
-// call, which the first callgraph scanner could not see; here it is an
-// ordinary cycle inside one module instead of chrome reaching two layers up.
+// call renderWall() to re-render the surface that owns the list — an ordinary
+// cycle inside one module instead of chrome reaching two layers up. The wall
+// is the only reorderable list left (the barrel was retired 2026-09-20); the
+// listKey parameter stays because the mutation is generic and the next
+// reorderable surface should not have to reintroduce it.
 //
 // Extracted from console-ui.js 2026-07-29. See dev/console-module-plan.md.
 
@@ -476,141 +477,13 @@ export function renderWall() {
   wireListDrag("wall-list", "wallpapers");
 }
 
-// ============== BARREL ==============
-export function barrelDateFromYMD(ymdStr) {
-  if (!ymdStr) return (new Date()).toLocaleDateString("en-US", {month:"2-digit",day:"2-digit"});
-  const parts = ymdStr.split("-");
-  return parts.length === 3 ? `${parts[1]}.${parts[2]}` : ymdStr;
-}
-
+// ============== NETWORK · FRIENDS OF (About §004) ==============
+// Lived in the barrel section until that surface was retired (2026-09-20);
+// the network list draws the same ↗ glyph on an off-site link.
 export function isExternalUrl(url) {
   return /^https?:\/\//i.test(url || "");
 }
 
-export function upsertAutoBarrel({ source, ref, date, title, url }) {
-  const existing = STATE.barrel.find(b => b.type === "auto" && b.source === source && b.ref === ref);
-  if (existing) {
-    existing.date = date;
-    existing.title = title;
-    existing.url = url;
-  } else {
-    STATE.barrel.unshift({
-      id: uid(), type: "auto", source, ref, date, title, url,
-      added_at: todayISO(),
-    });
-    stageChange("barrel", { id: STATE.barrel[0].id, label: `${title} — auto entry`, kind: 'add' });
-  }
-}
-
-let barrelEditId = null;
-
-export function barrelEdit(id) {
-  const b = STATE.barrel.find(x => x.id === id);
-  if (!b) return;
-  barrelEditId = id;
-  document.getElementById("barrel-date").value = b.date || "";
-  document.getElementById("barrel-title").value = b.title || "";
-  document.getElementById("barrel-url").value = b.url || "";
-  const btn = document.querySelector('#view-barrel .btn-stage');
-  btn.textContent = "✓ Update";
-  btn.style.borderColor = "var(--green)";
-  btn.style.color = "var(--green)";
-  document.getElementById("barrel-cancel-btn").style.display = "";
-  toast(`Editing: ${b.title}`, "success");
-}
-
-export function barrelClearEdit() {
-  barrelEditId = null;
-  ["barrel-date","barrel-title","barrel-url"].forEach(id => document.getElementById(id).value = "");
-  const btn = document.querySelector('#view-barrel .btn-stage');
-  btn.textContent = "+ Add";
-  btn.style.borderColor = "";
-  btn.style.color = "";
-  document.getElementById("barrel-cancel-btn").style.display = "none";
-}
-
-export function barrelAdd() {
-  const date = document.getElementById("barrel-date").value.trim();
-  const title = document.getElementById("barrel-title").value.trim();
-  const url = document.getElementById("barrel-url").value.trim();
-  if (!title) return toast("title required", "error");
-
-  // UPDATE MODE
-  if (barrelEditId) {
-    const b = STATE.barrel.find(x => x.id === barrelEditId);
-    if (!b) return toast("entry not found", "error");
-    if (date) b.date = date;
-    b.title = title;
-    b.url = url || b.url;
-    barrelEditId = null;
-    stageChange("barrel", { id: b.id, label: `${title} — updated` });
-    save();
-    ["barrel-date","barrel-title","barrel-url"].forEach(id => document.getElementById(id).value = "");
-    const btn = document.querySelector('#view-barrel .btn-stage');
-    btn.textContent = "+ Add";
-    btn.style.borderColor = "";
-    btn.style.color = "";
-    document.getElementById("barrel-cancel-btn").style.display = "none";
-    renderBarrel();
-    toast(`✓ ${title} updated`, "success");
-    return;
-  }
-
-  // NEW MODE
-  STATE.barrel.unshift({
-    id: uid(),
-    type: "manual",
-    date: date || (new Date()).toLocaleDateString("en-US", {month:"2-digit",day:"2-digit"}),
-    title,
-    url: url || "#",
-    added_at: todayISO(),
-  });
-  stageChange("barrel", { id: STATE.barrel[0].id, label: `${title} — new`, kind: 'add' });
-  save();
-  ["barrel-date","barrel-title","barrel-url"].forEach(id => document.getElementById(id).value = "");
-  renderBarrel();
-  toast(`✓ ${title} added (manual)`, "success");
-}
-
-export function barrelRemove(id) {
-  trashItem("barrel", id);
-}
-
-export function renderBarrel() {
-  document.getElementById("barrel-stats").textContent = `${STATE.barrel.length} entries`;
-  const list = document.getElementById("barrel-list");
-  if (!STATE.barrel.length) {
-    list.innerHTML = `<div class="empty">// BARREL EMPTY · STAGE A POST OR ARCHIVE FRAME TO AUTO-POPULATE</div>`;
-    return;
-  }
-  // The live homepage timeline re-sorts the changelog by date (newest first), so we
-  // render the same order here — what you see in the console now matches what ships.
-  // Array.prototype.sort is stable, so entries sharing a date keep their underlying
-  // STATE.barrel order, exactly as the live site's stable sort over barrel.json does.
-  // (Drag-to-reorder was retired with this change: date drives the order everywhere.)
-  const ordered = [...STATE.barrel].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  list.innerHTML = ordered.map(b => {
-    const isManual = b.type === "manual";
-    const rowClass = isManual ? "manual" : "auto";
-    const sourceBadge = !isManual && b.source
-      ? `<span class="barrel-source-badge ${b.source}">↪ ${b.source === "post" ? "FN//" : "ARCHIVE"}</span>`
-      : "";
-    const externalGlyph = isExternalUrl(b.url)
-      ? `<span class="external-glyph">↗</span>` : "";
-    return `
-    <div class="list-row ${rowClass}${b._imported ? ' imported' : ''}" data-id="${b.id}" data-list="barrel" onclick="barrelEdit('${b.id}')" style="cursor:pointer;">
-      <div class="list-info">
-        <div class="l-title">${sourceBadge}${b.title}${externalGlyph}</div>
-        <div class="l-sub">${b.date} · ${b.url}</div>
-      </div>
-      <div class="list-actions">
-        <button class="icon-btn danger" onclick="event.stopPropagation(); barrelRemove('${b.id}')" title="Remove">×</button>
-      </div>
-    </div>`;
-  }).join("");
-}
-
-// ============== NETWORK · FRIENDS OF (About §004) ==============
 let networkEditId = null;
 
 export function networkAdd() {
@@ -727,7 +600,7 @@ export function listNudge(listKey, id, dir) {
   arr.splice(j, 0, item);
   stageChange(listKey, { id: item.id, label: `${item.title || item.filename || 'entry'} — reordered` });
   save();
-  (listKey === "wallpapers" ? renderWall : renderBarrel)();
+  renderWall();
 }
 
 let dragSrc = null;
@@ -756,8 +629,7 @@ export function wireListDrag(containerId, listKey) {
       arr.splice(toIdx, 0, item);
       stageChange(listKey, { id: item.id, label: `${item.title || item.filename || 'entry'} — reordered` });
       save();
-      const renderer = listKey === "wallpapers" ? renderWall : renderBarrel;
-      renderer();
+      renderWall();
     });
   });
 }

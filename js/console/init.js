@@ -23,7 +23,7 @@ import { lightingInit } from './lighting.js';
 import { _initHelp } from './help.js';
 import { updatePurgeR2Button, _registerLibraryUploadProbe } from './sync.js';
 import { _libraryUploadsPending } from './upload.js';
-import { renderWall, renderBarrel, renderNetwork, renderLibrary, wallIngest, libraryIngest } from './more-views.js';
+import { renderWall, renderNetwork, renderLibrary, wallIngest, libraryIngest } from './more-views.js';
 import { renderArchive, archiveIngestPhoto, archiveUpdatePreview, restoreGearMemory, setGearRemember } from './archive.js';
 import { renderBuffer, bufferIngest, bufferPromote, bufferRemove, burstLinkMode, burstToggleFrame, enterBurstLinkMode, exitBurstLinkMode } from './buffer.js';
 import { renderFN, fnHeroIngest, fnHeroClear, fnSetupEnhancements, fnCloseDrawer, _registerFnShare } from './fn-editor.js';
@@ -93,7 +93,6 @@ export function registerSurfaces() {
     onLeave: fnCloseDrawer,
   });
   registerView("wall",    renderWall);
-  registerView("barrel",  renderBarrel);
   registerView("friends", renderNetwork);
   registerView("library", renderLibrary);
   registerView("audio",   renderAudio);
@@ -223,7 +222,6 @@ export function init() {
   renderArchive();
   renderFN();
   renderWall();
-  renderBarrel();
   renderNetwork();
   renderLibrary();
   renderAudio();

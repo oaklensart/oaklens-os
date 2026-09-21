@@ -141,7 +141,7 @@ describe('empty-overwrite guard — anything else is the absence of information'
       commits: false,
     });
     const res = await worker.fetch(await publishReq({
-      files: [emptyManifest, { path: 'data/barrel.json', content: '[]' }],
+      files: [emptyManifest, { path: 'data/friends.json', content: '[]' }],
       baseSha: 'HEAD_SHA',
     }), env, ctx);
 

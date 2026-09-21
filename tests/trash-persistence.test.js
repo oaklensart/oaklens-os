@@ -35,7 +35,7 @@ globalThis.confirm = () => true;
 // (the real console mirrors them onto window) — stub the family before importing.
 for (const fn of [
   'renderTrash', 'refreshStageIndicators', 'renderBuffer', 'renderArchive',
-  'renderFN', 'fnNewPost', 'renderWall', 'renderBarrel', 'renderNetwork',
+  'renderFN', 'fnNewPost', 'renderWall', 'renderNetwork',
   'renderLibrary', 'renderAudio', 'showView', 'scheduleLibrarySync',
   'updatePurgeR2Button', 'isVideoAsset',
 ]) globalThis[fn] = () => {};
@@ -63,7 +63,7 @@ beforeEach(() => {
   STATE.audio = [];
   STATE.buffer = [];
   STATE.stagedLog = [];
-  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0 };
+  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0, audio: 0 };
 });
 
 describe('writing', () => {
@@ -164,6 +164,40 @@ describe('reading back', () => {
     store.set(KEY, '{not json');
     expect(() => load()).not.toThrow();
     expect(sessionTrash).toHaveLength(0);
+  });
+
+  // The barrel was retired 2026-09-20, and load() hydrates with
+  // Object.assign(STATE, saved) — so a state saved before that date puts a
+  // surface back onto a STATE that no longer declares it. The array is dead
+  // weight, but `staged.barrel` is a correctness bug: refreshStageIndicators
+  // sums every counter, so a stale 3 is three pending changes on a surface that
+  // cannot publish and therefore can never clear them. The badge would read
+  // "3 pending" forever, on a console with nothing staged.
+  it('drops a retired surface left behind by a state saved before it went', () => {
+    store.set('oaklens_console_v01', JSON.stringify({
+      buffer: [], archive: [], posts: [], wallpapers: [], friends: [], library: [],
+      audio: [], audioSets: [], cards: [],
+      barrel: [{ id: 'b-1', date: '05.31', title: 'Old milestone', url: '/wall' }],
+      staged: { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 3,
+        friends: 0, library: 0, audio: 0, audioSets: 0, cards: 0 },
+      stagedLog: [
+        { surface: 'barrel', ids: ['b-1'], label: 'Old milestone — new', kind: 'add', n: 3 },
+        { surface: 'audio', ids: ['a1'], label: 'Track — edited', kind: 'edit', n: 1 },
+      ],
+    }));
+    load();
+    expect(STATE.barrel, 'the dead surface is gone, not merely empty').toBeUndefined();
+    expect(STATE.staged.barrel, 'and so is its counter').toBeUndefined();
+    expect(STATE.stagedLog.map((r) => r.surface), 'its ledger rows go too — a row whose surface has no label renders undefined')
+      .toEqual(['audio']);
+  });
+
+  it('survives a pre-barrel-retirement state with no stagedLog at all', () => {
+    // The guard runs after stagedLog is normalized to an array; a state old
+    // enough to predate the ledger must not make it throw on boot.
+    store.set('oaklens_console_v01', JSON.stringify({ barrel: [{ id: 'b-1' }] }));
+    expect(() => load()).not.toThrow();
+    expect(STATE.barrel).toBeUndefined();
   });
 });
 

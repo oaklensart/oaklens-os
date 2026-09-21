@@ -36,7 +36,7 @@ beforeEach(() => {
     <div id="toast-host"></div>
   `;
   STATE.buffer = [];
-  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0, friends: 0, library: 0, audio: 0 };
+  STATE.staged = { buffer: 0, archive: 0, posts: 0, wallpapers: 0, friends: 0, library: 0, audio: 0 };
 });
 
 const frame = (id, over) => ({

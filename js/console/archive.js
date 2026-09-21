@@ -3,7 +3,7 @@
 // The curated-frames surface: the compose form (drop → variants → R2 upload,
 // with dataset.uploadState arming the publish guards — see the truthfulness
 // write-up for the incident that forced that), stage/update, edit, clear,
-// remove (with auto-barrel cleanup), and the card renderer.
+// remove, and the card renderer.
 //
 // Owns the gear memory too (camera / lens / medium): those three fields are
 // free text — see the block comment above GEAR_KEY for why they stopped being
@@ -23,8 +23,7 @@ import { STATE, save, stageChange, trashItem, _pendingR2Deletes } from '../conso
 import { getToken, uploadFilesWithRetry } from '../console-api.js';
 import { toast, escapeHTML } from './chrome.js';
 import { cdnThumb, generateVariants, _resizeToWebP, _hasOgCard } from './assets.js';
-import { cleanFilename, slugify, todayISO, uid, ymd, readFileAsDataURL, findDuplicateByHash } from './utils.js';
-import { upsertAutoBarrel, barrelDateFromYMD } from './more-views.js';
+import { cleanFilename, slugify, todayISO, uid, readFileAsDataURL, findDuplicateByHash } from './utils.js';
 
 // ============== GEAR MEMORY ==============
 // Camera / lens / medium were two hardcoded <option> lists — one photographer's
@@ -431,18 +430,10 @@ export function archiveStage() {
   delete view.dataset.uploadState;   // consumed — the entry now carries the state
   STATE.archive.unshift(entry);
   stageChange("archive", { id: entry.id, label: `${title} — new entry`, kind: 'add' });
-  // Auto-barrel entry
-  upsertAutoBarrel({
-    source: "archive",
-    ref: entry.slug,
-    date: barrelDateFromYMD(ymd(new Date())),
-    title: `Archive: ${title}`,
-    url: `/archive#${entry.slug}`,
-  });
   save();
   archiveClear();
   renderArchive();
-  toast(`✓ "${title}" staged + barrel updated`, "success");
+  toast(`✓ "${title}" staged for publish`, "success");
 }
 
 export function archiveClear() {
@@ -480,19 +471,7 @@ export function archiveClear() {
 }
 
 export function archiveRemove(id) {
-  // Capture the slug before the frame is spliced out so we can drop its matching
-  // auto-barrel changelog entry too. Without this the homepage timeline keeps an
-  // orphan "Archive: <title>" link pointing at /archive#<slug> after the frame is
-  // gone — which is exactly why a deleted frame's barrel entry stayed live on the
-  // site. Mirrors fnDeletePost(); filter() snapshots the match before splicing.
-  const a = STATE.archive.find(x => x.id === id);
-  const slug = a && a.slug;
   trashItem("archive", id);
-  if (slug) {
-    STATE.barrel
-      .filter(b => b.type === "auto" && b.source === "archive" && b.ref === slug)
-      .forEach(b => trashItem("barrel", b.id));
-  }
 }
 
 export function renderArchive() {

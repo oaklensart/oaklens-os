@@ -740,7 +740,7 @@ function injectWordmark(rewriter) {
         chunk.remove();
         return;
       }
-      const page = titleBuf.trim();
+      const page = _decodeEntities(titleBuf).trim();
       titleBuf = '';
       chunk.replace(_composeTitle(titleMode, page, mark.text));
     },
@@ -768,6 +768,24 @@ function injectWordmark(rewriter) {
       el.removeAttribute('data-site-suffix');
     },
   });
+}
+
+// HTMLRewriter hands back the SOURCE text of a text node, entities and all —
+// it does not decode them — while chunk.replace() escapes what we give it. So
+// a title written `<title>&gt;Dev</title>` round-trips to `&amp;gt;Dev` and the
+// browser tab literally reads "&gt;Dev". That shipped on /dev until 2026-09-20.
+//
+// Decoding here closes the round trip: the entity becomes the character, the
+// wordmark is joined on, and chunk.replace() re-escapes exactly what needs it.
+// The five XML entities are enough — a page title is authored markup, not
+// arbitrary HTML — and `&amp;` MUST be last or `&amp;gt;` decodes twice.
+function _decodeEntities(s) {
+  return String(s)
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&amp;/g, '&');
 }
 
 function _composeTitle(mode, page, brand) {

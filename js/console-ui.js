@@ -50,7 +50,7 @@ export * from './console/utils.js';
 export * from './console/sync.js';
 // the R2 upload queue, its panel, and the no-broken-frame publish gates
 export * from './console/upload.js';
-// Library / Wall / Barrel / Network + list drag-reorder
+// Library / Wall / Network + list drag-reorder
 export * from './console/more-views.js';
 // the curated-frames compose form, stage/edit, renderer
 export * from './console/archive.js';

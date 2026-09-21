@@ -43,9 +43,22 @@ if (typeof globalThis.document !== 'undefined' && !globalThis.localStorage) {
   }
 }
 
-// The suite tests the ENGINE, and site.config.js → demoMode rewires the whole
-// write surface: on an instance that ships demoMode: true (the public demo),
-// every upload/draft/publish/subscribe test would 403 and CI would be
+// Two keys of this instance's config are stripped for the whole suite, for the
+// same reason: the suite tests the ENGINE, and either one makes the engine
+// behave like THIS site rather than like a fork.
+//
+// `devFeed` names real GitHub repositories, and /api/devfeed calls the GitHub
+// API for any path it is configured for. Left in, tests/method-not-allowed's
+// sweep over EXACT_ROUTES — which really invokes every route — would reach out
+// to github.com four times per run, and the suite would be as reliable as
+// somebody else's rate limit. Stripped, the endpoint takes its unconfigured
+// branch (404) and the sweep still proves the route is wired. What the handler
+// does when it IS configured is pinned in tests/devfeed.test.js, which mocks
+// both the config and fetch.
+//
+// And site.config.js → demoMode rewires the whole write surface: on an
+// instance that ships demoMode: true (the public demo), every
+// upload/draft/publish/subscribe test would 403 and CI would be
 // permanently red — found by running the fork suite against the demo's real
 // config before its first deploy. So the suite runs with demoMode stripped
 // from the instance config, and the gate itself is pinned explicitly by
@@ -55,6 +68,6 @@ if (typeof globalThis.document !== 'undefined' && !globalThis.localStorage) {
 // this strip never leaks into what they assert.)
 vi.mock('../site.config.js', async (importOriginal) => {
   const actual = await importOriginal();
-  const { demoMode, ...rest } = actual.default;
+  const { demoMode, devFeed, ...rest } = actual.default;
   return { default: Object.freeze(rest) };
 });

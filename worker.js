@@ -29,6 +29,7 @@ import {
   handleManifest, handleSitemap, handleFeed, handlePodcastFeed, handleBufferSummary, handleSiteSettings, handleVersion,
   handleAnalogsToken,
 } from './src/api/site-meta.js';
+import { handleDevFeed, warmDevFeed } from './src/api/devfeed.js';
 
 // Re-exported for the public contract: tests/page-gate.test.js imports the page
 // helpers + _navLinksHtml, and tests/publish-guard.test.js imports the two pure
@@ -105,6 +106,9 @@ const EXACT_ROUTES = new Map([
   // RSS, and only tracks the author marked `episode` belong in one.
   ['GET /podcast.xml', (request, env) => handlePodcastFeed(request, env)],
   ['GET /api/buffer-summary', (request, env) => handleBufferSummary(request, env)],
+  // The /dev page's commit grid + activity log. Public and cache-first;
+  // 404s unless site.config.js names repos under `devFeed`.
+  ['GET /api/devfeed', (request, env, url, ctx) => handleDevFeed(request, env, url, ctx)],
   ['GET /api/site/settings', (request, env) => handleSiteSettings(request, env)],
   ['GET /api/version', (request, env) => handleVersion(env)],
   ['GET /.well-known/analogs.txt', () => handleAnalogsToken()],
@@ -177,6 +181,14 @@ export const DEMO_LOCKED_ROUTES = new Set([
 export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runArchiveCapture(env));
+    // Warm the /dev commit feed once a day, so the page is fresh for the
+    // first visitor rather than because of them. Without this the feed is
+    // purely traffic-driven: a stale entry is only noticed when somebody
+    // arrives, and that visitor sees the OLD payload while the refresh runs
+    // behind them. A quiet week would mean a week-old log.
+    // Independent of the archive run — neither should be able to skip the
+    // other — and silent when `devFeed` is unconfigured (it returns null).
+    ctx.waitUntil(warmDevFeed(env));
   },
 
   async fetch(request, env, ctx) {
@@ -216,7 +228,10 @@ export default {
     }
     const exactRoute = EXACT_ROUTES.get(routeKey);
     if (exactRoute) {
-      const res = await exactRoute(request, env, url);
+      // ctx rides along so a handler can defer background work with
+      // waitUntil (devfeed's stale-while-revalidate refresh). Handlers
+      // that don't need it simply declare fewer parameters.
+      const res = await exactRoute(request, env, url, ctx);
       return url.pathname.startsWith('/api/') ? withCors(res, url.origin) : res;
     }
 

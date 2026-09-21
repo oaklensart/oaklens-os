@@ -11,6 +11,13 @@ import siteConfig from './config.js';
 // Every public page. Shared by the sitemap and the daily Wayback-archive cron.
 export const PUBLIC_PAGES = ['/', '/about', '/archive', '/field-notes', '/support', '/wall'];
 
+// `/dev/fixxer` is listed alongside `/dev` rather than left to be crawled off
+// the index: the Fixxer page WAS `/dev` until 2026-09-20, so it was in the
+// sitemap and in the daily Wayback run, and moving it a directory deeper would
+// otherwise have dropped a real page out of both without anybody deciding to.
+// It needs no PAGE_ROUTES entry of its own — `dev: '/dev'` already gates the
+// whole subtree, so `pages.dev: false` still switches both off together.
+//
 // pages[key] === false turns a public page off end to end: the route 404s,
 // the sitemap and Wayback cron drop it, and nav items pointing at it are
 // filtered. A missing key means enabled, so existing configs change nothing.

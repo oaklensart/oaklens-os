@@ -43,7 +43,7 @@ const SOURCE = readFileSync(
   join(import.meta.dirname, '..', 'js', 'console', 'cards.js'), 'utf8');
 
 const emptyStaged = () => ({
-  buffer: 0, archive: 0, posts: 0, wallpapers: 0, barrel: 0,
+  buffer: 0, archive: 0, posts: 0, wallpapers: 0,
   friends: 0, library: 0, audio: 0, cards: 0,
 });
 
@@ -60,7 +60,7 @@ const composeNamed = (title) => {
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="cards-body"></div><div id="toast-host"></div>';
-  for (const k of ['buffer', 'archive', 'posts', 'audio', 'wallpapers', 'barrel',
+  for (const k of ['buffer', 'archive', 'posts', 'audio', 'wallpapers',
     'friends', 'library', 'cards']) STATE[k] = [];
   STATE.staged = emptyStaged();
   STATE.stagedLog = [];

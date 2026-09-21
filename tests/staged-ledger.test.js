@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 globalThis.refreshStageIndicators = () => {};
 globalThis.renderTrash = () => {};
 for (const fn of ['renderBuffer', 'renderArchive', 'renderFN', 'fnNewPost',
-  'renderWall', 'renderBarrel', 'renderNetwork', 'renderLibrary', 'renderAudio']) {
+  'renderWall', 'renderNetwork', 'renderLibrary', 'renderAudio']) {
   globalThis[fn] = () => {};
 }
 globalThis.fetch = async () => new Response('[]', { status: 200 });
@@ -26,7 +26,7 @@ const {
   trashItem, trashRestore, save, load,
 } = await import('../js/console-state.js');
 
-const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'barrel', 'friends', 'library', 'audio', 'cards'];
+const SURFACES = ['buffer', 'archive', 'posts', 'wallpapers', 'friends', 'library', 'audio', 'cards'];
 
 beforeEach(() => {
   document.body.innerHTML = '<div id="toast-host"></div>';
@@ -79,11 +79,11 @@ describe('stageChange — one row per item, gestures fold into n', () => {
 
   it('the ledger caps; the counters stay authoritative past it', () => {
     for (let i = 0; i < LEDGER_CAP + 25; i++) {
-      stageChange('barrel', { id: `b${i}`, label: `entry ${i}` });
+      stageChange('friends', { id: `n${i}`, label: `entry ${i}` });
     }
     expect(STATE.stagedLog).toHaveLength(LEDGER_CAP);
-    expect(STATE.staged.barrel).toBe(LEDGER_CAP + 25);
-    expect(STATE.stagedLog[0].ids[0], 'oldest rows fall off first').toBe('b25');
+    expect(STATE.staged.friends).toBe(LEDGER_CAP + 25);
+    expect(STATE.stagedLog[0].ids[0], 'oldest rows fall off first').toBe('n25');
   });
 
   it('clearStage wipes rows and counters together', () => {
