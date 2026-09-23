@@ -369,7 +369,18 @@ export default {
     if (isConsoleShell && siteConfig.consoleShellPublic !== true) {
       if (!(await verifyShellRequest(request, env))) {
         const gate = await env.ASSETS.fetch(new Request(`${url.origin}/dev/console-gate.html`));
-        return new Response(gate.body, {
+        // The gate carries the console's lighting, and light needs a colour.
+        // Stamp the PALETTE and nothing else, so a fork's login page is in its
+        // own brand. Deliberately NOT the site-chrome rewriter: the name,
+        // tagline, coordinates and OG card must never reach an
+        // unauthenticated visitor. One attribute, one element handler — and
+        // a palette name is already on every public page of the same site.
+        const lit = new HTMLRewriter().on('html', {
+          element(el) {
+            el.setAttribute('data-preset', (siteConfig.theme || {}).preset || 'aperture');
+          },
+        }).transform(gate);
+        return new Response(lit.body, {
           status: 401,
           headers: {
             'Content-Type': 'text/html; charset=utf-8',

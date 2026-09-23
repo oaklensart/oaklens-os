@@ -25,6 +25,98 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-22 (help's light behaves like light)
+
+**Nothing to do on merge.**
+
+- **Changed: with `?` on, the light under each marked control and around the
+  `?` itself is redrawn to behave like real light.** The line under each
+  button used to sit in a black groove wider than the button, which bit into
+  its outline and looked unfinished. It's now a line of light tucked under the
+  button, the button's own width, dissolving at both ends, with a faint glow
+  around it. That glow gets brighter when you point at the control and
+  ignites fully when you pick it. The `?` used to wear an oval of red haze
+  that a window edge could cut off. Now light comes off its outline in soft
+  layers, with a faint pool on the panel beneath it. DAYLIGHT keeps its flat,
+  unlit look.
+
+  If your console is installed as an app, it picks this up on its next reload.
+
+## 2026-09-22 (the console stops moving your scroll)
+
+**Nothing to do on merge.**
+
+- **Fixed: scrolling in the console no longer pulls you somewhere you didn't
+  stop.** The Buffer and Archive snapped to the nearest row of thumbnails when
+  you stopped scrolling. On a big screen "nearest" reached a long way, so
+  scrolling up to the drop zone paused for a second or two and then yanked
+  you back down to the photos. On a phone it made flicks feel sticky. The
+  snapping is gone, and the page stays exactly where you leave it.
+- **Fixed: on phones and tablets, the view title no longer makes the page
+  stutter near the top.** The title shrinks when you scroll, and it used to
+  shrink by changing its own size. That pushed the page around under your
+  finger and, in some browsers, set off a back-and-forth loop. It now shrinks
+  without moving anything below it.
+
+  If your console is installed as an app, it picks this up on its next reload.
+
+## 2026-09-22 (help marks hold still on a phone)
+
+**Nothing to do on merge.**
+
+- **Fixed: with `?` on, scrolling on a phone or tablet no longer drags the help
+  marks behind their buttons.** A finger scrolls the page faster than the marks
+  could follow, so they trailed their controls and caught up in jumps. Now,
+  while a finger is scrolling, the marks step aside and the screen stays evenly
+  dimmed; the moment the page comes to rest they fade back in, exactly on their
+  controls. They vanish at once rather than fading out, so even a hard flick
+  leaves nothing behind, and the top bar's marks stay lit throughout because
+  the top bar never moves. On a computer nothing changes — the marks follow the
+  page as they always did.
+
+  If your console is installed as an app, it picks this up on its next reload.
+
+## 2026-09-21 (the help marks are filaments now)
+
+**Nothing to do on merge.**
+
+- **Changed: press `?` in the console and the marks on the controls you can ask
+  about are now thin glass rods along each control's edge, instead of corner
+  brackets.** Rest a pointer on one and it warms; pick one and it lights up over
+  a second and a half while the explanation unfolds out of it; go back and it
+  cools. On a phone the explanation still rises as a sheet. Nothing about what
+  the help says has changed, and nothing lights up until you pick something.
+
+  **Why.** Brackets are a drawing; a rod in a groove is a thing to press, which
+  matters most on a tablet, where this help exists. The rod is built from the
+  console's own light rules — the same warm-up and cool-down the publish button
+  uses, the same shadow ladder, no extra colours — so it follows your preset and
+  both themes.
+
+  Reduced-motion settings keep every state and skip the ramps. If your console
+  is installed as an app, it picks the new stylesheet up on its next reload.
+
+- **Fixed: there is now only one login screen.** The console used to have two —
+  the real login page, and a small password box it drew over itself after you
+  logged out or opened it in a new tab. Now every one of those takes you to the
+  same login page. This is deliberate: you should never get used to typing your
+  password into whatever box happens to appear. Anything you had staged but not
+  published is still there when you sign back in.
+
+- **Changed: the login page matches the console.** The console's password
+  screen used to be a flat red line over a flat red button. It is now the same
+  panel the console is: a thin light rail across the top that stays dark until
+  you start typing and lights while it is checking your password, with the
+  light spilling down the panel beneath it, and a proper backlit ENTER key that
+  travels when you press it. It follows your site's colours — a blue site gets
+  a blue rail — and in light mode it is ink on paper instead. Nothing about
+  logging in changed.
+
+- **Changed: the sidebar shows where you are with a small lit bead.** Each view
+  in the left panel sits on a recessed track with a dark bead; the view you are
+  on has a lit one. Nothing else in the sidebar lights, and nothing moves on
+  its own.
+
 ## 2026-09-20 (the card fits on a phone again)
 
 **Nothing to do on merge.**

@@ -630,3 +630,95 @@ describe('a help mark folds under the bars, like the thing it marks', () => {
     }
   });
 });
+
+// 2026-09-22. The owner: on desktop, scrolling up to the drop zone "hesitates
+// for like 1-2 seconds, and then perfectly snaps to the top row"; on a phone,
+// "a lil resistance and choppy … like a glitch". Two causes, both about the
+// console moving the page when the user had not asked it to.
+describe('the console leaves the scroll where the user left it', () => {
+  const RULES = css.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Proximity snapping on `.main`, with a point on every frame, reached
+  // 247px at 1280×832. Stopping with the drop zone on screen was pulled
+  // down to the first row. A shared scroller cannot snap safely.
+  it('does not snap the main scroller, or seat snap points in its grids', () => {
+    expect(RULES).not.toMatch(/scroll-snap-type:\s*y/);
+    expect(RULES).not.toMatch(/\.buffer-grid\s*>\s*\*[^{]*\{[^}]*scroll-snap-align/);
+    expect(RULES).not.toMatch(/\.archive-list\s*>\s*\*[^{]*\{[^}]*scroll-snap-align/);
+  });
+
+  // The header shrank 21px at the threshold. Scroll anchoring moved
+  // scrollTop to compensate, back across the threshold, and it flipped 35
+  // times in 1.5s. Compaction must leave the header's margin box, and so
+  // everything after it, exactly where it was.
+  const bandRule = (sel) => {
+    const at = band.indexOf(`${sel} {`);
+    expect(at, `${sel} in the band`).toBeGreaterThanOrEqual(0);
+    const open = band.indexOf('{', at);
+    return band.slice(open + 1, band.indexOf('}', open));
+  };
+  const px = (decl, prop) => {
+    const m = decl.match(new RegExp(`(?:^|[\\s;])${prop}:\\s*([^;]+);`));
+    return m ? m[1].trim().split(/\s+/).map((v) => parseFloat(v)) : null;
+  };
+
+  it('compacts the header without moving anything below it', () => {
+    const base = bandRule('.view:not(#view-fn) .view-header');
+    const compact = bandRule('body.hdr-compact .view:not(#view-fn) .view-header');
+    const [pt, , pb] = px(base, 'padding');         // 10px 32px 14px
+    const [, , mb] = px(base, 'margin');             // 0 -32px 24px
+    const cpt = px(compact, 'padding-top')[0];
+    const cpb = px(compact, 'padding-bottom')[0];
+    const cmb = px(compact, 'margin-bottom')?.[0];
+    expect(cmb, 'compact must hand the padding back as margin').not.toBeUndefined();
+    expect(cpt + cpb + cmb).toBe(pt + pb + mb);
+    // …on the same curve, or the sum is only constant at the two ends.
+    expect(base).toMatch(/transition:[^;]*padding var\(--dur-2\) var\(--ease-out\)[^;]*margin var\(--dur-2\) var\(--ease-out\)/);
+  });
+
+  it('shrinks the title with a transform, never a size', () => {
+    const title = bandRule('body.hdr-compact .view:not(#view-fn) .view-title');
+    expect(title).toMatch(/transform:\s*scale\(/);
+    expect(title).not.toMatch(/font-size|margin|padding|height/);
+  });
+
+  describe('the compact switch has two thresholds', () => {
+    let chrome;
+    let main;
+    let y = 0;
+    const scrollTo = (v) => {
+      y = v;
+      main.dispatchEvent(new Event('scroll'));
+    };
+    const compact = () => document.body.classList.contains('hdr-compact');
+
+    beforeEach(async () => {
+      // Runs the frame at once and hands back 0, as if it had already fired:
+      // the listener guards on the handle, and a live one would swallow every
+      // later scroll.
+      vi.stubGlobal('requestAnimationFrame', (fn) => { fn(); return 0; });
+      document.body.className = '';
+      document.body.innerHTML = '<div class="main"></div>';
+      main = document.querySelector('.main');
+      Object.defineProperty(main, 'scrollTop', { get: () => y, configurable: true });
+      chrome = await import('../js/console/chrome.js');
+      chrome._initStickyHeaders();
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('compacts past the top line and releases only near the top', () => {
+      scrollTo(30);
+      expect(compact()).toBe(true);
+      // The loop's landing spot: anchoring pulled 30 → 9. It must hold.
+      scrollTo(9);
+      expect(compact()).toBe(true);
+      scrollTo(5);
+      expect(compact()).toBe(false);
+      // …and on the way down, the band in between does not compact.
+      scrollTo(15);
+      expect(compact()).toBe(false);
+      scrollTo(25);
+      expect(compact()).toBe(true);
+    });
+  });
+});

@@ -12,10 +12,13 @@
 // THREE STATES, and the middle one is the point:
 //
 //   off    — nothing rendered. Only the `?` key is listening.
-//   browse — every control on this view that has an entry wears a hairline
-//            outline. A bar at the bottom says so. NO geometry is computed.
-//   card   — you tapped one. The screen dims around that control and ONE card
-//            explains it. Tap anywhere → back to browse. Esc → back to browse.
+//   browse — every control on this view that has an entry wears a mark: a
+//            hairline field and a FILAMENT along its edge, cold until you are
+//            on it (2026-09-21; the brackets it replaced are in the manual).
+//            A HUD line says to pick one.
+//   card   — you tapped one. Its filament ignites, the screen dims around
+//            that control and ONE card unfurls out of the rod to explain it.
+//            Tap anywhere → back to browse (the rod cools). Esc → browse.
 //
 // Why one card and not all of them: the design sketch this came from drew every
 // card at once with curved leader lines and a collision resolver, and in the
@@ -313,9 +316,12 @@ let _mode = 'off';            // 'off' | 'browse' | 'card'
 let _lit = [];                 // [{ item, el, mark }] while browsing
 let _target = null;            // the element the open card explains
 let _wired = false;
+let _touch = false;            // was the last pointer down a finger or a pen?
+let _settle = 0;               // the timer that re-seats the marks after a touch scroll
 
 const GUTTER = 16;             // keep the card this far off every edge
 const PAD = 4;                 // breathing room around the lit control
+const SETTLE_MS = 140;         // scroll quiet this long = the page has come to rest
 
 /**
  * How much of the bottom of the screen the tab bar owns right now, measured
@@ -380,10 +386,15 @@ function _topInset() {
  * un-dimming the topbar to show off a control in the scroller would light the
  * wrong thing.
  */
+/** A control that IS one of the fixed bars — it scrolls with nothing. */
+function _onBar(el) {
+  return !!el?.closest?.('.topbar, .tabbar');
+}
+
 export function _fieldFor(el) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  if (el?.closest?.('.topbar, .tabbar')) {
+  if (_onBar(el)) {
     return { top: 0, bottom: vh, left: 0, right: vw };
   }
   return { top: _topInset(), bottom: vh - _bottomInset(), left: 0, right: vw };
@@ -434,7 +445,7 @@ function _layer() {
     + '<svg class="help-scrim" id="help-scrim" aria-hidden="true">'
     + '<defs><mask id="help-scrim-mask" maskUnits="userSpaceOnUse">'
     + '<rect id="help-scrim-field" x="0" y="0" fill="#fff"></rect>'
-    + '<g id="help-scrim-holes"></g></mask></defs>'
+    + '<g id="help-scrim-holes"></g><g id="help-scrim-fixed"></g></mask></defs>'
     + '<rect id="help-scrim-fill" x="0" y="0" mask="url(#help-scrim-mask)"></rect>'
     + '</svg>'
     + '<div class="help-marks" id="help-marks"></div>'
@@ -498,6 +509,14 @@ function _outline(on) {
     // table's order, which is NOT the DOM's order and quietly mis-pairs
     // anything that assumes it is.
     mark.dataset.helpFor = item.sel;
+    // A control IN a bar never scrolls, so its mark stays put when a finger
+    // scrolls the content (see _onScroll) — the stylesheet reads this.
+    if (_onBar(el)) mark.dataset.fixed = '';
+    // The touch point: a glass rod in a channel along the control's edge, cold
+    // iron until you are on it, lit only once you have picked it. Static
+    // markup — every state it has is an attribute the stylesheet reads
+    // (data-warm, data-press, data-hot), so this module never styles it.
+    mark.innerHTML = '<div class="help-filament"><span class="help-strand"><i class="help-core"></i></span></div>';
     host?.appendChild(mark);
     _lit.push({ item, el, mark });
   }
@@ -527,17 +546,24 @@ function _cutScrim(rects) {
     r.setAttribute('width', w);
     r.setAttribute('height', h);
   }
+  // Two groups: what scrolls, and what sits on a bar. Under a finger the first
+  // is hidden while the page moves (see _onScroll) and the second stays cut.
   const holes = document.getElementById('help-scrim-holes');
+  const fixed = document.getElementById('help-scrim-fixed');
   holes.textContent = '';
+  fixed.textContent = '';
   const screen = w * h;
   for (const r of rects) {
     if (!r || r.width < 1 || r.height < 1) continue;
     const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    el.setAttribute('x', Math.round(r.left));
-    el.setAttribute('y', Math.round(r.top));
-    el.setAttribute('width', Math.round(r.width));
-    el.setAttribute('height', Math.round(r.height));
-    el.setAttribute('rx', '3');
+    // To the hundredth, not the pixel. Rounding moved a hole up to half a
+    // pixel off its control, which a padded hole hides and a flush one (the
+    // `?`, see _armRect) shows as a bright sliver down one side.
+    el.setAttribute('x', r.left.toFixed(2));
+    el.setAttribute('y', r.top.toFixed(2));
+    el.setAttribute('width', r.width.toFixed(2));
+    el.setAttribute('height', r.height.toFixed(2));
+    el.setAttribute('rx', String(r.rx ?? 3));
     // A mask reads LUMINANCE: black hides the scrim completely, white keeps it,
     // and grey lifts it part way. Small controls get black — a real gap. The
     // buffer's contact sheet is 75% of the screen, and cutting that out did not
@@ -549,7 +575,7 @@ function _cutScrim(rects) {
     const lift = frac <= 0.10 ? 1 : Math.max(0.2, 1 - (frac - 0.10) / 0.25);
     const v = Math.round(255 * (1 - lift));
     el.setAttribute('fill', `rgb(${v},${v},${v})`);
-    holes.appendChild(el);
+    (r.fixed ? fixed : holes).appendChild(el);
   }
 }
 
@@ -586,26 +612,49 @@ export function _visibleRect(el, pad = PAD, field = _fieldFor(el)) {
  * what makes it read as a sticker rather than as something emitting (owner,
  * 2026-09-19: "it feels like it was pasted on in photoshop"). The falloff is
  * _placeArmGlow's job; this is just the crisp control.
+ *
+ * And FLUSH, since 2026-09-22. At 2px it still cut a ring out of the button's
+ * own halo (`--lit-halo`, a 12px glow): full strength inside the ring, dimmed
+ * outside it, so the `?` wore a hard square of light. At 0 the hole ends on the
+ * button's own border, and the whole halo sits evenly under the dim, where the
+ * pool above takes over.
  */
 function _armRect() {
   const btn = document.getElementById('help-topbar-btn');
   if (!btn || !btn.getBoundingClientRect().height) return null;
-  return _visibleRect(btn, 2);
+  // Flush means the corners too: the padded holes' 3px rounding would dim the
+  // four corners of a square button.
+  const rx = parseFloat(getComputedStyle(btn).borderTopLeftRadius) || 0;
+  return { ..._visibleRect(btn, 0), fixed: true, rx };
 }
 
-/** The pool the armed `?` throws onto the dimmed chrome around it. */
-function _placeArmGlow() {
+/**
+ * The bloom around the armed `?`. The element IS the button's box, and the
+ * stylesheet hangs the light off its outline in tiers (see `.help-arm-glow`).
+ *
+ * Two drafts before this, both shapes of their own. First a circle 1.6× the
+ * button, which the window's top edge sliced while still at ~10%. Then an
+ * ellipse fitted to the bar, which no edge could cut, and which the owner
+ * called exactly (2026-09-22): "it looks pasted on not like physical light".
+ * Light takes the shape of its emitter, so the emitter's box is all this
+ * places. Returns the box, for the test.
+ */
+export function _placeArmGlow() {
   const glow = document.getElementById('help-arm-glow');
   const btn = document.getElementById('help-topbar-btn');
-  if (!glow || !btn) return;
+  if (!glow || !btn) return null;
   const r = btn.getBoundingClientRect();
-  if (!r.height) { glow.style.display = 'none'; return; }
-  const spread = Math.round(Math.max(r.width, r.height) * 1.6);
+  if (!r.height) { glow.style.display = 'none'; return null; }
+  const box = { left: r.left, top: r.top, width: r.width, height: r.height };
   glow.style.display = 'block';
-  glow.style.left = `${r.left - spread}px`;
-  glow.style.top = `${r.top - spread}px`;
-  glow.style.width = `${r.width + spread * 2}px`;
-  glow.style.height = `${r.height + spread * 2}px`;
+  glow.style.left = `${box.left}px`;
+  glow.style.top = `${box.top}px`;
+  glow.style.width = `${box.width}px`;
+  glow.style.height = `${box.height}px`;
+  // Round like the lamp: square corners blur round on their own, and a
+  // rounded button must not bloom from a square box.
+  glow.style.borderRadius = getComputedStyle(btn).borderTopLeftRadius;
+  return box;
 }
 
 /** Marks follow their controls, on the listeners the spotlight already uses. */
@@ -613,51 +662,60 @@ function _placeMarks() {
   // Browse needs the tab bar's height too — the HUD line sits above it, and a
   // value only written in card mode left the line lying across the tab labels.
   document.getElementById('help-layer')?.style.setProperty('--help-foot', `${_bottomInset()}px`);
-  for (const { el, mark } of _lit) {
-    const r = el.getBoundingClientRect();
-    const field = _fieldFor(el);
-    // Scrolled off, or clipped to nothing by a scroller or by a bar: draw no
-    // mark rather than a sliver pinned to an edge.
-    if (r.bottom <= field.top || r.top >= field.bottom
-        || r.right <= field.left || r.left >= field.right || r.height < 4) {
-      mark.style.display = 'none';
-      continue;
-    }
-    const box = _visibleRect(el, PAD, field);
-    // …and the same for what is LEFT once the bars have taken their share: a
-    // control with 3px showing under the topbar gets no mark, not a hairline
-    // that reads as the bar's own underline.
-    if (box.height < 6 || box.width < 6) { mark.style.display = 'none'; continue; }
-    mark.style.display = 'block';
-    mark.style.left = `${box.left}px`;
-    mark.style.top = `${box.top}px`;
-    mark.style.width = `${box.width}px`;
-    mark.style.height = `${box.height}px`;
-    // Only the edges the CONTROL actually has. A target taller than the screen
-    // used to get a full frame drawn at the viewport boundary — a hairline that
-    // is really the window's edge, not the thing's, and one that slides as you
-    // scroll. An edge clipped away simply is not drawn, and a corner bracket
-    // needs both of its edges to be real.
-    const edges = [];
-    if (r.top - PAD >= field.top) edges.push('t');
-    if (r.left - PAD >= field.left) edges.push('l');
-    if (r.bottom + PAD <= field.bottom) edges.push('b');
-    if (r.right + PAD <= field.right) edges.push('r');
-    mark.dataset.edges = edges.join(' ');
-    // A bracket must not meet itself in the middle: these run from a 30px chip
-    // to a full-width dropzone.
-    mark.toggleAttribute('data-narrow', Math.min(box.width, box.height) < 46);
-  }
+  for (const entry of _lit) _placeMark(entry);
   // The dim, and the reason the marks can now be quiet: the bright thing is the
   // control itself, not a colour laid over it.
   const cut = _lit
     .filter(({ mark }) => mark.style.display !== 'none')
-    .map(({ el }) => _visibleRect(el));
+    .map(({ el }) => ({ ..._visibleRect(el), fixed: _onBar(el) }));
   const arm = _armRect();
   if (arm) cut.push(arm);
   _cutScrim(cut);
   _placeArmGlow();
   _dockBar();
+}
+
+/**
+ * Put one mark over its control — or hide it, when there is nothing honest to
+ * draw. Shared by browse (every mark) and card mode (the hot one), because the
+ * filament has to sit in exactly the same place in both.
+ */
+export function _placeMark({ el, mark }) {
+  const r = el.getBoundingClientRect();
+  const field = _fieldFor(el);
+  // Scrolled off, or clipped to nothing by a scroller or by a bar: draw no
+  // mark rather than a sliver pinned to an edge.
+  if (r.bottom <= field.top || r.top >= field.bottom
+      || r.right <= field.left || r.left >= field.right || r.height < 4) {
+    mark.style.display = 'none';
+    return;
+  }
+  const box = _visibleRect(el, PAD, field);
+  // …and the same for what is LEFT once the bars have taken their share: a
+  // control with 3px showing under the topbar gets no mark, not a hairline
+  // that reads as the bar's own underline.
+  if (box.height < 6 || box.width < 6) { mark.style.display = 'none'; return; }
+  mark.style.display = 'block';
+  mark.style.left = `${box.left}px`;
+  mark.style.top = `${box.top}px`;
+  mark.style.width = `${box.width}px`;
+  mark.style.height = `${box.height}px`;
+  // Only the edges the CONTROL actually has. A target taller than the screen
+  // used to get a full frame drawn at the viewport boundary — a hairline that
+  // is really the window's edge, not the thing's, and one that slides as you
+  // scroll. An edge clipped away simply is not drawn.
+  const edges = [];
+  if (r.top - PAD >= field.top) edges.push('t');
+  if (r.left - PAD >= field.left) edges.push('l');
+  if (r.bottom + PAD <= field.bottom) edges.push('b');
+  if (r.right + PAD <= field.right) edges.push('r');
+  mark.dataset.edges = edges.join(' ');
+  // The filament rides the control's bottom edge — under it, where a caption
+  // goes. When that edge is under a bar it moves to the top; when both are, it
+  // is not drawn at all, for the reason the hairline is not: a rod lying along
+  // the window's edge is the window's, not the thing's. The control is still
+  // there to press; it just has no rod, and the field says which it is.
+  mark.dataset.lamp = edges.includes('b') ? 'b' : edges.includes('t') ? 't' : '';
 }
 
 /**
@@ -718,9 +776,19 @@ function _dockBar() {
 function _enterBrowse() {
   const layer = _layer();
   const was = _target;
+  // Back from a card, the marks are still there — card mode faded the others
+  // and heated the one you picked. Keep them: the rod then COOLS on the
+  // --arm-cool curve, which a rebuilt mark could not do, and the view under
+  // them cannot have changed while every click was absorbed.
+  const fromCard = _mode === 'card' && _lit.length > 0;
   _mode = 'browse';
   _hideCard();
-  _outline(true);
+  if (fromCard) {
+    for (const { mark } of _lit) mark.removeAttribute('data-hot');
+    _placeMarks();
+  } else {
+    _outline(true);
+  }
   layer.classList.add('open');
   layer.classList.remove('carded');
   document.body.classList.add('help-on');
@@ -831,7 +899,10 @@ function _paintCard(item) {
 }
 
 function _reflow() {
-  if (_mode === 'browse') { _placeMarks(); return; }
+  // Let go under a finger: nothing on the content is showing, and _seat()
+  // measures everything once the page stops. Doing it here — a ResizeObserver
+  // tick, a resize — would spend the main thread in the middle of a flick.
+  if (_mode === 'browse') { if (!_settle) _placeMarks(); return; }
   if (_mode !== 'card' || !_target) return;
   if (!_target.getClientRects().length) { _enterBrowse(); return; }
   // Clamped to the viewport, because the hole is a picture of what you can SEE.
@@ -864,6 +935,69 @@ function _reflow() {
   glow.style.width = `${rect.width + spread * 2}px`;
   glow.style.height = `${rect.height + spread * 2}px`;
   _placeCard(document.getElementById('help-card'), rect);
+  // The filament under the picked control stays, hot, and moves with it.
+  const hot = _lit.find(({ el }) => el === _target);
+  if (hot) _placeMark(hot);
+}
+
+/**
+ * A scroll, and who is driving it.
+ *
+ * Under a mouse or a wheel the marks follow the page live, as they always have.
+ * Under a FINGER they cannot: a phone or tablet scrolls on its own thread, and
+ * this handler — and the marks it moves — only hear about it a frame or more
+ * later. Each call also re-measures every mark and re-cuts the dim, 14ms on a
+ * desktop Mac at phone width, so on a phone the marks moved in late jumps while
+ * the controls glided under them (owner, 2026-09-22: the overlays "separate
+ * from their objects as you scroll"). No amount of speed closes a gap that is
+ * one thread behind by construction.
+ *
+ * So under touch the marks stop pretending to track. The first scroll of a
+ * gesture lets go of them — they vanish and the dim closes over the page while
+ * it moves — and once the page has been still for SETTLE_MS they are measured
+ * ONCE, where everything now is, and fade back in. Momentum scrolling keeps
+ * firing scroll events, so a flick holds them down until it actually stops.
+ *
+ * ⚠️ VANISH, don't fade. The first cut faded them out over --dur-1, which was
+ * right for a slow drag and a tear on a flick (owner, same evening: "for the
+ * muscle reaction flick … the fade still lags and registers as a tear"). A hard
+ * flick moves the page a few hundred pixels in 120ms, and for all of it the
+ * marks and the bright cut-outs sat where the controls USED to be. Anything
+ * that lingers while the page races is a tear, so the way out is instant and
+ * only the way back is eased. The stylesheet carries that asymmetry.
+ *
+ * Only the CONTENT lets go. A mark on a bar never moves, so it stays lit and
+ * its cut-out lives in its own mask group — blinking the whole header on every
+ * flick would be the overlay flickering, not getting out of the way.
+ *
+ * Browse only: in card mode the catch layer owns every touch, so the page
+ * cannot be scrolled by a finger and any scroll is our own _bringIntoView,
+ * which the spotlight has to follow exactly.
+ */
+function _onScroll() {
+  if (_mode !== 'browse' || !_touch) { _reflow(); return; }
+  _letGo();
+}
+
+/** Hide what the page is about to carry away, and (re)arm the settle. */
+function _letGo() {
+  document.getElementById('help-layer')?.classList.add('scrolling');
+  clearTimeout(_settle);
+  _settle = setTimeout(_seat, SETTLE_MS);
+}
+
+/** The page has come to rest: put every mark where its control now is, and show them. */
+function _seat() {
+  _settle = 0;
+  if (_mode === 'browse') _placeMarks();
+  document.getElementById('help-layer')?.classList.remove('scrolling');
+}
+
+/** Drop a pending re-seat — leaving browse, or opening a card, needs no settle. */
+function _unsettle() {
+  clearTimeout(_settle);
+  _settle = 0;
+  document.getElementById('help-layer')?.classList.remove('scrolling');
 }
 
 /** The nearest ancestor that actually scrolls — the console has fourteen. */
@@ -945,9 +1079,18 @@ function _forceClear(el) {
 
 function _showCard(item, el) {
   _layer();
+  _unsettle();
   _mode = 'card';
   _target = el;
-  _outline(false);
+  // The marks stay. The stylesheet fades every one but the picked control's,
+  // whose rod ignites on --arm-heat — its resting rule already declares every
+  // filter at zero, so the attribute alone is the ignition; no layout flush is
+  // needed here the way setCommitArmed() needs one.
+  for (const entry of _lit) {
+    entry.mark.toggleAttribute('data-hot', entry.el === el);
+    entry.mark.removeAttribute('data-warm');
+    entry.mark.removeAttribute('data-press');
+  }
   _paintCard(item);
   document.getElementById('help-layer').classList.add('carded');
   // The card is measurable as soon as it is shown, so the scroll happens BEFORE
@@ -980,6 +1123,7 @@ export function helpToggle() {
 /** Leave help entirely, from any state. */
 export function helpClose() {
   _mode = 'off';
+  _unsettle();
   _outline(false);
   _hideCard();
   const layer = document.getElementById('help-layer');
@@ -1072,6 +1216,29 @@ function _wire() {
     if (hit) _showCard(hit.item, hit.el);
   }, true);
 
+  // The rod answers the touch before the tap. A pointer (or the keyboard's
+  // focus) on a marked control warms its filament; a press sinks it into its
+  // channel. Both are attributes on the mark and nothing else — the control
+  // under the pointer is left exactly alone, as always — and both are inert
+  // outside browse, so the listeners cost nothing while help is off.
+  const markFor = (t) => _lit.find(({ el }) => el === t || el.contains?.(t))?.mark;
+  const warm = (e) => {
+    if (_mode !== 'browse') return;
+    const m = markFor(e.target);
+    for (const { mark } of _lit) mark.toggleAttribute('data-warm', mark === m);
+  };
+  document.addEventListener('pointerover', warm, true);
+  document.addEventListener('focusin', warm, true);
+  document.addEventListener('pointerdown', (e) => {
+    if (_mode !== 'browse') return;
+    markFor(e.target)?.setAttribute('data-press', '');
+  }, true);
+  for (const ev of ['pointerup', 'pointercancel']) {
+    document.addEventListener(ev, () => {
+      for (const { mark } of _lit) mark.removeAttribute('data-press');
+    }, true);
+  }
+
   window.addEventListener('resize', _reflow);
   // Late layout. A view can finish rendering AFTER help opens — Bench and
   // Publish both do, and the Cards view takes a network round trip — which
@@ -1087,7 +1254,21 @@ function _wire() {
   // never hears the console's fourteen nested scrollers — the Field Notes
   // canvas holds `.fn-dock`, which is an explained target, and scrolling it
   // left the spotlight stranded where the dock used to be.
-  window.addEventListener('scroll', _reflow, { passive: true, capture: true });
+  window.addEventListener('scroll', _onScroll, { passive: true, capture: true });
+  // Who is driving the next scroll (see _onScroll). A pan starts with a
+  // pointerdown before the browser takes it over, so the last one down names
+  // the input; a wheel is always a mouse or a trackpad, whatever came before.
+  // Read off the event, not a media query: a touch laptop is both.
+  document.addEventListener('pointerdown', (e) => { _touch = e.pointerType === 'touch' || e.pointerType === 'pen'; }, true);
+  // …and a finger's pointercancel is the browser saying "this touch is a
+  // scroll now", sent as it takes the gesture over — before the first scroll
+  // event reaches us. On a flick that head start is the difference.
+  document.addEventListener('pointercancel', (e) => {
+    if (_mode !== 'browse' || (e.pointerType !== 'touch' && e.pointerType !== 'pen')) return;
+    _touch = true;
+    _letGo();
+  }, true);
+  window.addEventListener('wheel', () => { _touch = false; }, { passive: true, capture: true });
 }
 
 /** Wired from init.js — the `?` key, and the outline refresh when a view changes. */

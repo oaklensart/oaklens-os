@@ -5,6 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>FIELD CONSOLE — LOGIN</title>
+<script>
+/* Anti-flash mode boot — the same `console_theme` key the console's own head
+   script reads (dev/field-console.html), so the door opens into the room in
+   the same light instead of flashing black at someone working in DAYLIGHT.
+   Inline and pre-paint on purpose: this page loads no stylesheet to wait on. */
+try {
+  var _t = localStorage.getItem('console_theme')
+        || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  if (_t === 'light') document.documentElement.dataset.theme = 'light';
+} catch (e) {}
+</script>
 <!--
   The console gate. Served by the worker (with status 401) in place of the
   Field Console document whenever the request carries no valid console-shell
@@ -18,13 +29,138 @@
   CSS/JS, no service-worker registration — an unauthenticated visitor learns
   nothing here but "a login exists", and the page keeps working on a fork
   before any branding is configured.
+
+  The ONE thing the edge adds is `data-preset` on <html> (worker.js, the shell
+  gate branch): a palette name, which every public page of the same site
+  already carries, so the door is in the fork's own colour. It is not
+  identity — no name, tagline, coordinates or meta come near this page, and
+  the rewriter used there is a two-attribute one, NOT injectSiteChrome.
 -->
 <style>
-  :root { color-scheme: dark; }
+  /* =============================================================
+     THE GATE, LIT — the console's own lighting, carried across the door.
+     (2026-09-21, after the V1 Avionics pass on the console itself.)
+
+     This page loads NO shared stylesheet, on purpose (see the note above), so
+     the tokens below are a deliberate, trimmed COPY of the ladder in
+     css/field-console.css — the L1 brand primitives, the light ladder
+     (§ L1.5 THE LIGHT), the lit/cold-iron pair and the ignition curves.
+     Nothing here invents a value and nothing here is a literal colour: every
+     rule names a token, so a fork that runs another preset gets its own
+     filament, and DAYLIGHT gets ink and paper instead of a glowing rod.
+
+     ⚠️ If a token's value changes in field-console.css, change it here too —
+     tests/console-gate-lighting.test.js compares the two files and fails when
+     they drift. A copy is the price of a self-contained login page; a SILENT
+     copy is not.
+
+     The preset comes from the edge: worker.js stamps data-preset on this
+     document's <html> (config, never hardcoded). The mode comes from the same
+     `console_theme` key the console's own anti-flash boot reads, so the door
+     and the room behind it are in the same light.
+     ============================================================= */
+  :root {
+    /* ---- L1: the brand. Base values are noir; a preset overrides the
+       channels, and everything below composites from them. ---- */
+    --brand-rgb:     255, 0, 0;
+    --brand-ink-rgb: 196, 17, 17;   /* the same brand recalibrated for paper */
+
+    /* ---- surfaces + ink · STUDIO (dark) ---- */
+    --surface-0: #000000;   /* the chassis deck   */
+    --surface-1: #0c0c0c;   /* the panel          */
+    --surface-2: #141414;   /* the milled well    */
+    --surface-3: #1d1d1d;   /* the button's bezel */
+    --ink-1: #f2f2f2;
+    --ink-3: #8f8f8f;
+    --line-2: #242424;
+    --accent-rgb:  var(--brand-rgb);
+    --accent-text: #ff2b2b;
+    --on-accent:   #000;
+
+    /* ---- L1.5 · THE LIGHT — one source, one ladder. --light-y is a unit
+       MULTIPLIER, not a length: set it to -1 and this page must relight from
+       below, or something here was never deriving from the light. ---- */
+    --light-x:   0;
+    --light-y:   1;
+    --light-rim: rgba(255,255,255,0.045);
+    --shade-1:   rgba(0,0,0,0.45);
+    --shade-2:   rgba(0,0,0,0.6);
+    --shade-3:   rgba(0,0,0,0.7);
+    --edge-up:   inset 0 calc(var(--light-y) * 1px) 0 var(--light-rim);
+    --edge-in:   inset 0 calc(var(--light-y) * 2px) 4px -1px var(--shade-3);
+    --shadow-1: calc(var(--light-x) *  4px) calc(var(--light-y) *  4px) 14px var(--shade-1);
+    --shadow-2: calc(var(--light-x) *  8px) calc(var(--light-y) *  8px) 28px var(--shade-2);
+
+    /* ---- ARMED / LIVE, and COLD IRON: the two halves of one licence.
+       An unlit filament is not grey and not invisible — it is the emitter's
+       own hue surviving in the mid-tones of a dark rod, so the eye registers
+       that it COULD light. Derived from --lit-rgb, never a literal. ---- */
+    --lit-rgb:    var(--accent-rgb);
+    --lit-cold-0: rgba(var(--lit-rgb), 0.10);
+    --lit-cold-1: rgba(var(--lit-rgb), 0.24);
+    --lit-cold-2: rgba(var(--lit-rgb), 0.38);
+    --lit-hot:    rgba(255, 255, 255, 0.92);
+    --lit-halo:   0 0 12px rgba(var(--lit-rgb), 0.32);
+
+    /* ---- IGNITION — the only asymmetric timing here. A coil ramps up fast
+       and lets go slowly; matching the two makes it read as a class toggling
+       rather than as something warming up. ---- */
+    --arm-heat: 1.5s cubic-bezier(0.4, 0, 0.5, 1);
+    --arm-cool: 2.6s cubic-bezier(0.33, 0.05, 0.2, 1);
+
+    /* ---- PRESS — travel first: a control that only dims reads as a web
+       page, one that travels into the panel reads as a key. ---- */
+    --press-travel: 1.5px;
+
+    /* The pool's master dial, and the gate's version of the console's
+       --bloom-gain: light pooling onto PAPER is not what a lit object does on
+       a desk — it is what a screen does — so DAYLIGHT paints no wash at all.
+       One token, and no second set of state rules. */
+    --wash-gain: 1;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --dur-1: 120ms;
+    --dur-3: 360ms;
+    --r-1: 3px;
+
+    color-scheme: dark;
+  }
+
+  /* ---- The presets. Channels only — this page needs no faces beyond the
+     system mono, so a fork downloads nothing to be in its own colour. ---- */
+  :root[data-preset="aperture"]      { --brand-rgb: 86, 128, 255;  --brand-ink-rgb: 30, 63, 219;  --accent-text: #8FA8FF; }
+  :root[data-preset="passe-partout"] { --brand-rgb: 196, 96, 79;   --brand-ink-rgb: 150, 58, 48;  --accent-text: #E08A75; }
+  :root[data-preset="selenium"]      { --brand-rgb: 216, 103, 74;  --brand-ink-rgb: 184, 72, 44;  --accent-text: #E08063; }
+  :root[data-preset="cyanotype"]     { --brand-rgb: 92, 159, 206;  --brand-ink-rgb: 35, 100, 142; --accent-text: #85BADF; }
+
+  /* ---- DAYLIGHT — paper and ink. On paper an object that is ON is not
+     brighter, it is HEAVIER: the halo becomes a ring and a contact shadow,
+     and there is no white hotter than the paper, so --lit-hot becomes the
+     emitter's own colour. Same rules below; no second set of them. ---- */
+  :root[data-theme="light"] {
+    --surface-0: #f4f1ea;
+    --surface-1: #fbf9f4;
+    --surface-2: #ffffff;
+    --surface-3: #eae6dc;
+    --ink-1: #131210;
+    --ink-3: #6b675f;
+    --line-2: #d3cec2;
+    --accent-rgb:  var(--brand-ink-rgb, 196, 17, 17);
+    --accent-text: rgb(var(--brand-ink-rgb, 196, 17, 17));
+    --on-accent:   #fff;
+    --light-rim: rgba(255,255,255,0.9);
+    --shade-1:   rgba(60,50,30,0.18);
+    --shade-2:   rgba(60,50,30,0.22);
+    --shade-3:   rgba(60,50,30,0.28);
+    --lit-hot:   rgb(var(--lit-rgb));
+    --lit-halo:  0 0 0 1px rgba(var(--lit-rgb), 0.4), var(--shadow-1);
+    --wash-gain: 0;
+    color-scheme: light;
+  }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #050505;
-    color: #e0e0e0;
+    background: var(--surface-0);
+    color: var(--ink-1);
     font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
     min-height: 100dvh;
     display: flex;
@@ -32,81 +168,354 @@
     justify-content: center;
     padding: 24px;
   }
+
+  /* ---- the panel: a plate seated on the deck, lit from above ---- */
   form {
+    position: relative;
+    /* So the wash below can sit at z-index -1: behind the heading, the label
+       and the well, but still in FRONT of the panel's own face. Without a
+       stacking context here it would fall behind the panel and vanish. */
+    isolation: isolate;
     width: 100%;
     max-width: 320px;
-    border: 1px solid #333;
-    border-top: 2px solid #ff0000;
-    padding: 28px 24px 24px;
-    background: #0a0a0a;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-1);
+    padding: 30px 24px 24px;
+    background: var(--surface-1);
+    box-shadow: var(--edge-up), var(--shadow-2);
   }
+
+  /* ---- the filament: the red rule, rebuilt as a rod in a groove.
+     Three parts, the console's own construction (css/field-console.css
+     § HELP): the CHANNEL milled into the plate, the dark glass ROD seated in
+     it, and the CORE — the light guide inside the rod. At rest the rod is
+     dark and the core is cold iron; it warms when the field has your
+     attention and ignites while the door is actually being tried.
+
+     The order matters: resting declares the drop-shadows at their no-op
+     values so the glow HEATS instead of blinking on. ---- */
+  .gate-filament {
+    position: absolute;
+    top: 6px;
+    left: 14px;
+    right: 14px;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--surface-0);
+    box-shadow: var(--edge-in);
+  }
+  .gate-strand {
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    top: 1.5px;
+    height: 5px;
+    border-radius: 2.5px;
+    background: linear-gradient(180deg, transparent 50%, var(--shade-3));
+    /* Three tiers declared at their no-op values, in the lit rules' exact
+       order: core, mid scatter, atmospheric wash. A resting rule that omits
+       one makes the glow BLINK on instead of heating. */
+    filter:
+      brightness(1)
+      drop-shadow(0 0 0 rgba(var(--lit-rgb), 0))
+      drop-shadow(0 0 0 rgba(var(--lit-rgb), 0))
+      drop-shadow(0 0 0 rgba(var(--lit-rgb), 0));
+    transition: filter var(--arm-cool), box-shadow var(--arm-cool);
+  }
+  /* The crown: the rod's own light catching its apex. 0 at rest — room light
+     on a 5px rod is not something the eye can parse; a dark thing that then
+     lights is. */
+  .gate-strand::before {
+    content: '';
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    top: 0;
+    height: 1px;
+    border-radius: 1px;
+    background: var(--lit-hot);
+    opacity: 0;
+    transition: opacity var(--arm-cool);
+  }
+  .gate-core {
+    position: absolute;
+    /* Inset to the ROD, not to the channel. It used to run the channel's full
+       width, so the lit 2px guide stuck 3px out past each rounded end of the
+       rod and terminated square — the hard cut the owner spotted. A light
+       guide cannot be longer than the glass it is inside. */
+    left: 3px;
+    right: 3px;
+    top: 1.5px;
+    height: 2px;
+    border-radius: 1px;
+    background: linear-gradient(90deg,
+      var(--lit-cold-0), var(--lit-cold-1) 25%, var(--lit-cold-2) 50%, var(--lit-cold-1) 75%, var(--lit-cold-0));
+  }
+  /* The hot core is a second layer whose OPACITY heats: a gradient does not
+     interpolate, and a background that swaps is a class toggling, not a coil
+     warming. */
+  .gate-core::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 1px;
+    background: linear-gradient(90deg,
+      var(--lit-cold-2), rgb(var(--lit-rgb)) 18%, var(--lit-hot) 50%, rgb(var(--lit-rgb)) 82%, var(--lit-cold-2));
+    opacity: 0;
+    transition: opacity var(--arm-cool);
+  }
+
+  /* ---- the pool: what the rod DOES to the panel it is mounted on.
+     A lit conduit is not a lit line on a dark plate — it throws a grazing
+     curtain down the fascia beneath it, brightest where the photons leave the
+     glass and gone within a few centimetres. This is that curtain: one
+     gradient, the emitter's own colour, behind the content so it washes the
+     plate rather than tinting the words on it.
+
+     It is the same light as the rod, so it is on the same two curves and the
+     same licence — nothing at rest, most of the way there once something is in
+     the lock, all of it while the door is being tried. The owner's read of the
+     first cut was that it "barely renders": a wash you have to look for is a
+     tint, and the point is that the panel is being LIT by something. So the
+     source is hot and the falloff does the restraint. The console pays
+     for its far tiers with a canvas because a box-shadow cannot leave its own
+     box; inside one 320px panel a gradient is the honest, cheaper answer. ---- */
+  .gate-wash {
+    position: absolute;
+    z-index: -1;
+    /* Starts below the channel and stops short of the panel's corners, which
+       is why the panel needs no `overflow: hidden` — and must not have one:
+       clipping the panel also clips the ROD's own halo at the left and right
+       walls, which is the one thing light does that a box cannot contain. */
+    top: 10px;
+    left: 1px;
+    right: 1px;
+    height: 78%;
+    pointer-events: none;
+    /* An ELLIPSE from the top centre, not a vertical linear gradient: the rod
+       is inset from the panel's walls, so its curtain falls off toward the two
+       corners as well as downward. A flat linear wash reads as a tint applied
+       to the panel; this reads as light arriving from one place. */
+    background: radial-gradient(ellipse 84% 112% at 50% 0%,
+      rgba(var(--lit-rgb), 0.52) 0%,
+      rgba(var(--lit-rgb), 0.27) 24%,
+      rgba(var(--lit-rgb), 0.10) 50%,
+      rgba(var(--lit-rgb), 0.028) 76%,
+      transparent 100%);
+    opacity: 0;
+    transition: opacity var(--arm-cool);
+  }
+
+  /* WARM — something is in the lock. Pre-ignition, quick up and slow back:
+     the door has not been tried yet.
+
+     Keyed to CONTENT, not focus. The field carries `autofocus`, so a
+     focus-within rule lit the rod before the page had finished appearing and
+     cold iron was never seen — which makes the ignition on submit a nudge
+     instead of an event. The empty `placeholder` is what makes
+     :placeholder-shown answer "is there anything typed in here"; the field's
+     own focus ring is the feedback for focus. */
+  /* Every layer inherits the base rule's --arm-cool, so warm rises exactly as
+     slowly as it falls. The first cut ramped up on --dur-3 (360ms) and down
+     over 2.6s, and the owner caught it: a filament that snaps on and then
+     lingers is a class toggling with a slow exit, not a coil with thermal
+     mass. Symmetry here is the physics; the ASYMMETRY is reserved for the
+     ignition, where a real coil does ramp faster than it lets go. */
+  form:has(input[type="password"]:not(:placeholder-shown)) .gate-core::after { opacity: 0.8; }
+  form:has(input[type="password"]:not(:placeholder-shown)) .gate-strand::before { opacity: 0.34; }
+  form:has(input[type="password"]:not(:placeholder-shown)) .gate-wash { opacity: calc(0.78 * var(--wash-gain)); }
+  /* And the rod itself throws light while warm — the same three tiers at
+     roughly half the hot reach. Without this the pool had no visible SOURCE:
+     a lit panel under an unlit rail reads as a tint, which is the one thing
+     the wash is not. Hot goes further, so the ignition is still an event. */
+  form:has(input[type="password"]:not(:placeholder-shown)) .gate-strand {
+    filter:
+      brightness(1.2)
+      drop-shadow(0 0 4px rgba(var(--lit-rgb), 0.5))
+      drop-shadow(0 0 11px rgba(var(--lit-rgb), 0.32))
+      drop-shadow(0 0 24px rgba(var(--lit-rgb), 0.18));
+  }
+
+  /* HOT — the credentials are in flight. This is the one moment on this page
+     when something is genuinely DOING work, which is the whole licence for
+     light; when the answer comes back wrong the rod simply cools. */
+  form[data-state="live"] .gate-core::after { opacity: 1; transition: opacity var(--arm-heat); }
+  form[data-state="live"] .gate-strand::before { opacity: 0.6; transition: opacity var(--arm-heat); }
+  form[data-state="live"] .gate-wash { opacity: calc(1 * var(--wash-gain)); transition: opacity var(--arm-heat); }
+  form[data-state="live"] .gate-strand {
+    box-shadow: var(--lit-halo);
+    filter:
+      brightness(1.35)
+      drop-shadow(0 0 7px rgba(var(--lit-rgb), 0.78))
+      drop-shadow(0 0 20px rgba(var(--lit-rgb), 0.5))
+      drop-shadow(0 0 46px rgba(var(--lit-rgb), 0.3));
+    transition: filter var(--arm-heat), box-shadow var(--arm-heat);
+  }
+
+  /* The heading sits directly under the rod, so it is the first thing the
+     light reaches — the mockup lights its rail's label for the same reason.
+     A lift in the ink and a soft cast, never a colour change: this is light
+     falling ON type, not type that has become a status. */
   h1 {
     font-size: 0.8rem;
     font-weight: 400;
     letter-spacing: 3px;
     margin-bottom: 4px;
+    text-shadow: none;
+    transition: text-shadow var(--arm-cool);
   }
+  form:has(input[type="password"]:not(:placeholder-shown)) h1 {
+    text-shadow: 0 0 14px rgba(var(--lit-rgb), 0.45);
+  }
+  form[data-state="live"] h1 {
+    text-shadow: 0 0 10px rgba(var(--lit-rgb), 0.6), 0 0 26px rgba(var(--lit-rgb), 0.4);
+    transition: text-shadow var(--arm-heat);
+  }
+  /* One line. "AUTHENTICATION REQUIRED" wrapped to a second at every width
+     the panel has, which put a ragged two-line block directly under the
+     heading and directly in the brightest part of the wash. */
   .sub {
     font-size: 0.6rem;
-    letter-spacing: 2px;
-    color: #555;
+    letter-spacing: 1.6px;
+    color: var(--ink-3);
+    opacity: 0.72;
+    white-space: nowrap;
     margin-bottom: 22px;
   }
   label {
     display: block;
     font-size: 0.6rem;
     letter-spacing: 2px;
-    color: #919191;
+    color: var(--ink-3);
     margin-bottom: 6px;
   }
+
+  /* ---- the well: a recess milled into the plate, not a box drawn on it ---- */
   input[type="password"] {
     width: 100%;
-    background: #000;
-    border: 1px solid #333;
-    color: #e0e0e0;
+    background: var(--surface-2);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-1);
+    color: var(--ink-1);
     font: inherit;
     font-size: 0.85rem;
     padding: 10px 12px;
     letter-spacing: 2px;
+    box-shadow: var(--edge-in);
+    transition: border-color var(--dur-1) var(--ease-out);
   }
-  input[type="password"]:focus { outline: none; border-color: #919191; }
+  input[type="password"]:focus { outline: none; border-color: rgba(var(--lit-rgb), 0.45); }
+
+  /* ---- the annunciator: a stationary machined bezel with a backlit cap
+     that travels. The console declined this shape for its 35 chrome controls
+     — a skin on everything is a costume — but this page has exactly one
+     button, and it is the only thing on the door you are meant to push. The
+     bezel is structural: it never loses its bevel when pressed, so the cap
+     reads as sinking INTO it rather than the whole control deflating. ---- */
   button {
+    display: block;
     width: 100%;
     margin-top: 14px;
-    background: #ff0000;
-    color: #000;
+    padding: 2.5px;
     border: none;
+    border-radius: var(--r-1);
+    background: var(--surface-3);
     font: inherit;
+    cursor: pointer;
+    /* The bezel is machined metal: the room's light on its top face, its own
+       undercut below, and a contact shadow on the deck. All three off the
+       ladder — which is also what makes the bezel behave on PAPER, where the
+       rim is 90% white and a hardcoded 24% would have read as grime. */
+    box-shadow: var(--edge-up), inset 0 -1px 0.5px var(--shade-3), var(--shadow-1);
+  }
+  /* Zero-shift geometry: the cap's height, weight and tracking are identical
+     in every state, so nothing on this page twitches by a pixel when it is
+     pressed or disabled. */
+  .cap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    border-radius: 2px;
+    color: var(--on-accent);
     font-size: 0.7rem;
     font-weight: 700;
     letter-spacing: 2px;
-    padding: 11px 0;
-    cursor: pointer;
+    line-height: 1;
+    /* The light is behind the cap, not around it — and it arrives through a
+       FROSTED diffuser, which is the whole difference between an emissive
+       lamp and a gradient. Three layers, in the order the eye meets them:
+
+         1. the acrylic's own surface sheen, catching the room light on the
+            same --light-rim every machined face in here uses;
+         2. the diffused hot spot — broad, low-contrast and desaturating
+            toward white rather than reaching it. A tight white dot is the
+            tell: a diffuser's job is to spread the source until the bulb is
+            no longer locatable, so this one is wider than the cap and never
+            gets above a third of --lit-hot;
+         3. the emitter's colour, mixed toward the ground as it runs out
+            toward the edges, so the falloff is LESS LIGHT rather than more
+            transparency over the bezel.
+
+       The whites come through color-mix on --lit-hot rather than as literals,
+       so DAYLIGHT (where --lit-hot IS the emitter colour — no white is hotter
+       than paper) turns layer 2 into a saturation lift instead of a glare. */
+    background:
+      linear-gradient(180deg, var(--light-rim) 0%, transparent 46%),
+      radial-gradient(ellipse 84% 165% at 50% 46%,
+        color-mix(in srgb, var(--lit-hot) 30%, transparent) 0%,
+        color-mix(in srgb, var(--lit-hot) 13%, transparent) 30%,
+        color-mix(in srgb, var(--lit-hot) 4%, transparent) 56%,
+        transparent 78%),
+      radial-gradient(ellipse 128% 185% at 50% 44%,
+        rgb(var(--lit-rgb)) 0%,
+        color-mix(in srgb, rgb(var(--lit-rgb)) 88%, var(--surface-0)) 62%,
+        color-mix(in srgb, rgb(var(--lit-rgb)) 72%, var(--surface-0)) 100%);
+    box-shadow: inset 0 -1px 0.5px var(--shade-3);
+    transition: transform 0.12s cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity var(--dur-1) var(--ease-out);
   }
-  button:disabled { opacity: 0.5; cursor: default; }
+  button:active .cap {
+    transform: translateY(calc(var(--light-y) * var(--press-travel)));
+    box-shadow: inset 0 calc(var(--light-y) * 3px) 4px var(--shade-3), inset 0 -1px 0.5px var(--shade-3);
+  }
+  button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent-text); }
+  button:disabled { cursor: default; }
+  button:disabled .cap { opacity: 0.5; }
+
   #gate-error {
     min-height: 16px;
     margin-top: 10px;
     font-size: 0.62rem;
     letter-spacing: 1.5px;
-    color: #ff0000;
+    color: var(--accent-text);
   }
   /* Present for password-manager account matching, never shown. */
   .pm-username { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+  /* Light has thermal mass; motion sickness does not care. Every curve above
+     collapses to an instant state change, and the states themselves stay —
+     the rod still tells you what the door is doing. */
+  @media (prefers-reduced-motion: reduce) {
+    .gate-strand, .gate-strand::before, .gate-core::after, .gate-wash, h1, .cap, input[type="password"] {
+      transition-duration: 0.01ms !important;
+    }
+  }
 </style>
 </head>
 <body>
 
 <form id="gate-form" method="post" action="/api/auth">
+  <div class="gate-wash" aria-hidden="true"></div>
+  <div class="gate-filament" aria-hidden="true"><span class="gate-strand"></span><span class="gate-core"></span></div>
   <h1>FIELD CONSOLE</h1>
-  <div class="sub">RESTRICTED — AUTHENTICATION REQUIRED</div>
+  <div class="sub">RESTRICTED — AUTH REQUIRED</div>
   <input class="pm-username" type="text" name="username" value="console"
          autocomplete="username" tabindex="-1" aria-hidden="true">
   <label for="gate-password">PASSWORD</label>
-  <input type="password" name="password" id="gate-password"
+  <input type="password" name="password" id="gate-password" placeholder=" "
          autocomplete="current-password" required autofocus>
   <div id="gate-error" role="alert"></div>
-  <button type="submit" id="gate-btn">→ ENTER</button>
+  <button type="submit" id="gate-btn"><span class="cap">→ ENTER</span></button>
 </form>
 
 <script>
@@ -122,6 +531,10 @@
     if (!pw) return;
     btn.disabled = true;
     errEl.textContent = '';
+    // The one moment on this page when something is genuinely working: the
+    // filament ignites on --arm-heat, and cools on --arm-cool if we come back
+    // empty-handed. Light is licensed for what is DOING something.
+    form.setAttribute('data-state', 'live');
 
     fetch('/api/auth', {
       method: 'POST',
@@ -136,6 +549,7 @@
           location.reload();
           return;
         }
+        form.removeAttribute('data-state');
         btn.disabled = false;
         pwEl.value = '';
         pwEl.focus();
@@ -144,6 +558,7 @@
           : (data.error || 'invalid credentials'));
       });
     }).catch(function () {
+      form.removeAttribute('data-state');
       btn.disabled = false;
       errEl.textContent = '✕ network error — try again';
     });

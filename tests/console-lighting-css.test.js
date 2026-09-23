@@ -178,8 +178,10 @@ describe('press and focus are one mechanism each', () => {
       .toBeGreaterThan(10);
   });
 
-  it('keeps a reduced-motion escape for both', () => {
-    expect(CSS).toMatch(/prefers-reduced-motion[\s\S]{0,400}scroll-snap-type:\s*none/);
+  // The scroll-snap half of this retired on 2026-09-22 with the snapping
+  // itself (it pulled the page away from where the user stopped). Its
+  // absence is pinned in tests/console-viewport.test.js.
+  it('keeps a reduced-motion escape for the press', () => {
     expect(CSS).toMatch(/prefers-reduced-motion[\s\S]{0,400}transition:\s*none/);
   });
 });

@@ -76,6 +76,16 @@ export function themeToggle() {
 // In the tab-bar band, view headers pin to the top as glass and compress once
 // the content starts moving. One passive scroll listener, one body class —
 // the size/padding change is pure CSS transition.
+//
+// Two thresholds, not one. Compaction is flow-neutral now (the CSS trades
+// padding for margin, and the title scales with a transform), and that is
+// the fix for the 2026-09-22 loop: the header shrank 21px at 24px, scroll
+// anchoring pulled scrollTop from 30 to 9, the header grew back, and it
+// flipped 35 times in 1.5s. The gap between the two numbers is the
+// insurance. A sub-pixel of rounding in the middle of the transition must
+// never be able to re-cross a single line and start it again.
+const HDR_COMPACT_AT = 24;
+const HDR_RELEASE_AT = 8;
 export function _initStickyHeaders() {
   const main = document.querySelector(".main");
   if (!main) return;
@@ -84,7 +94,10 @@ export function _initStickyHeaders() {
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
-      document.body.classList.toggle("hdr-compact", main.scrollTop > 24);
+      const on = document.body.classList.contains("hdr-compact");
+      const y = main.scrollTop;
+      if (!on && y > HDR_COMPACT_AT) document.body.classList.add("hdr-compact");
+      else if (on && y < HDR_RELEASE_AT) document.body.classList.remove("hdr-compact");
     });
   }, { passive: true });
 }

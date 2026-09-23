@@ -171,6 +171,24 @@
   --lit-fill: rgba(var(--lit-rgb), 0.1);
   --lit-edge: rgba(var(--lit-rgb), 0.45);
   --lit-halo: 0 0 12px rgba(var(--lit-rgb), 0.32);
+  /* ---- COLD IRON — the resting half of the same licence (2026-09-21).
+     An unlit filament is not grey and not invisible: a tungsten coil that is
+     off still reads as a coil, and the eye registers that it COULD light.
+     Three steps of the emitter's own hue over the ground, derived from
+     --lit-rgb so they follow the theme, the preset and the tone variant —
+     never a literal, for the reason the bloom reads its colour at paint time.
+     This is unlit, so it is not a fifth licensed state: a control wearing
+     cold iron is a control that can ignite, showing that it has not. First
+     consumer: the help filament (§ HELP). */
+  --lit-cold-0: rgba(var(--lit-rgb), 0.10);
+  --lit-cold-1: rgba(var(--lit-rgb), 0.24);
+  --lit-cold-2: rgba(var(--lit-rgb), 0.38);
+  /* And the other end of the same coil: the white-hot centre of a lit core.
+     NOT --light-rim — that is the room's light on a machined edge, and in
+     STUDIO it is a 4% highlight; a core whose centre is 4% white has a hole
+     in it. DAYLIGHT sets this to the emitter colour itself: on paper there is
+     no white hotter than the paper. */
+  --lit-hot: rgba(255, 255, 255, 0.92);
   /* The canvas bloom's master dial (phase 2 — js/console/lighting.js). --lit-halo
      is the light INSIDE the control's own box; a box-shadow cannot leave that
      box — every `overflow: hidden` ancestor clips it and it stops at the edge
@@ -289,6 +307,7 @@
   --lit-fill:  rgba(var(--lit-rgb), 0.16);
   --lit-edge:  rgb(var(--lit-rgb));
   --lit-halo:  0 0 0 1px rgba(var(--lit-rgb), 0.4), var(--shadow-1);
+  --lit-hot:   rgb(var(--lit-rgb));
   /* And the canvas goes dark with it. Light pooling onto paper is not what a
      lit object does on a desk — it is what a screen does — so DAYLIGHT paints
      no bloom at all. One token, still no [data-theme] branch in the module. */
@@ -481,13 +500,37 @@ button { font-family: inherit; cursor: pointer; }
 }
 
 /* ============ SIDEBAR ============ */
+/* The waveguide (2026-09-21, K39b). Owner's call after the filament shipped:
+   "I don't want the lighting to just live in help" — with the avionics mockup's
+   sidebar as the reference. Each group runs a recessed 2px track down its left
+   edge; every item seats a cold-iron bead on it; the CURRENT view's bead is a
+   lit prism (4×18) with the one halo, and a shelf line fades out under it.
+
+   ⚠️ This is a licence amendment, not a loophole. "Selection is not liveness"
+   still holds for slots, filters and cards; the owner licensed exactly one
+   selection — WHERE YOU ARE — because the current view is the console's live
+   position, the way a lit tab on a desk is. design-spec.md §6.5 records it.
+   The mockup's idle chaser down the track is NOT here: an ambient loop is a
+   second heartbeat, and the SYS lamp has the only one. */
 .sidebar {
   background: var(--bg-elev-1);
   border-right: 1px solid var(--border);
   overflow-y: auto;
   padding: 18px 0;
 }
-.nav-group { margin-bottom: 22px; }
+.nav-group { position: relative; margin-bottom: 22px; }
+.nav-group::before {
+  content: '';
+  position: absolute;
+  top: 24px;
+  bottom: 2px;
+  left: 11px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(180deg, var(--lit-cold-1), var(--lit-cold-0) 45%, var(--surface-0));
+  box-shadow: var(--edge-in);
+  pointer-events: none;
+}
 .nav-group-label {
   font-size: var(--t-micro);
   letter-spacing: 0.18em;
@@ -508,13 +551,49 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 0.78rem;
   letter-spacing: 0.09em;
   text-align: left;
+  position: relative;
+  padding-left: 26px;
   border-left: 2px solid transparent;
   transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out), opacity var(--dur-1) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+/* The bead: cold iron seated on the track. Hover warms it (still unlit); the
+   current view's is the prism. Height and colour move on the console's own
+   spring — a view change is a press, not an ignition. */
+.nav-btn::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 2px;
+  background: var(--lit-cold-1);
+  box-shadow: var(--edge-in);
+  transition: height var(--dur-3) var(--ease-spring), margin-top var(--dur-3) var(--ease-spring),
+              background var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+.nav-btn:hover::before { background: var(--lit-cold-2); }
+.nav-btn.active::before {
+  height: 18px;
+  margin-top: -9px;
+  background: linear-gradient(180deg, var(--lit-hot), rgb(var(--lit-rgb)) 40%, var(--lit-cold-2));
+  box-shadow: var(--lit-halo);
+}
+/* The shelf: the light landing on the row's floor and running out. */
+.nav-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 22px;
+  right: 14px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(var(--lit-rgb), 0.55), rgba(var(--lit-rgb), 0) 75%);
+  pointer-events: none;
 }
 .nav-btn:hover { color: var(--text-bright); background: var(--bg-elev-2); }
 .nav-btn.active {
   color: var(--accent);
-  border-left-color: var(--accent);
   background: var(--accent-soft);
 }
 .nav-icon { font-size: 0.85rem; width: 14px; text-align: center; opacity: 0.85; }
@@ -4579,6 +4658,7 @@ body.fn-bar-hidden:has(#view-fn.active) .tabbar {
      load-bearing while a commit is in flight — it simply arrives at once
      instead of ramping over a second and a half. */
   [data-armed], [data-armed="on"] { transition: none; }
+  .nav-btn::before { transition: none; }
 }
 
 /* -- 4d. DAYLIGHT primaries: hairline outlines vanish in glare — the stage
@@ -4678,18 +4758,38 @@ body.kb-open { --tabbar-rsv: 0px; }
     backdrop-filter: blur(18px) saturate(1.3);
     margin: 0 -32px 24px;
     padding: 10px 32px 14px;
-    transition: padding var(--dur-2) var(--ease-out);
+    /* Padding and margin on ONE curve: the header trades 10px of one for 10px
+       of the other, and only a shared timing keeps the sum constant on every
+       frame in between (see the compaction note below). */
+    transition: padding var(--dur-2) var(--ease-out), margin var(--dur-2) var(--ease-out);
   }
   .view:not(#view-fn) .view-title {
-    transition: font-size var(--dur-2) var(--ease-out);
+    transform-origin: left center;
+    transition: transform var(--dur-2) var(--ease-out);
   }
+  /* ⚠️ COMPACTING MUST NOT MOVE THE PAGE. This shrank the title's font size
+     and the header's padding, which made the header 21px shorter at the
+     24px threshold. Everything below it moved, and the browser's scroll
+     anchoring moved scrollTop 21px to compensate: from 30 to 9, back under
+     24, so the header grew, anchoring pushed back to 30, and so on. That
+     was 35 flips in 1.5s with a finger resting on the glass (2026-09-22, the
+     owner's "a lil resistance and choppy … like a glitch"). Safari has no
+     anchoring, so there the content jumped 21px under the finger instead.
+
+     So the compaction is flow-neutral. The title scales with a transform
+     (0.95rem / 1.4rem, which is what it used to resize to), so it has no
+     layout effect. The header gives up 10px of padding and takes the same
+     10px back as margin below it (24 → 34), so its margin box, and
+     everything after it, does not move. When stuck, the header is visibly
+     10px shorter and its title smaller. In flow, nothing changed, so
+     nothing shifts and there is nothing for anchoring to chase. */
   body.hdr-compact .view:not(#view-fn) .view-header {
     padding-top: 6px;
     padding-bottom: 8px;
+    margin-bottom: 34px;
   }
   body.hdr-compact .view:not(#view-fn) .view-title {
-    font-size: 0.95rem;
-    margin-bottom: 2px;
+    transform: scale(0.68);
   }
 }
 
@@ -5129,30 +5229,25 @@ body.rl-lock { overflow: hidden; }
    selectors to swap one alpha for #fff. --light-rim already flips with the
    theme, so the twin is gone: four selectors and a hex literal, subtracted. */
 
-/* 6b — Flick and land: the contact sheets get momentum that ends on a row.
+/* 6b — Flick and land: RETIRED 2026-09-22. `.main` does not snap.
    -------------------------------------------------------------------------
-   The buffer and the archive are the two highest-traffic scrolling surfaces
-   in the console and neither had any snapping, so a flick through 600 frames
-   lands halfway through a row and you read a band of cropped thumbnails.
+   From 2026-09-14 `.main` had `scroll-snap-type: y proximity` with a snap
+   point on every buffer frame and archive card, so a flick would land on a
+   row. The safety argument was that proximity "only engages when the scroll
+   has already come to rest near a row edge, so it tidies the landing and
+   never steers". That was wrong. The browser decides how near is near, and
+   it scales with the scroller: at 1280×832, resting at 250px with the drop
+   zone on screen was yanked 247px down to the first row of frames. At the
+   owner's 2560×1664 the reach is longer still. On a trackpad it lands after
+   momentum ends, which is the "hesitate for like 1-2 seconds, and then
+   perfectly snaps" that reported it. On a phone the same points are folded
+   into every flick's momentum, which reads as resistance.
 
-   PROXIMITY, never mandatory, and that is the whole safety argument: these
-   grids are not their own scroll container — they scroll inside `.main`
-   alongside headers, stat rows and compose forms. Mandatory snapping on a
-   shared scroller fights the user the moment they want to stop somewhere
-   that is not a card. Proximity only engages when the scroll has already
-   come to rest near a row edge, so it tidies the landing and never steers.
-
-   scroll-margin-top keeps a snapped row clear of the sticky view header. */
-.main { scroll-snap-type: y proximity; }
-.buffer-grid > *,
-.archive-list > * {
-  scroll-snap-align: start;
-  scroll-margin-top: 12px;   /* this file ships no spacing scale to join */
-}
-/* A snap point under a finger that is still dragging reads as a stutter. */
-@media (prefers-reduced-motion: reduce) {
-  .main { scroll-snap-type: none; }
-}
+   A shared scroller cannot snap safely. The grids scroll inside `.main`
+   with the headers, the drop zone and the forms, and the user may want to
+   stop anywhere. If a flick-and-land ever comes back, it needs the grid to
+   be its OWN scroller, and that is a layout decision, not a line of CSS.
+   tests/console-lighting-css.test.js pins the absence. */
 
 /* 7 — ARMED / LIVE: the one place this stylesheet is allowed to add light.
    -------------------------------------------------------------------------
@@ -9078,6 +9173,13 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
    brackets and a hairline, borrowed from ANALOGS.NETWORK's own
    `.frame`, which is where this console's light came from.
 
+   ⚠️ AMENDED 2026-09-22 BY THE OWNER, for this surface only: the
+   rods under the marks carry a faint resting EMBER in browse ("this
+   is suppose to be sort of an organic emissive situation"). It is
+   the bottom rung of the rod's own ladder (ember < warm < hot), so
+   picking a control still reads as its light coming on. Nothing
+   else in browse lights. See `.help-filament::after`.
+
    The one lit thing is the control you actually picked, in card
    mode, and it is lit because it is the only thing happening.
    Its pool is painted HERE rather than by js/console/lighting.js,
@@ -9105,7 +9207,6 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
      for four different reasons, so a breakpoint would lie). Declared here as
      the contract, and so a sheet has a sane value before the first card. */
   --help-foot: 0px;
-  --help-bracket: 14px;
   position: fixed;
   inset: 0;
   overflow: hidden;         /* a mark on a control scrolled past the edge */
@@ -9142,11 +9243,69 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
 .help-scrim { opacity: 0.88; transition: opacity var(--dur-2) var(--ease-out); }
 .help-layer.carded .help-scrim { opacity: 1; }
 
-/* ---- browse: the annotation mark ---------------------------------------- */
+/* ---- browse: the annotation mark, and the filament that is its touch point --
+
+   Until 2026-09-21 the mark was a machinist's: a hairline field and two corner
+   registration brackets. The brackets are gone. The owner's mockups
+   (docs/ideas/field-console-help-filament-mockup.html, and the avionics
+   communicator beside it) put the annotation on a FILAMENT instead — a glass
+   rod recessed in a channel along the control's edge, cold iron at rest,
+   warming under a pointer, igniting when picked and unfurling the explanation
+   out of itself. That is a better touch point than a corner bracket for the
+   reason this whole feature exists: on a tablet a bracket is a drawing, and a
+   rod in a groove is a thing to press.
+
+   The physics is the console's own, not the mockup's:
+     • the channel is a recess on the light ladder (--edge-in), the rod's crown
+       is --light-rim and its underside --shade-3, so it is lit from the same
+       angle as every other machined edge in here;
+     • cold iron is the --lit-cold-* ladder, derived from --lit-rgb;
+     • heat and cool are --arm-heat / --arm-cool, the ignition's own asymmetric
+       pair — a coil ramps up fast and lets go slowly;
+     • and the outer light is the SAME three tiers the console already has: the
+       rod's own halo, its drop-shadow, and the pool (.help-glow) on the scrim.
+       No box-shadow chain tries to leave the box, and no mix-blend-mode.
+
+   ⚠️ Browse carries ONE light, and it is faint (amended by the owner,
+   2026-09-22). Ten controls marked as available-to-ask-about are still
+   selection, not liveness (design-spec.md §6.5). So the rod's core stays cold
+   iron, the hue surviving in the mid-tones, and the only emission is the
+   ember under it, at 45%. The warmth under a pointer is the pre-ignition of
+   the one thing you are about to press. Full ignition (the halo, the drop-
+   shadows, the white-hot core) is still card mode only, on the one control
+   you picked.
+
+   ⚠️ Same filter-list trap as the ignition: the rod's resting rule declares
+   every drop-shadow at its no-op value, in the hot rule's order, or the glow
+   BLINKS on instead of heating. tests/console-help-filament.test.js pins it. */
 
 /* One host for every mark, so clearing browse mode is one `textContent = ''`
    rather than a walk over other modules' elements. */
 .help-marks { position: absolute; inset: 0; pointer-events: none; }
+
+/* A FINGER is scrolling (the module sets .scrolling; see _onScroll). A phone
+   scrolls on its own thread and these marks are placed by script, so under a
+   thumb they could only ever trail their controls — owner, 2026-09-22: they
+   "separate from their objects as you scroll". So they let go instead: the
+   marks fade, the cut-outs close and the page moves under an even dim, then
+   everything is measured once where it came to rest and fades back in.
+
+   ⚠️ OUT IS INSTANT, and only the way back is eased (.help-mark's own --dur-2).
+   This faded out over --dur-1 first, which a slow drag forgave and a flick did
+   not: a hard flick carries the page a few hundred pixels in 120ms, and for
+   all of it the marks and bright cut-outs sat where the controls USED to be —
+   a tear. `transition: none` here is the after-change style going in, so it
+   governs only the exit.
+
+   Marks on a bar (data-fixed) and their cut-outs (#help-scrim-fixed) stay:
+   the bar does not move, so there is nothing to tear. A mouse or a wheel
+   never sets .scrolling at all. */
+#help-scrim-holes { transition: opacity var(--dur-2) var(--ease-out); }
+.help-layer.scrolling .help-mark:not([data-fixed]),
+.help-layer.scrolling #help-scrim-holes {
+  opacity: 0;
+  transition: none;
+}
 
 .help-mark {
   position: absolute;
@@ -9154,50 +9313,183 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border-radius: var(--r-1);
   /* No fill. The control underneath is already the brightest thing on a dimmed
      screen — the scrim cuts a hole for it — so a wash on top would only re-tint
-     what the dim just made stand out. Hairline and brackets are the annotation;
-     the light is the console's own.
+     what the dim just made stand out. The hairline is the field; the filament
+     is the annotation; the light is the console's own.
 
      A BORDER, per edge, rather than one inset ring: a control taller than the
      screen is clipped to the viewport, and a ring drew a hairline along the
      window's edge that had nothing to do with the control and slid as you
      scrolled. The module says which edges are real; the rest are not drawn. */
-  border: 0 solid rgba(var(--accent-rgb), 0.3);
+  border: 0 solid rgba(var(--accent-rgb), 0.22);
+  transition: opacity var(--dur-2) var(--ease-out);
 }
 .help-mark[data-edges~="t"] { border-top-width: 1px; }
 .help-mark[data-edges~="r"] { border-right-width: 1px; }
 .help-mark[data-edges~="b"] { border-bottom-width: 1px; }
 .help-mark[data-edges~="l"] { border-left-width: 1px; }
 
-/* Two pseudo-elements, two corners — each one draws an L, and only when BOTH
-   of its edges belong to the control rather than to the window. */
-.help-mark::before,
-.help-mark::after {
+/* In card mode every other mark recedes and the picked one drops its field —
+   the crisp edge there is .help-hole's ring, and two outlines on one control
+   read as a registration error. The filament stays, and heats. */
+.help-layer.carded .help-mark:not([data-hot]) { opacity: 0; }
+.help-layer.carded .help-mark[data-hot] { border-width: 0; }
+
+/* The channel: a recess milled along the control's edge. `data-lamp` is the
+   edge the module chose — the bottom where the control has one on screen, the
+   top when the bottom is under a bar, neither when both are (a rod drawn at the
+   window's edge would be the window's, not the thing's). */
+/* ⚠️ NO SLAB (2026-09-22). This was an 8px channel filled with --surface-0,
+   spanning the MARK (the control plus 4px each side) and hanging 5px below
+   it. The mockup drew that groove for a full-width section rail. Under a
+   28px top-bar button it was a black pill wider than the button, biting
+   the bottom of the button's own outline and the cut-out in the dim. The
+   owner, magnified: "half finished or even kind of like a jagged edge".
+   Now the filament is light in the seam: as wide as the CONTROL (inset by
+   the mark's 4px PAD), centred 3px under the control's edge, with nothing
+   opaque in it. */
+.help-filament {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 8px;
+  display: none;
+}
+.help-mark[data-lamp="b"] .help-filament { display: block; bottom: -3px; }
+.help-mark[data-lamp="t"] .help-filament { display: block; top: -3px; }
+/* The rod IS that edge of the frame, so the hairline is not drawn under it —
+   a 1px line through a light reads as the light being struck out. */
+.help-mark[data-lamp="b"] { border-bottom-width: 0; }
+.help-mark[data-lamp="t"] { border-top-width: 0; }
+
+/* THE EMBER — the rod's resting light on the panel around it. The owner
+   amended the licence for this one surface on 2026-09-22 ("this is suppose
+   to be sort of an organic emissive situation"): in browse the rods
+   emit, faintly. It is the bottom rung of a ladder that already existed —
+   ember at rest, brighter under a pointer (warm), full ignition when
+   picked (hot) — so picking one still reads as the light coming ON.
+
+   ⚠️ BLOOM FOLLOWS THE EMITTER. The first cut was a radial ellipse centred
+   on the rod, and the owner's read of that technique was exact: "it looks
+   pasted on not like physical light". An ellipse has its own shape. Real
+   light takes the shape of whatever is emitting it: a tight, bright bloom
+   hugging the source, then wider and fainter tiers, each one Gaussian
+   (which is what a box-shadow blur is). So this is a capsule exactly on the
+   core's run, with nothing painted INSIDE it (an outer box-shadow never
+   paints under its own box, so the core stays crisp), carrying three tiers
+   of bloom. It is inset 10% from each end, because the core dissolves over
+   its outer eighth and a bloom that outran it would glow past the light.
+   Brightness is OPACITY, one declaration per state, on the core's own
+   timings. The owner's lighting reference: a hot core, a bloom that hugs
+   the rod, a wide warm wash, and an edge nowhere. */
+.help-filament::after {
   content: '';
   position: absolute;
-  display: none;
-  width: var(--help-bracket);
-  height: var(--help-bracket);
-  border: 0 solid rgba(var(--accent-rgb), 0.75);
+  left: calc(3px + 10%);
+  right: calc(3px + 10%);
+  top: 3px;
+  height: 2px;
+  border-radius: 1px;
   pointer-events: none;
+  /* The VP-1 core / mid / wash (8 / 20 / 50) at a rod's scale. Symmetric up
+     and down, because the spec's help filament "casts an upward warm wash …
+     and a downward catch" (§2.5, bi-directional backwash). */
+  box-shadow:
+    0 0 3px 0 rgba(var(--lit-rgb), 0.55),
+    0 0 7px 1px rgba(var(--lit-rgb), 0.30),
+    0 0 17px 2px rgba(var(--lit-rgb), 0.13);
+  opacity: 0.45;
+  transition: opacity var(--arm-cool);
 }
-.help-mark[data-edges~="t"][data-edges~="l"]::before {
-  display: block;
-  top: -1px; left: -1px;
-  border-top-width: 1px;
-  border-left-width: 1px;
-  border-top-left-radius: var(--r-1);
+.help-mark[data-warm] .help-filament::after { opacity: 0.75; transition: opacity var(--dur-3) var(--ease-out); }
+.help-mark[data-hot] .help-filament::after { opacity: 1; transition: opacity var(--arm-heat); }
+
+/* The rod. At rest it is a DARK rod in a groove: the cold core and the
+   cylinder's underside shadow, nothing else. The first cut gave it a crown
+   highlight and a lit top edge at rest, and the owner's read was exact — "a
+   thin white stroke … pasted on". Room light on a 5px rod is not a thing the
+   eye can parse; what it can parse is a dark thing that then lights. So the
+   crown (the ::before) is 0 at rest, comes up a little when warm and shows
+   only when the rod is hot — where it reads as the rod's own light catching
+   its apex, not as a stroke drawn over it. No socket bead either: a separate
+   dot at the rod's end sat outside the control's box and read as a sticker;
+   the core's gradient already cools to cold iron at both ends.
+
+   Resting declares both drop-shadows at zero (the trap above). The cool
+   timing sits here, the heat timing on [data-hot]: the rod fades slowly and
+   lights fast. */
+.help-strand {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  top: 1.5px;
+  height: 5px;
+  border-radius: 2.5px;
+  /* No dark underside any more. It was the cylinder's shade, and with the
+     slab gone it lay on the panel as a 2px shadow under a light. */
+  filter: drop-shadow(0 0 0 rgba(var(--lit-rgb), 0)) drop-shadow(0 0 0 rgba(var(--lit-rgb), 0));
+  transition: filter var(--arm-cool), box-shadow var(--arm-cool), transform 60ms var(--ease-out);
 }
-.help-mark[data-edges~="b"][data-edges~="r"]::after {
-  display: block;
-  bottom: -1px; right: -1px;
-  border-bottom-width: 1px;
-  border-right-width: 1px;
-  border-bottom-right-radius: var(--r-1);
+.help-strand::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 0;
+  height: 1px;
+  border-radius: 1px;
+  background: var(--lit-hot);
+  opacity: 0;
+  transition: opacity var(--arm-cool);
+}
+/* A press sinks the rod one step into its channel — the same travel every
+   control in the console has under a thumb, on the same token. */
+.help-mark[data-press] .help-strand { transform: translateY(calc(var(--light-y) * 1px)); }
+
+/* The core: the 2px light guide inside the glass. Cold iron at rest — the
+   emitter's hue in the mid-tones and nothing brighter. The hot core is a
+   second layer whose OPACITY heats, because a gradient does not interpolate
+   and a background that swaps is a class toggling, not a coil warming. */
+.help-core {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 1.5px;
+  height: 2px;
+  border-radius: 1px;
+  /* The ends DISSOLVE — they used to stop on --lit-cold-0, a dim stub at
+     each end that read as the line being unfinished. Now the run fades in
+     over its first and last eighth, the way light leaves a fibre's end. */
+  background: linear-gradient(90deg,
+    transparent, var(--lit-cold-1) 12%, var(--lit-cold-2) 50%, var(--lit-cold-1) 88%, transparent);
+}
+.help-core::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 1px;
+  /* White-hot at the centre, the emitter's colour along the run, dissolving
+     at the ends like the resting core. --lit-hot is the white, so nothing
+     here names one. */
+  background: linear-gradient(90deg,
+    transparent, rgb(var(--lit-rgb)) 14%, var(--lit-hot) 50%, rgb(var(--lit-rgb)) 86%, transparent);
+  opacity: 0;
+  transition: opacity var(--arm-cool);
 }
 
-/* A mark can be wider than it is tall by a factor of thirty (a dropzone against
-   a chip), so the bracket shrinks rather than meeting itself in the middle. */
-.help-mark[data-narrow] { --help-bracket: 8px; }
+/* WARM — a pointer or the keyboard is on this control. Pre-ignition: the core
+   comes up part way, quickly, and falls back on the cool. Browse still lights
+   nothing; this is the one you are about to press, answering the touch. */
+.help-mark[data-warm] .help-core::after { opacity: 0.55; transition: opacity var(--dur-3) var(--ease-out); }
+.help-mark[data-warm] .help-strand::before { opacity: 0.18; transition: opacity var(--dur-3) var(--ease-out); }
+
+/* HOT — card mode, the picked control. The heat curve on every layer. */
+.help-mark[data-hot] .help-core::after { opacity: 1; transition: opacity var(--arm-heat); }
+.help-mark[data-hot] .help-strand::before { opacity: 0.6; transition: opacity var(--arm-heat); }
+.help-mark[data-hot] .help-strand {
+  box-shadow: var(--lit-halo);
+  filter: drop-shadow(0 0 6px rgba(var(--lit-rgb), 0.7)) drop-shadow(0 0 18px rgba(var(--lit-rgb), 0.45));
+  transition: filter var(--arm-heat), box-shadow var(--arm-heat), transform 60ms var(--ease-out);
+}
 
 
 /* ---- card: the scrim, the light, and the explanation --------------------- */
@@ -9243,25 +9535,52 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
    rectangle — which is the difference between something emitting and a sticker
    (owner: "it feels like it was pasted on in photoshop"). Sits above the scrim
    for the same reason the spotlight's does: it has to lie ON the dim. */
+/* ⚠️ REWORKED 2026-09-22, twice in one evening. It began as a circle 1.6×
+   the button in every direction, which the window's top edge sliced while
+   it was still at ~10%. The first rework fitted a Gaussian ellipse to the
+   bar: no cut any more, but the owner, rightly: "it def doesn't clip but it
+   looks pasted on not like physical light". An ellipse laid OVER the button
+   is a decal. It has its own shape, and it tints the emitter's face.
+
+   Physical light takes the shape of what emits it. This element is now
+   exactly the `?`'s box (_placeArmGlow), with nothing inside it, carrying
+   bloom tiers the way a lens sees a bright edge: a 1px rim hugging the
+   border, a tight core bloom, a mid bloom, and a wide faint wash onto the
+   panel. Each tier is a box-shadow blur, which is a Gaussian, and it follows
+   the button's own outline (a square button gets a softly rounded glow
+   because that is what blur does to a corner). An outer shadow never paints
+   under its own box, so the button face and its glyph stay crisp: the
+   light is AROUND the lamp, not smeared across it.
+
+   The tiers are the VP-1 spec's (docs/ideas/avionics-communicator-system.md §2.1:
+   core ~8px, mid scatter ~20px, atmospheric wash ~45px), with alphas
+   tempered because this lies over a dimmed console, not a black demo
+   plate. The WASH is where the spec's §2.5 comes in: active buttons "project
+   an elliptical photon footprint … onto the chassis deck beneath their
+   bezel". A 45px wash centred on a button 11px from the top of the window
+   would be cut by that edge. So it is the footprint instead: shrunk 4px,
+   dropped 16px, lying on the panel under the lamp, and gone (< 1%) by the
+   window's edge. The core and mid tiers are sized to fade out within those
+   11px too: 8px is ~0.6% at the edge, 16px ~3% of its own 0.26. */
 .help-arm-glow {
   position: fixed;
   z-index: 2;
   display: none;
   pointer-events: none;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(var(--accent-rgb), 0.28) 0%,
-    rgba(var(--accent-rgb), 0.10) 26%,
-    rgba(var(--accent-rgb), 0.03) 48%,
-    transparent 70%);
+  box-shadow:
+    0 0 1px 0 rgba(var(--accent-rgb), 0.85),
+    0 0 8px 0 rgba(var(--accent-rgb), 0.55),
+    0 0 16px 1px rgba(var(--accent-rgb), 0.26),
+    0 16px 34px -4px rgba(var(--accent-rgb), 0.20);
 }
 .help-layer.open .help-arm-glow { display: block; }
 
-/* DAYLIGHT keeps the scrim and drops both pools, for the reason --bloom-gain is
+/* DAYLIGHT keeps the scrim and drops the pools and the ember, for the reason --bloom-gain is
    0 there: light spilling onto paper reads as a screen artefact rather than as
    something that is on. The rings stay — on paper, lit reads as LIFTED. */
 :root[data-theme="light"] .help-glow,
-:root[data-theme="light"] .help-arm-glow { display: none; }
+:root[data-theme="light"] .help-arm-glow,
+:root[data-theme="light"] .help-filament::after { display: none; }
 
 .help-card {
   --arrow-x: 50%;
@@ -9281,9 +9600,40 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
   pointer-events: auto;
+  /* The drawer (2026-09-21). The card is what the filament unfurls: it wears a
+     rule of the emitter's colour on the side it hangs from, and a wash of the
+     same light falls into it from that edge — the rod is lit, and this is
+     what the light lands on. Below is the common case; the other sides move
+     the rule and the wash with the arrow (see the [data-side] rules). */
+  --unfurl-from: inset(-16px);
+  --wash-to: bottom;
+  border-top: 2px solid var(--accent);
+  background:
+    linear-gradient(to var(--wash-to), rgba(var(--accent-rgb), 0.11), rgba(var(--accent-rgb), 0) 46%),
+    var(--surface-1);
 }
-.help-layer.carded .help-card { display: block; }
+.help-layer.carded .help-card {
+  display: block;
+  /* A reveal from the filament's edge, on the console's own spring. Runs once
+     per show: the card is display:none between cards, so the animation
+     restarts with the next one. */
+  animation: help-unfurl var(--dur-3) var(--ease-out) both;
+}
 .help-card:focus { outline: none; }
+/* Which edge the light comes in from. The arrow sits 14px outside the box, so
+   the resting clip is inset(-16px) rather than inset(0) — a clip at the
+   border box would cut the arrow off for good. */
+.help-card[data-side="below"] { --unfurl-from: inset(-16px -16px 100% -16px); }
+.help-card[data-side="above"] { --unfurl-from: inset(100% -16px -16px -16px); --wash-to: top;
+  border-top-width: 1px; border-top-color: var(--line-2); border-bottom: 2px solid var(--accent); }
+.help-card[data-side="right"] { --unfurl-from: inset(-16px -16px -16px 100%); --wash-to: right;
+  border-top-width: 1px; border-top-color: var(--line-2); border-left: 2px solid var(--accent); }
+.help-card[data-side="left"] { --unfurl-from: inset(-16px 100% -16px -16px); --wash-to: left;
+  border-top-width: 1px; border-top-color: var(--line-2); border-right: 2px solid var(--accent); }
+@keyframes help-unfurl {
+  from { clip-path: var(--unfurl-from); opacity: 0; }
+  to   { clip-path: inset(-16px); opacity: 1; }
+}
 
 /* The pointer back to the control. A border triangle, not a leader line: at one
    card per screen the hole is the only lit thing, so there is never a question
@@ -9299,16 +9649,16 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   border: 7px solid transparent;
 }
 .help-card[data-side="below"]::before {
-  top: -14px; left: var(--arrow-x); margin-left: -7px; border-bottom-color: var(--line-2);
+  top: -14px; left: var(--arrow-x); margin-left: -7px; border-bottom-color: var(--accent);
 }
 .help-card[data-side="above"]::before {
-  bottom: -14px; left: var(--arrow-x); margin-left: -7px; border-top-color: var(--line-2);
+  bottom: -14px; left: var(--arrow-x); margin-left: -7px; border-top-color: var(--accent);
 }
 .help-card[data-side="right"]::before {
-  left: -14px; top: var(--arrow-y); margin-top: -7px; border-right-color: var(--line-2);
+  left: -14px; top: var(--arrow-y); margin-top: -7px; border-right-color: var(--accent);
 }
 .help-card[data-side="left"]::before {
-  right: -14px; top: var(--arrow-y); margin-top: -7px; border-left-color: var(--line-2);
+  right: -14px; top: var(--arrow-y); margin-top: -7px; border-left-color: var(--accent);
 }
 
 /* The masthead: which surface you are on, in the console's own sub-line voice
@@ -9390,6 +9740,10 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   color: var(--accent);
   font-weight: 600;
 }
+/* And at rest, cold iron: the one control that ignites this surface wears the
+   unlit hue of the light it can carry, so the eye reads a lamp that is off
+   rather than a chip like its neighbours. Unlit, so not a new state. */
+#help-topbar-btn:not([data-lit]) { border-color: var(--lit-cold-2); }
 
 /* ---- the HUD line ------------------------------------------------------- */
 
@@ -9527,6 +9881,20 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
     border-radius: 0 0 var(--r-sheet) var(--r-sheet);
   }
   .help-card::before { display: none; }
+  /* A sheet lifts rather than unfurls — there is no filament edge to grow
+     from at the foot of a phone — and its rule sits on the edge it hangs from. */
+  .help-card, .help-card[data-side="sheet"] {
+    --unfurl-from: inset(-16px);
+    --wash-to: bottom;
+    border-width: 2px 0 0;
+    border-top-color: var(--accent);
+  }
+  .help-layer.carded .help-card { animation-name: help-lift; }
+  .help-card[data-side="sheet-top"] {
+    --wash-to: top;
+    border-width: 0 0 2px;
+    border-bottom-color: var(--accent);
+  }
   /* Two berths on a phone, both full width — there is no corner wide enough for
      the line here. Above the tab bar by default; under the top bar when the
      bottom of the screen is where the marked control is, which on a single
@@ -9553,7 +9921,16 @@ html[data-theme="light"] .pulse-card-slot textarea.wk-p-text:focus {
   .help-bar-count { display: none; }
 }
 
+@keyframes help-lift {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .help-layer { transition: none; }
-  .help-mark { transition: none; }
+  .help-mark, #help-scrim-holes { transition: none; }
+  /* Keep the state, drop the journey: the rod still goes hot and the card
+     still opens — at once, instead of over a heat curve and an unfurl. */
+  .help-strand, .help-strand::before, .help-core::after { transition: none; }
+  .help-layer.carded .help-card { animation: none; }
 }

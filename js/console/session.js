@@ -27,15 +27,47 @@ import { applyPodcastPosture } from './audio.js';
 // js/console-api.js (SESSION_KEY, getToken, setToken, clearToken, isLoggedIn,
 // _tokenSecondsLeft, login). This section owns the login modal + settings UI.
 
+// ---- ONE DOOR ------------------------------------------------------------
+// A password box is a HABIT. An owner who learns to type their password into
+// whatever box appears is an owner who will type it into a box somebody else
+// drew. So this console has exactly one login page — the gate the worker
+// serves at /dev/field-console — and it never draws a second one over itself
+// when it can send you to the first.
+//
+// Both routes below retire the shell cookie and then reload: a cookie-less
+// request is what makes the worker answer with the gate rather than this
+// document. The reload is deliberately NOT delayed and is never preceded by
+// checkAuth(), because either one puts the console's own modal on screen for
+// the length of the wait — which is the exact habit this is here to avoid.
+//
+// The modal is the FALLBACK, and it is why it still exists: if the cookie
+// cannot be retired (offline, endpoint down) the shell is served again, and a
+// second bounce would loop forever. One attempt per tab, then the modal.
+const GATE_BOUNCE_KEY = 'oaklens_gate_bounce';
+
+function _bounceToGate() {
+  // ⚠️ Also the reason a `consoleShellPublic: true` instance spends one reload
+  // here before falling back to the modal: the console document is public
+  // there, so the reload serves it again. Self-limiting, once per tab, and the
+  // secure-by-default posture is the one worth optimising for.
+  try {
+    if (sessionStorage.getItem(GATE_BOUNCE_KEY)) return false;
+    sessionStorage.setItem(GATE_BOUNCE_KEY, '1');
+  } catch { return false; }   // private mode: no flag means no loop guard
+  logoutServer()
+    .catch(() => {})
+    .then(() => { try { location.reload(); } catch { /* not a browser */ } });
+  return true;
+}
+
 export function logout() {
   clearToken();
-  // Retire the console-shell cookie too, so the document gate re-locks for
-  // this browser (best-effort — the cookie's own expiry backstops it; the
-  // already-loaded shell stays up with the login modal, same UX as before).
-  logoutServer().catch(() => {});
   closeSettings();
-  checkAuth();
   toast('Logged out', 'info');
+  // Straight to the gate. Staged work survives the reload — the console
+  // persists it to localStorage (js/console-state.js) — and the toast is
+  // beside the point: the login page appearing IS the confirmation.
+  if (!_bounceToGate()) checkAuth();
 }
 
 export async function loginSubmit() {
@@ -70,6 +102,11 @@ export function checkAuth() {
   const loginModal = document.getElementById('login-modal');
   if (!loginModal) return;
   if (!isLoggedIn()) {
+    // No usable token. That happens on an expired one, and on every new TAB
+    // (the bearer lives in sessionStorage, which is per-tab, while the shell
+    // cookie is 30 days) — both of which used to raise the modal. Send them
+    // to the one door instead; the modal answers only when that cannot work.
+    if (_bounceToGate()) return;
     loginModal.classList.remove('hidden');
     // Resolve the field NOW, not inside the timer. A deferred document lookup
     // outlives whatever tore the page down around it — in the suite that means
