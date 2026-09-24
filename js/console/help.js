@@ -54,11 +54,15 @@
 // what keeps a config-gated view (Bench) and a not-yet-rendered panel honest.
 export const HELP = [
   // ---- the top bar — present on every view ----
+  // Both homes of the one control: the topbar button on a desk, the tab-bar
+  // cell on a phone or tablet, where the topbar's is `display: none`. Naming
+  // only the first left the touch band — the audience this feature exists for —
+  // with no answer for Publish at all (2026-09-24).
   {
-    sel: '#publish-btn', view: '*',
+    sel: '#publish-btn, .tabbar .tab-btn[data-view="publish"]', view: '*',
     title: 'Publish',
     body: 'Opens the page where you send your work live. Nothing you do anywhere else in here reaches your site until you go there and press publish.',
-    note: 'The dot lights up when something is waiting.',
+    note: 'It lights up when something is waiting.',
   },
   {
     sel: '#topbar-stage-stat', view: '*',
@@ -81,7 +85,7 @@ export const HELP = [
   {
     sel: '#theme-toggle', view: '*',
     title: 'Studio or daylight',
-    body: 'Switches this console between dark and light. Dark for working on pictures indoors, light for working in the sun.',
+    body: 'Switches this console between dark and light. Dark for working indoors, light for working in the sun.',
     note: 'Only the console changes. Your site is untouched.',
   },
   {
@@ -114,7 +118,7 @@ export const HELP = [
     sel: '#buffer-display', view: 'buffer',
     title: 'The marks under each frame',
     body: 'Every frame carries a small row of controls — feature it, move it into your curated collection, or retire it.',
-    note: 'Pressing the same mark again undoes it.',
+    note: 'Feature is a switch — press it again to undo. Anything removed waits in the trash until you publish.',
   },
 
   // ---- archive ----
@@ -318,6 +322,9 @@ let _target = null;            // the element the open card explains
 let _wired = false;
 let _touch = false;            // was the last pointer down a finger or a pen?
 let _settle = 0;               // the timer that re-seats the marks after a touch scroll
+let _viewSize = null;          // ResizeObserver on the active view (see _watchView)
+let _viewNodes = null;         // MutationObserver on the same view
+let _relayout = 0;             // the one frame both of those coalesce into
 
 const GUTTER = 16;             // keep the card this far off every edge
 const PAD = 4;                 // breathing room around the lit control
@@ -452,7 +459,7 @@ function _layer() {
     + '<div class="help-hole" id="help-hole"></div>'
     + '<div class="help-glow" id="help-glow"></div>'
     + '<div class="help-arm-glow" id="help-arm-glow"></div>'
-    + '<div class="help-card" id="help-card" role="dialog" aria-live="polite" tabindex="-1"></div>'
+    + '<div class="help-card" id="help-card" role="dialog" aria-live="polite" aria-labelledby="help-card-title" tabindex="-1"></div>'
     + '<div class="help-bar" id="help-bar">'
     + '<span class="help-bar-text">Pick anything marked'
     + ' <span class="help-bar-count" id="help-bar-count"></span></span>'
@@ -773,14 +780,30 @@ function _dockBar() {
   cost(best);
 }
 
+/**
+ * Do the marks still describe the screen? Two ways they stop: a control was
+ * re-rendered under its mark (renderPublish() rebuilds the summary tiles after
+ * a sync; the Cards view swaps its loading line for the grid a round trip
+ * later), or a control that measured nothing when help opened has since grown
+ * a box. Either way the count in the HUD line says one thing and the screen
+ * shows another. Costs one selector pass, so it is asked on RELAYOUT only —
+ * a resize or the active view's observers — never per scroll event.
+ */
+function _marksStale() {
+  if (_lit.some(({ el }) => !el.isConnected)) return true;
+  const now = _entriesForView();
+  return now.length !== _lit.length || now.some(({ el }, i) => el !== _lit[i].el);
+}
+
 function _enterBrowse() {
   const layer = _layer();
   const was = _target;
   // Back from a card, the marks are still there — card mode faded the others
   // and heated the one you picked. Keep them: the rod then COOLS on the
-  // --arm-cool curve, which a rebuilt mark could not do, and the view under
-  // them cannot have changed while every click was absorbed.
-  const fromCard = _mode === 'card' && _lit.length > 0;
+  // --arm-cool curve, which a rebuilt mark could not do. Every click was
+  // absorbed, so the view cannot have changed under them by a tap — but it
+  // can by a render that finished on its own, which is what _marksStale asks.
+  const fromCard = _mode === 'card' && _lit.length > 0 && !_marksStale();
   _mode = 'browse';
   _hideCard();
   if (fromCard) {
@@ -792,6 +815,7 @@ function _enterBrowse() {
   layer.classList.add('open');
   layer.classList.remove('carded');
   document.body.classList.add('help-on');
+  _watchView();
   // The console's own vocabulary for a control that is currently doing
   // something: data-lit gets the fill, the edge and the halo, and
   // js/console/lighting.js finds it by that attribute and pools light around it
@@ -884,6 +908,7 @@ function _paintCard(item) {
   card.append(eyebrow);
   const h = document.createElement('h3');
   h.className = 'help-card-title';
+  h.id = 'help-card-title';   // the dialog's accessible name (aria-labelledby, see _layer)
   h.textContent = item.title;
   const p = document.createElement('p');
   p.className = 'help-card-body';
@@ -898,11 +923,20 @@ function _paintCard(item) {
   return card;
 }
 
-function _reflow() {
+/**
+ * @param {boolean} relayout — true when the LAYOUT may have changed (a resize,
+ *   the active view's observers), false when only the scroll position did.
+ *   Only the first is allowed to rebuild the mark set (see _marksStale).
+ */
+function _reflow(relayout = false) {
   // Let go under a finger: nothing on the content is showing, and _seat()
   // measures everything once the page stops. Doing it here — a ResizeObserver
   // tick, a resize — would spend the main thread in the middle of a flick.
-  if (_mode === 'browse') { if (!_settle) _placeMarks(); return; }
+  if (_mode === 'browse') {
+    if (_settle) return;
+    if (relayout && _marksStale()) _outline(true); else _placeMarks();
+    return;
+  }
   if (_mode !== 'card' || !_target) return;
   if (!_target.getClientRects().length) { _enterBrowse(); return; }
   // Clamped to the viewport, because the hole is a picture of what you can SEE.
@@ -993,6 +1027,29 @@ function _seat() {
   document.getElementById('help-layer')?.classList.remove('scrolling');
 }
 
+/** One relayout per frame, however many observations land in it. */
+function _queueRelayout() {
+  if (_relayout || _mode === 'off') return;
+  const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (fn) => setTimeout(fn, 16);
+  _relayout = raf(() => { _relayout = 0; _reflow(true); }) || 1;
+}
+
+/** Point the late-layout observers at whichever view is up now. */
+function _watchView() {
+  _viewSize?.disconnect();
+  _viewNodes?.disconnect();
+  const view = document.querySelector('.view.active');
+  if (!view) return;
+  _viewSize?.observe(view);
+  _viewNodes?.observe(view, { childList: true, subtree: true });
+}
+
+function _unwatchView() {
+  _viewSize?.disconnect();
+  _viewNodes?.disconnect();
+  _relayout = 0;
+}
+
 /** Drop a pending re-seat — leaving browse, or opening a card, needs no settle. */
 function _unsettle() {
   clearTimeout(_settle);
@@ -1024,7 +1081,14 @@ function _scrollerFor(el) {
  * still says which one is meant.
  */
 function _bringIntoView(el, reserve) {
-  const top = 8;
+  // A control that IS a bar scrolls with nothing; walking up from it finds no
+  // scroller and falls back to .main, which would then scroll the CONTENT to
+  // chase a button that never moves.
+  if (_onBar(el)) return false;
+  // Under the topbar is not "in view": the content slides beneath it, so a
+  // control with 6px showing under the bar used to pass this test, get no
+  // scroll, and open a card pointing at that sliver (2026-09-24).
+  const top = _topInset() + 8;
   const floor = window.innerHeight - _bottomInset() - reserve - 8;
   const r = el.getBoundingClientRect();
   if (r.top >= top && r.bottom <= floor) return false;
@@ -1124,6 +1188,7 @@ export function helpToggle() {
 export function helpClose() {
   _mode = 'off';
   _unsettle();
+  _unwatchView();
   _outline(false);
   _hideCard();
   const layer = document.getElementById('help-layer');
@@ -1195,6 +1260,22 @@ function _wire() {
     // Anything else: absorbed.
   }, true);
 
+  // A file let go over the console is a real action too — every dropzone
+  // ingests on `drop` — so it is absorbed on the same terms as a click. The
+  // default is prevented as well, because a drop nothing accepts is a drop
+  // the BROWSER accepts: it navigates the tab to the file, and the console
+  // with it. The cursor says "not allowed" over the dim, and nothing lands.
+  // (Long-press is the third real action, and it is gated in init.js, where
+  // the menus are registered.)
+  for (const ev of ['dragenter', 'dragover', 'drop']) {
+    document.addEventListener(ev, (e) => {
+      if (_mode === 'off') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+    }, true);
+  }
+
   // Our own Escape, guarded on the synchronous state — NOT a line in init.js's
   // chain, which is bubble-phase and runs after the editor's.
   document.addEventListener('keydown', (e) => {
@@ -1239,17 +1320,21 @@ function _wire() {
     }, true);
   }
 
-  window.addEventListener('resize', _reflow);
+  window.addEventListener('resize', () => _reflow(true));
   // Late layout. A view can finish rendering AFTER help opens — Bench and
   // Publish both do, and the Cards view takes a network round trip — which
   // leaves every mark, and the HUD line's choice of berth, sitting on the
-  // layout as it was a moment ago. An observer on the scroller catches the
-  // content settling; `_reflow` is a no-op whenever help is off.
-  if (typeof ResizeObserver === 'function') {
-    const ro = new ResizeObserver(() => _reflow());
-    const main = document.querySelector('.main');
-    if (main) ro.observe(main);
-  }
+  // layout as it was a moment ago. Two observers on the ACTIVE VIEW catch it
+  // (pointed there by _watchView on every entry into browse): its size, for a
+  // render that grows it, and its children, for one that swaps nodes at the
+  // same height (renderPublish() after a sync). Both land on the same frame.
+  //
+  // ⚠️ Not on `.main`. Until 2026-09-24 the ResizeObserver watched the
+  // scroller, whose box is `height: 100%` and never changes when content
+  // renders inside it — so this fired on a window resize, which the listener
+  // above already covered, and on nothing else. The view is what grows.
+  if (typeof ResizeObserver === 'function') _viewSize = new ResizeObserver(_queueRelayout);
+  if (typeof MutationObserver === 'function') _viewNodes = new MutationObserver(_queueRelayout);
   // Capture, at the window. `scroll` does not bubble, so a listener on `.main`
   // never hears the console's fourteen nested scrollers — the Field Notes
   // canvas holds `.fn-dock`, which is an explained target, and scrolling it

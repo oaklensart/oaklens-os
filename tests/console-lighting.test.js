@@ -322,6 +322,46 @@ describe('it spends no heartbeat', () => {
   });
 });
 
+describe('the size observer never re-arms the frame it runs in', () => {
+  // A ResizeObserver delivers an initial notification for every observe() —
+  // by spec — so re-pointing it each paint (disconnect + observe) was: paint →
+  // notify → repaint → …, a 60fps loop for as long as anything was lit.
+  // Headless Chromium, 2026-09-24: 120 rAF callbacks in two idle seconds with
+  // one emitter, 0 after the fix. The observer may only ever see the DIFF.
+  let log;
+  class RecordingRO {
+    constructor(cb) { this.cb = cb; }
+    observe(el) { log.push(['observe', el.id]); }
+    unobserve(el) { log.push(['unobserve', el.id]); }
+    disconnect() { log.push(['disconnect']); }
+  }
+  let realRO;
+  beforeEach(() => { log = []; realRO = globalThis.ResizeObserver; globalThis.ResizeObserver = RecordingRO; });
+  afterEach(() => { globalThis.ResizeObserver = realRO; });
+
+  it('observes an emitter once, however many frames it stays lit for', async () => {
+    document.body.innerHTML = '<button id="a"></button><button id="b"></button>';
+    lamp(document.getElementById('a'));
+    const m = await painted();
+    m._lighting.paint();
+    m._lighting.paint();
+    expect(log).toEqual([['observe', 'a']]);
+    // A second emitter joins: only IT is observed. The first is left alone.
+    lamp(document.getElementById('b'), { y: 100 });
+    m._lighting.paint();
+    expect(log).toEqual([['observe', 'a'], ['observe', 'b']]);
+    // …and leaves: only it is released. Never a disconnect-and-rebuild.
+    document.getElementById('a').removeAttribute('data-lit');
+    m._lighting.paint();
+    expect(log).toEqual([['observe', 'a'], ['observe', 'b'], ['unobserve', 'a']]);
+  });
+
+  it('spends the observer only on change at the source level too', () => {
+    const fn = CODE.slice(CODE.indexOf('function observeSizes'));
+    expect(fn.slice(0, fn.indexOf('\n}'))).not.toMatch(/disconnect\(\)/);
+  });
+});
+
 describe('it is inert where a canvas cannot be had', () => {
   it('boots without a 2D context instead of taking the console down with it', async () => {
     // happy-dom returns null from getContext, which is exactly the shape of a

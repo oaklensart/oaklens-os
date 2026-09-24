@@ -146,7 +146,7 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   (D1), `CDN` (R2) — the resource *names* behind them are instance config and
   live in `wrangler.jsonc`, never here. Daily cron `0 11 * * *`.
 - **Identity is edge-injected**, never hardcoded (see engine vs. instance).
-- **The console is twenty-one layered modules.** `js/console-ui.js` is a thin
+- **The console is twenty-two layered modules.** `js/console-ui.js` is a thin
   barrel — `export *` from `js/console/*` in layer order — and holds no logic.
   A module may import only ones *below* it in that order; when lower code needs
   something above, the thing above **registers** with it (six seams, all wired

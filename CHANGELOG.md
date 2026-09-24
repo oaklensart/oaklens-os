@@ -25,6 +25,33 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-09-24 (the console stops redrawing itself while work is waiting)
+
+**Nothing to do on merge.**
+
+- **Fixed: the glow around the Publish button was repainting sixty times a
+  second the whole time anything was waiting to publish.** It was meant to
+  redraw only when something moved, and it looked that way, but a browser
+  quirk kept re-triggering it. On a phone or tablet that is battery and warmth
+  spent on nothing. It now redraws only when something actually changes.
+- **Fixed: with `?` on, the marks now keep up with a screen that finishes
+  drawing after you press it.** The Bench, Publish and Cards screens fill in a
+  moment after they open, and a sync can redraw the Publish tiles; the marks
+  used to stay where things *were*, and the count in the corner said one thing
+  while the screen showed another.
+- **Fixed: nothing real can happen under the dim.** Dropping a file on the
+  console while `?` was on still added it (and a drop the console refused could
+  open the file in the tab instead), and holding a thumb on a frame still opened
+  its menu. Both are now inert until you turn help off.
+- **Fixed: on a phone, Publish now has an explanation.** The `?` only knew the
+  desktop button, which a phone never shows.
+- **Fixed: asking about a control half-hidden under the top bar now scrolls it
+  clear first** instead of explaining a sliver.
+- Two sentences of help copy reworded; the help card now announces its title
+  to a screen reader.
+
+  If your console is installed as an app, it picks this up on its next reload.
+
 ## 2026-09-22 (help's light behaves like light)
 
 **Nothing to do on merge.**

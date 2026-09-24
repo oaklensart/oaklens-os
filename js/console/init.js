@@ -20,7 +20,7 @@ import { STATE, load, restoreSidebar, restoreFnBar, resetConsole } from '../cons
 import { isLoggedIn } from '../console-api.js';
 import { registerView, registerLongPress, refreshStageIndicators, themeInit, wireDropzone, _wireSheetDrag, _initKeyboardInsets, _initViewportFrame, _initStickyHeaders, _initLongPress, closeActionSheet, closeMoreSheet } from './chrome.js';
 import { lightingInit } from './lighting.js';
-import { _initHelp } from './help.js';
+import { _initHelp, helpIsOpen } from './help.js';
 import { updatePurgeR2Button, _registerLibraryUploadProbe } from './sync.js';
 import { _libraryUploadsPending } from './upload.js';
 import { renderWall, renderNetwork, renderLibrary, wallIngest, libraryIngest } from './more-views.js';
@@ -103,7 +103,10 @@ export function registerSurfaces() {
     hostId: "buffer-display",
     itemSelector: ".buffer-frame",
     title: "FRAME ACTIONS",
-    enabled: () => !burstLinkMode,   // Link mode owns its own taps
+    // Link mode owns its own taps; and with `?` on, a held thumb must not open
+    // a menu under the dim — help absorbs clicks and drops itself, but a
+    // long-press is a timer on pointerdown and only this gate can see it.
+    enabled: () => !burstLinkMode && !helpIsOpen(),
     actions: (id) => [
       { icon: "▲", label: "Promote to Archive", fn: () => bufferPromote(id) },
       { icon: "◎", label: "Focal point",        fn: () => bufferFocal(id) },

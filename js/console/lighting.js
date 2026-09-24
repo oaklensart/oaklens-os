@@ -104,6 +104,7 @@ let dirty = false;
 let queued = 0;
 let sized = { w: 0, h: 0, dpr: 0 };
 let ro = null;
+let watched = new Set();   // the emitters the size observer is pointed at right now
 
 /** Every element currently licensed to emit. The attribute IS the contract. */
 function emitters() {
@@ -183,6 +184,15 @@ function paint() {
   // `childList` on the whole body fires for every render in the console, and
   // a document-wide querySelectorAll per batch is a real cost on a grid of
   // several hundred frames. The frame already knows who is lit.
+  //
+  // ⚠️ Only the CHANGE in that set may touch the observer (2026-09-24). A
+  // ResizeObserver delivers an initial notification for every `observe()` —
+  // by spec, not by accident — so `disconnect()` + re-observe every paint
+  // meant: paint → observe → "here is its size" → repaint → observe → … one
+  // frame after another, for as long as anything was lit. Headless Chromium
+  // measured 120 rAF callbacks in two idle seconds with one emitter and 0
+  // with none — a 60fps loop hiding behind the promise of "event-driven",
+  // running whenever work was waiting to publish, which is nearly always.
   observeSizes(lit);
   if (!lit.length) return;
 
@@ -339,11 +349,18 @@ export function lightingInit() {
   lightingRepaint();
 }
 
-/** Re-point the size observer at the emitters this frame found. */
+/**
+ * Re-point the size observer at the emitters this frame found — by DIFF, never
+ * by disconnect-and-rebuild (see the note in paint()). A newly lit control
+ * costs one initial notification and so one extra paint; a control lit since
+ * the last frame costs nothing at all.
+ */
 function observeSizes(lit) {
   if (!ro) return;
-  ro.disconnect();
-  for (const el of lit) ro.observe(el);
+  const next = new Set(lit);
+  for (const el of watched) if (!next.has(el)) ro.unobserve(el);
+  for (const el of next) if (!watched.has(el)) ro.observe(el);
+  watched = next;
 }
 
 // Test seam: the paint is pure DOM + canvas and has no other way in.
