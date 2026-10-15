@@ -40,42 +40,49 @@ This trips people up once and then never again:
 | You changed… | How it goes live |
 |---|---|
 | **Photos, posts, anything in the console** | Hit **▲ Publish** in the console |
-| **Settings — anything in `site.config.js`** | Save the file and `git push` |
+| **Settings — anything in `site.config.js`** | Commit the change: on github.com (open the file, press the pencil, **Commit changes**), or `git push` from your own copy |
 
 Both end the same way: GitHub tells Cloudflare, Cloudflare rebuilds, and your
 change is live in about a minute. There's no separate "deploy the front end"
 step and no second place to check.
 
-**If you haven't connected your repo to Cloudflare yet,** that automatic rebuild
-isn't happening and pushing does nothing on its own. Go do it — it's the
-"Connect your repo" section of [setup.md](setup.md), it takes a few minutes, and
-it's the difference between publishing from your phone and publishing from a
-terminal.
+**Installed with the Deploy button?** Your repo is already connected, so this
+just works. **Installed from a terminal and haven't connected your repo to
+Cloudflare yet?** Then that automatic rebuild isn't happening and pushing does
+nothing on its own. Go do it — it's the "Connect your repo" section of
+[setup.md](setup.md), it takes a few minutes, and it's the difference between
+publishing from your phone and publishing from a terminal.
 
 ### The shape of the console
 
-Six places you'll actually use, whatever the screen size:
+The places you'll actually use, whatever the screen size:
 
+- **BRIDGE** — where the console opens: what's waiting on you, what your site
+  says right now, and where you were. Drop files on it, post a pulse, or jot an
+  idea down before it goes.
 - **BUFFER** — everything you've dropped in, newest first. Raw, unsorted, yours.
 - **FN** — Field Notes. The writing.
 - **ARCHIVE** — the curated work, with titles and gear details.
 - **LIBRARY** — images staged for reuse without being published anywhere.
+- **AUDIO** and **CARDS** — your tracks, and what your homepage cards will show.
 - **PUBLISH** — the button that sends it all live, plus sync and export.
-- **⚙** — session status and sign-out.
+- **⚙** — Settings: session status, sign-out, and site settings.
 
-On a desktop these are down the left. On a phone or tablet the four you use most
-sit in a bar along the bottom, and the rest live behind **More**.
+On a desktop these are down the left. On a phone or tablet the Bridge and the
+four you use most sit in a bar along the bottom, and the rest live behind
+**More**.
 
 ---
 
 ## Part 1 — The five-minute wins
 
-Everything in Part 1 happens in **one file: `site.config.js`**, in the folder you
-cloned. Open it in a text editor. It's long, it's commented throughout, and it's
-the only file that knows anything about you.
+Everything in Part 1 happens in **one file: `site.config.js`**, in your site's
+repo. Open it on github.com and press the pencil to edit it in your browser (or,
+if you installed from a terminal, open it in the folder you cloned). It's long,
+it's commented throughout, and it's the only file that knows anything about you.
 
-**The rhythm for all eight:** edit → save → `git push` → wait about a minute →
-reload your site.
+**The rhythm for all eight:** edit → commit (or save and `git push`) → wait about
+a minute → reload your site.
 
 > **A note on the commented-out lines.** Several switches ship with `//` in front
 > of them, like `// appleMusicEmbeds: true,`. Those two slashes mean "ignore this
@@ -220,6 +227,9 @@ page in Cloudflare. A visit shows up within a few minutes.
 **What it does.** Changes what the console's Publish screen tells you after you
 hit the button.
 
+**Installed with the Deploy button? Skip this one.** Your site's own build tells
+the console it's connected, whatever this line says.
+
 **Do it.** Once you've connected your repo to Cloudflare (setup.md, "Connect your
 repo"), find this line and change `false` to `true`:
 
@@ -227,8 +237,9 @@ repo"), find this line and change `false` to `true`:
 repoConnected: false,
 ```
 
-**Why it isn't automatic.** Your site genuinely cannot see, from the inside,
-whether Cloudflare is watching your repo. So this line is how it knows. It ships
+**Why it isn't automatic here.** A site installed from a terminal cannot see,
+from the inside, whether Cloudflare is watching its repo. So this line is how it
+knows. It ships
 switched off and fully visible — a switch you can see is a switch you can find
 again.
 
@@ -474,8 +485,8 @@ Everything staged goes as a single commit — photos, posts, archive entries,
 settings — all or nothing. There's no partial state to land in, and no order you
 have to do things in.
 
-**How you know it worked.** The console confirms the publish, and — if you set
-`repoConnected: true` in step 06 — tells you Cloudflare is rebuilding. Give it
+**How you know it worked.** The console confirms the publish, and — on a
+connected site (step 06) — tells you Cloudflare is rebuilding. Give it
 about a minute and reload your site.
 
 **A few things about that button:**
@@ -529,8 +540,8 @@ else breaks while you get to it; your homepage just carries on without a card.
 
 ## Part 3 — Where to go next
 
-You now have a site that looks like you, with your photographs on it, published
-from a browser.
+You now have a site that looks like you, with your work on it, published from a
+browser.
 
 - **[setup.md](setup.md)** — the full operating manual. Connecting your repo,
   every optional secret, custom domains, locking the console behind Cloudflare

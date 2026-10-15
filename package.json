@@ -1,7 +1,7 @@
 {
   "name": "oaklens-os",
   "version": "1.0.0",
-  "description": "OAKLENS OS — a photography site, field-notes blog, and print-drop storefront on a single Cloudflare Worker.",
+  "description": "OAKLENS OS — a digital studio you own: portfolio, blog, audio and storefront on a single Cloudflare Worker.",
   "main": "worker.js",
   "type": "module",
   "scripts": {
@@ -15,11 +15,14 @@
     "url": "https://github.com/oaklensart/oaklens-os.git"
   },
   "keywords": [
+    "portfolio",
+    "blog",
+    "audio",
+    "podcast",
     "photography",
     "cloudflare-workers",
     "indieweb",
-    "static-site",
-    "portfolio"
+    "static-site"
   ],
   "cloudflare": {
     "bindings": {

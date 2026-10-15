@@ -22,9 +22,9 @@ Paste it in as-is if you have it.
 **What you'd expected to happen instead**
 
 **Your setup**
-- Operating system (Mac / Windows / Linux):
-- Terminal you used (Terminal / Git Bash / PowerShell / WSL / other):
-- `node --version` output:
-- Install route (setup script / one-click Deploy button / by hand):
+- Install route (Deploy to Cloudflare button / setup script / by hand):
+- Device and browser (e.g. iPhone Safari, Windows Chrome):
+- Terminal installs only: terminal you used (Terminal / Git Bash / PowerShell / WSL / other):
+- Terminal installs only: `node --version` output:
 
 **Anything else**

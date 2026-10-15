@@ -42,7 +42,8 @@ export function handleCORS() {
 }
 
 // ---- Optional-secret degradation ----
-// Only AUTH_PASSWORD_HASH + SESSION_SECRET are required to run an instance;
+// Only a password (AUTH_PASSWORD_HASH or AUTH_PASSWORD) and a signing key
+// (SESSION_SECRET, or one generated into KV) are required to run an instance;
 // every other secret gates one feature. A missing optional secret answers 501
 // with notConfigured:true — a deliberate "this feature is off" the console can
 // tell apart from a real fault (it must never red-latch the system lamp or be

@@ -20,7 +20,7 @@ Some changes you make will carry through every update untouched, some may need
 redoing, and some become yours to keep working. That's the three kinds below,
 and it's worth knowing which one you're making *before* you make it.
 
-If you installed with the one-click button, your **first** update needs a
+If you installed with the Deploy to Cloudflare button, your **first** update needs a
 computer with a terminal, once. After that, updates are ordinary. See
 [Keeping your site up to date](setup.md#keeping-your-site-up-to-date-with-the-engine).
 
@@ -80,7 +80,7 @@ Never type your real name or email into a page file to "fix" one of these.
 
 ## Checking and undoing
 
-Every commit to `main` goes live in about a minute (on a one-click install, and
+Every commit to `main` goes live in about a minute (on a button install, and
 on any install whose repo is connected to Cloudflare). There's no preview step,
 so look at the site after each change.
 
