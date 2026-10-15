@@ -14,7 +14,7 @@ post in the Field Console, it saves to GitHub, and (once connected) Cloudflare
 rebuilds the site from there. So the copy of this code you work from has to be
 one you can push to.
 
-- **The one-click button does this for you.** It copies the repo into your own
+- **The Deploy button does this for you.** It copies the repo into your own
   GitHub account as part of the install. Skip ahead.
 - **Going the CLI route? Fork first.** Use the **Fork** button (or *Use this
   template*), then clone **your fork**:
@@ -31,15 +31,19 @@ one you can push to.
 > arrives hours after its cause, which is exactly the kind that wastes an
 > afternoon. Fork now.
 
-## The quick way — one click
+## The quick way — no terminal
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/oaklensart/oaklens-os)
 
-The button does the whole install in your browser. It copies this repo into your
+The button does the install in your browser. It copies this repo into your
 own GitHub account, creates your media storage, database and subscriber list on
 your Cloudflare account, wires them up and deploys. It also sets up automatic
 redeploys, so from then on every change saved to your repo goes live by itself.
 There's no terminal and nothing to install.
+
+Counted honestly, it's three steps to a live site (the two accounts with R2
+switched on, then the button), and one more inside your site afterwards to turn
+on Publish.
 
 ### Before you click
 
@@ -244,7 +248,7 @@ Only two secrets are **required** — a fresh instance runs with just these:
 ```bash
 npx wrangler secret put AUTH_PASSWORD_HASH
 # paste the bcrypt hash from above
-# (or set AUTH_PASSWORD to the password itself — see "one click" above.
+# (or set AUTH_PASSWORD to the password itself — see "The quick way" above.
 #  The hash wins if both are set.)
 
 npx wrangler secret put SESSION_SECRET
@@ -354,8 +358,8 @@ on one thing: whether Cloudflare is watching that repo.
   your live site keeps serving the old files until you run `npx wrangler deploy`
   yourself. Nothing looks broken. That is the trap.
 
-(The one-click **Deploy to Cloudflare** button sets this connection up for
-you — this section is for everyone who used `setup.sh` instead.)
+(The **Deploy to Cloudflare** button sets this connection up for you — this
+section is for everyone who used `setup.sh` instead.)
 
 ### Do these in order. The order is the whole thing.
 

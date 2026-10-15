@@ -13,11 +13,12 @@ itself. Nothing you make lives anywhere you can't reach.
 
 https://github.com/user-attachments/assets/cdfe0c20-be10-4c00-b38a-8f1ec434e39c
 
-## Install it in one click
+## Install it, no terminal needed
 
-You need a free GitHub account and a free Cloudflare account. The button does
-the rest in your browser: no commands to type, nothing to install on your
-computer.
+Three steps to a live site, all in your browser: a free GitHub account, a free
+Cloudflare account with R2 switched on (below), then the button. Nothing to
+install on your computer and no commands to type. Once it's live, one more step
+inside your site turns on Publish.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/oaklensart/oaklens-os)
 
@@ -29,7 +30,7 @@ computer.
 > it the install stops partway, because it has nowhere to put your media.
 > [How to switch it on](setup.md#before-either-way-switch-on-r2).
 
-**Never done this before?** The [one-click install page](https://os.oaklens.art/install)
+**Never done this before?** The [install page](https://os.oaklens.art/install)
 walks the same three steps on one page, written for people who don't do this
 for a living. [setup.md](setup.md#before-you-click) has the same ground in
 reference form, including what to put on Cloudflare's setup screen.
@@ -68,8 +69,8 @@ feeds are first-class, not accessories, and nothing here assumes a camera.
   breaks. Cite a number in a post and the link opens a preview inline — words
   and work stay tied together across years.
 - **Survives a bad connection.** Lose signal and your work is held locally, then
-  uploads when you're back. Close the tab mid-upload and it pauses rather than
-  publishing something half-formed.
+  uploads when you're back. Close the tab mid-upload and the console marks that
+  upload as failed rather than publishing something half-formed.
 - **An escape hatch.** Export the whole site, pages and images and code, as a
   single ZIP that runs from `file://` with no server and no network.
 - **Nothing third-party on the public pages.** A fork ships zero third-party
@@ -130,7 +131,7 @@ and which changes carry through future updates and which you'd have to redo.
 
 ## Prefer the terminal?
 
-The button above is the whole install for most people. If you'd rather see
+The button above is the install for most people. If you'd rather see
 every command, or the button isn't an option for you, this is the same install
 by hand.
 
@@ -162,7 +163,7 @@ cd YOUR-REPO
 
 ### 2. Switch on R2
 
-Same as the one-click route, and before the next step: Cloudflare dashboard,
+Same as the button route, and before the next step: Cloudflare dashboard,
 then **Storage & databases**, then **R2 Object Storage**, then **Add R2
 subscription to my account**. No command can do it for you. When it is done the
 R2 page reads `$0.00` billable usage and `0 B` stored, and there is an **Add
@@ -223,7 +224,7 @@ extra setup, and attaching your own domain later changes nothing in the code.
 
 | File | What's in it |
 |------|--------------|
-| [One-click install](https://os.oaklens.art/install) | Three steps on one page: the two accounts, then the link |
+| [Install page](https://os.oaklens.art/install) | Three steps on one page: the two accounts, then the link |
 | [setup.md](setup.md) | Deploying and operating an instance: accounts, secrets, storage, the console |
 | [CUSTOMIZE.md](CUSTOMIZE.md) | What to change and where, which changes survive an update, and rules for an AI helping you |
 | [quickstart.md](quickstart.md) | Your first half hour after the install: the config switches and console moves, one at a time |

@@ -25,6 +25,30 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-15 (the docs, checked against the code)
+
+**Nothing to do.** A read of every guide against what the engine actually
+does. Only words changed; no code behaves differently.
+
+- **The install is called "no terminal" now, not "one click".** A reader
+  rightly pointed out that the click comes after two accounts and switching
+  on R2, and Publish comes after it. The README and setup.md now give the
+  honest count: three steps to a live site, then one more inside it to turn
+  on Publish. If you linked to setup.md's install section, its heading (and
+  so its address) changed from `#the-quick-way--one-click` to
+  `#the-quick-way--no-terminal`.
+- **quickstart.md fits a button install.** It used to assume you had a
+  terminal and a folder you cloned. Settings changes now start on github.com
+  (open `site.config.js`, press the pencil, commit), with the terminal as the
+  other way. Step 06 (`repoConnected`) says to skip it if you installed with
+  the button, since your build already marks the site connected. The console
+  tour starts where the console really opens, the Bridge.
+- **Small corrections:** the README says an upload cut off by a closed tab is
+  marked failed (it said "pauses"); the install-feedback issue form asks for
+  your device and browser first and the terminal only if you used one; the
+  `package.json` description stops calling it a photography site; two
+  comments in `wrangler.example.jsonc` follow the new name.
+
 ## 2026-10-14 (Publish on a weak connection)
 
 **Nothing to do.** Two fixes for publishing over a slow or patchy link:

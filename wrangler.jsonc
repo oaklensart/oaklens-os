@@ -50,7 +50,7 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  // ---- One-click "Deploy to Cloudflare" -----------------------------------
+  // ---- The "Deploy to Cloudflare" button -----------------------------------
   // Cloudflare reads this file to work out what your Worker needs, provisions
   // the KV / D1 / R2 below automatically, and writes the new IDs into the copy
   // of the repo it makes for you (the placeholder IDs below are fine as they
@@ -60,7 +60,7 @@
   //
   //   AUTH_PASSWORD_HASH   a bcrypt hash — what `scripts/setup.sh` writes.
   //                        The recommended form if you are using the CLI.
-  //   AUTH_PASSWORD        the password itself — for one-click installs, where
+  //   AUTH_PASSWORD        the password itself — for button installs, where
   //                        a deploy dialog cannot ask you to produce a hash.
   //
   // If AUTH_PASSWORD_HASH is set it always wins, so the two never conflict.
@@ -86,7 +86,7 @@
   // Create: `npx wrangler d1 create YOUR_DB_NAME`. The tables themselves are
   // wrangler migrations (migrations/): setup.sh applies them, and the
   // package.json `deploy` script applies them on every deploy — including the
-  // one-click Deploy path, which runs that script (see setup.md).
+  // Deploy button's path, which runs that script (see setup.md).
   "d1_databases": [
     {
       "binding": "DB",

@@ -1480,7 +1480,7 @@ the class together.
 | what may light | design-spec §6.5 (the licence, amended 2026-09-25 to the ladder above) |
 | how it lights | this document |
 | the engine's promises | `tests/console-lighting.test.js` |
-| the primitives' promises | `tests/console-emissive.test.js` (the bay, the strike, selection, toasts, the seams and their hosts), `tests/console-ignition.test.js`, `tests/console-help-filament.test.js`, `tests/console-gate-lighting.test.js` |
+| the primitives' promises | `tests/console-emissive.test.js` (the bay, the strike, selection, toasts, the seams and their hosts), `tests/console-ignition.test.js`, `tests/console-help-marks.test.js`, `tests/console-gate-lighting.test.js` |
 | the seams and the haze (K41) | `tests/console-lighting.test.js` ("the seams are emitters", "the room has haze"), `tests/console-emissive.test.js` ("the long rules are seams of light") |
 | the bays' hover and wake, the cover bay, the frame caps, the planes (2026-10-02) | `tests/console-planes.test.js` |
 | the backlight, the glass, the cap, the corners (K44) | `tests/console-backlight.test.js`, `tests/console-lighting.test.js` ("the backlight") |

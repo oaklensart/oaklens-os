@@ -8,8 +8,8 @@
 You are working on **OAKLENS OS**: a digital studio you own — portfolio, blog,
 audio and storefront — that runs as a **single Cloudflare Worker**: no
 framework, no build step, native ES modules on the front end. It also ships as
-an open-source engine a stranger can deploy on Cloudflare's free tier in ~15
-minutes, so "does this help every fork" outranks "does this help one site."
+an open-source engine a stranger can deploy on Cloudflare's free tier with no
+terminal, so "does this help every fork" outranks "does this help one site."
 
 **It is a creative platform, not a photography platform** (owner decision,
 2026-08-13, during soft launch). The instance is a photographer's site and the
@@ -148,7 +148,8 @@ Keep commits focused on one change; write a message that explains *why*, not jus
 - **The Worker serves everything.** `run_worker_first: true` — it intercepts
   every request, serves static assets via `env.ASSETS`, and owns all `/api/*`
   routes. Bindings: `ASSETS` (static), `SUBSCRIBERS` (KV), `DB`
-  (D1), `CDN` (R2) — the resource *names* behind them are instance config and
+  (D1), `CDN` (R2), `CF_VERSION_METADATA` (which deploy is live; it scopes the
+  edge data cache) — the resource *names* behind them are instance config and
   live in `wrangler.jsonc`, never here. Daily cron `0 11 * * *`.
 - **Identity is edge-injected**, never hardcoded (see engine vs. instance).
 - **The console is twenty-eight layered modules.** `js/console-ui.js` is a thin
@@ -186,8 +187,11 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   edit that pre-paint block on *any* public page, its hash must be updated in
   lockstep — `tests/csp.test.js` recomputes and enforces it. Don't introduce a
   new inline `<script>` or `onclick=`/`onerror=` on a public page.
-- **Optional-secret degradation.** Only `AUTH_PASSWORD_HASH` + `SESSION_SECRET`
-  are required. Every other secret gates one feature and, when unset, answers
+- **Optional-secret degradation.** Only two things are required: a console
+  password (`AUTH_PASSWORD_HASH`, or `AUTH_PASSWORD` as plain text, which is
+  what the Deploy button asks for; the hash wins if both are set) and a signing
+  key (`SESSION_SECRET`, or the one the Worker generates on first use and keeps
+  in KV when it is unset). Every other secret gates one feature and, when unset, answers
   **`501 { notConfigured: true }`** — a deliberate "feature off," never a fault.
   The console must not red-latch on it. New optional-secret features follow this
   shape (see `notConfiguredRes`, `src/shared/http.js`).
