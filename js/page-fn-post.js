@@ -280,8 +280,12 @@ async function loadPost() {
       const embedContainer = document.getElementById('buffer-embed');
 
       bufferDates.forEach(date => {
+        // The SITE's day, the one the console picked the date in. This was
+        // `captured_at.startsWith(date)`, the UTC date: an evening frame in the
+        // Pacific is already tomorrow in UTC, so fn-005's embed showed 16
+        // frames, 15 from the night before (maintenance review 2026-10-15, D2).
         const dayEntries = allEntries.filter(e =>
-          (e.captured_at || e.published_at || '').startsWith(date)
+          LightTable.siteDay(e.captured_at || e.published_at) === date
         );
         if (!dayEntries.length) return;
 
@@ -312,7 +316,7 @@ async function loadPost() {
       inlineDateEls.forEach(el => {
         const date = el.dataset.date;
         const dayEntries = allEntries.filter(e =>
-          (e.captured_at || e.published_at || '').startsWith(date)
+          LightTable.siteDay(e.captured_at || e.published_at) === date
         );
         if (!dayEntries.length) {
           const empty = document.createElement('div');

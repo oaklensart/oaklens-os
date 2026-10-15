@@ -94,55 +94,111 @@
 }
 
 /* ---- MONTH RAIL ---- */
+/* The roll's index. It used to be a column of rotated "MON YYYY" labels
+   centred on the full viewport height, 125px a month: six months stood 692px
+   tall, so on an iPad in landscape the first slid under the nav and the last
+   into the fixed footer (2026-10-15, owner on the iPad). Now it is bounded by
+   the nav and the footer, its months share whatever height there is, the
+   current month follows the scroll, and a tap jumps to it. Past ~26px a month
+   it thins out (.is-dense): ticks, with words only where they anchor. */
 
 .month-rail {
   position: fixed;
-  right: 18px;
-  top: 0;
-  height: 100vh;
-  height: 100dvh;
+  right: 14px;
+  top: calc(var(--nav-h) + 24px);
+  /* The footer is fixed: ~31px tall, plus the home-indicator inset. */
+  bottom: calc(48px + env(safe-area-inset-bottom, 0px));
   width: 54px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
   pointer-events: none;
   z-index: 20;
 }
+.month-rail[hidden] { display: none; }
+
+.rail-year {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 2px;
+  padding-left: 2px;
+  color: var(--gray-700);
+  margin-bottom: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rail-track {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
 
 .rail-line {
   position: absolute;
-  top: 12%;
-  bottom: 12%;
+  top: 0;
+  bottom: 0;
   left: 50%;
   width: 1px;
   background: linear-gradient(to bottom,
-    transparent 0%, var(--gray-800) 12%,
-    var(--gray-800) 88%, transparent 100%);
+    transparent 0%, var(--gray-800) 8%,
+    var(--gray-800) 92%, transparent 100%);
 }
 
 .rail-marks {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 56px;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
-  letter-spacing: 2.5px;
-  color: var(--gray-700);
+  justify-content: space-between;
   align-items: center;
 }
+.rail-marks li { display: flex; }
 
-.rail-mark {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  transform: rotate(180deg);
-  padding: 4px 0;
+.rail-month {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 26px;
+  padding: 0 0 0 2px;   /* the letter-spacing's trailing gap, balanced */
+  border: 0;
+  border-radius: 2px;
   background: var(--black);
+  color: var(--gray-700);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 2px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+.rail-month:hover { color: var(--gray-500); }
+.rail-month:focus-visible { outline: 1px solid var(--red); outline-offset: 2px; }
+.rail-month.current { color: var(--red); }
+.rail-label { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.rail-label-yr { font-size: 0.5rem; letter-spacing: 1px; opacity: 0.8; }
+
+.rail-tick {
+  display: none;
+  width: 7px;
+  height: 1px;
+  background: currentColor;
 }
 
-.rail-mark.current {
-  color: var(--red);
-}
+/* Dense: more months than the rail has room to name. Every month keeps a
+   tick (still a target); words stay on the first, on January, and on the
+   month you are in. */
+.month-rail.is-dense .rail-month { min-height: 12px; }
+.month-rail.is-dense .rail-month:not(.is-anchor):not(.current) .rail-label { display: none; }
+.month-rail.is-dense .rail-month:not(.is-anchor):not(.current) .rail-tick { display: block; }
+
+/* A month you jump to lands below the sticky nav, not under it. */
+.day-block { scroll-margin-top: calc(var(--nav-h) + 16px); }
 
 /* ---- BUFFER FOOTER ---- */
 
@@ -167,7 +223,7 @@
 /* ---- RESPONSIVE ---- */
 
 @media (max-width: 768px) {
-  .month-rail { display: none; }
+  .month-rail, .month-rail[hidden] { display: none; }
 
   .binder {
     padding: 0 16px 40px;
@@ -176,6 +232,11 @@
   .buffer-end {
     padding-right: 16px;
   }
+}
+
+/* A landscape phone has no height to index in. */
+@media (max-height: 520px) {
+  .month-rail { display: none; }
 }
 
 @media (max-width: 640px) {
@@ -402,10 +463,16 @@
 <div class="buffer-end" id="buffer-end"></div>
 
 <!-- ============ MONTH RAIL ============ -->
-<aside class="month-rail" aria-hidden="true" id="month-rail">
-  <div class="rail-line"></div>
-  <div class="rail-marks" id="rail-marks"></div>
-</aside>
+<!-- The roll's index (js/page-buffer.js buildMonthRail): fits between the nav
+     and the footer whatever the month count, follows the scroll, and a tap
+     jumps to that month. Stays hidden until the buffer has two months. -->
+<nav class="month-rail" id="month-rail" aria-label="Months in the buffer" hidden>
+  <div class="rail-year" id="rail-year" aria-hidden="true"></div>
+  <div class="rail-track">
+    <div class="rail-line" aria-hidden="true"></div>
+    <ol class="rail-marks" id="rail-marks"></ol>
+  </div>
+</nav>
 
 <!-- ============ LIGHTBOX ============ -->
 <div class="lightbox" id="lightbox" role="dialog" aria-modal="true">
@@ -429,8 +496,8 @@
   <div class="footer-right">WE OBSERVE. WE DO NOT CONSUME.</div>
 </footer>
 
-<script src="/js/lighttable.js?v=3"></script>
-<script src="/js/page-buffer.js?v=3" defer></script>
+<script src="/js/lighttable.js?v=4"></script>
+<script src="/js/page-buffer.js?v=4" defer></script>
 
 </body>
 </html>

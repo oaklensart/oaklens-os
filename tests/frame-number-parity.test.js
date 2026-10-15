@@ -3,14 +3,16 @@
 // Frame numbers (f#N) are positional and permanent: a citation in a field
 // note must point at the same frame in the console, on the live light table,
 // and in the homepage's featured RAW card. Three implementations number the
-// Buffer (K65 checked them against each other on the instance's own 729
-// frames): the console's getBufferFrameNumbers (js/console/fn-editor.js),
-// the public LightTable.assignFrameNumbers (js/lighttable.js, a classic
-// script) and the server's _featuredRawFrames (src/api/site-meta.js). The
-// clients read the device's day; the server reads the site's time zone. So
-// this runs the clients in the site's zone: on a device in another zone, a
-// frame shot near midnight can be numbered differently in the console than
-// on the site. That is known and reported, not hidden.
+// Buffer: the console's getBufferFrameNumbers (js/console/fn-editor.js), the
+// public LightTable.assignFrameNumbers (js/lighttable.js, a classic script)
+// and the server's _featuredRawFrames (src/api/site-meta.js).
+//
+// ALL THREE BUCKET DAYS IN THE SITE'S ZONE since 2026-10-15 (maintenance
+// review, D1). Before, the clients read the device's own day, and this file ran
+// them in the site's zone to stay green, noting the gap. Measured on the live
+// buffer, a reader in London saw 93 of 731 frames under different numbers. The
+// zone now reaches the clients as <meta name="site-timezone">, and the last
+// block below runs them on a device in other zones and asks for one answer.
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
@@ -26,7 +28,7 @@ globalThis.fetch = async () => new Response('[]', { status: 200 });
 const lightTable = () => {
   const src = readFileSync(join(ROOT, 'js', 'lighttable.js'), 'utf8');
   const win = { location: { origin: 'https://example.com' }, matchMedia: () => ({ matches: false }) };
-  new Function('window', 'document', src)(win, { querySelector: () => null });
+  new Function('window', 'document', src)(win, globalThis.document);
   return win.LightTable;
 };
 
@@ -86,4 +88,56 @@ describe('one f# for every frame, wherever it is read', () => {
     const src = readFileSync(join(ROOT, 'js', 'console', 'fn-editor.js'), 'utf8');
     expect(src).toMatch(/const numToEntry = new Map\(\[\.\.\.getBufferFrameNumbers\(\)\]/);
   });
+});
+
+// The same numbering read from a device in another zone. The page carries
+// the site's zone in a meta (as the edge injects it), the process runs in a
+// different one, and every implementation must still agree with the server.
+describe('one f# for every reader, whatever their zone (D1)', () => {
+  const SITE_TZ = 'America/Los_Angeles';
+  const withMeta = () => {
+    let m = document.querySelector('meta[name="site-timezone"]');
+    if (!m) { m = document.createElement('meta'); m.setAttribute('name', 'site-timezone'); document.head.appendChild(m); }
+    m.setAttribute('content', SITE_TZ);
+  };
+  // Frames shot around a Pacific evening, filenames from two cameras so the
+  // within-day order is NOT time order: the case where zones disagreed.
+  const evening = [
+    { id: 'e1', filename: 'IMG_9000.jpg', captured_at: '2026-05-25T18:00:00.000Z' },
+    { id: 'e2', filename: 'DSC_0001.jpg', captured_at: '2026-05-26T05:30:00.000Z' },  // 22:30 PDT on the 25th
+    { id: 'e3', filename: 'AAA_0001.jpg', captured_at: '2026-05-26T16:00:00.000Z' },
+    { id: 'e4', filename: 'IMG_0002.jpg', captured_at: '2026-05-26T06:59:00.000Z' },  // 23:59 PDT on the 25th
+  ];
+  const serverNums = (frames) => {
+    // The server numbers by the configured zone; compute the reference with
+    // the same rule directly so this file does not depend on the instance's.
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: SITE_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const rows = frames.map((e) => ({ e, d: fmt.format(new Date(e.captured_at)) }));
+    rows.sort((a, b) => a.d.localeCompare(b.d) || a.e.filename.localeCompare(b.e.filename));
+    return new Map(rows.map((r, i) => [r.e.id, i + 1]));
+  };
+
+  for (const deviceTz of ['Europe/London', 'Asia/Tokyo', 'UTC']) {
+    it(`a device in ${deviceTz} numbers like the site`, async () => {
+      const saved = process.env.TZ;
+      process.env.TZ = deviceTz;
+      try {
+        withMeta();
+        const U = await import('../js/console/utils.js');
+        U._resetSiteDay();
+        const want = serverNums(evening);
+        const lt = lightTable().assignFrameNumbers(evening);
+        S.STATE.buffer = evening.map((e) => ({ ...e }));
+        const con = F.getBufferFrameNumbers();
+        for (const e of evening) {
+          expect(lt.get(e.id), `light table ${e.id}`).toBe(want.get(e.id));
+          expect(con.get(e.id), `console ${e.id}`).toBe(want.get(e.id));
+        }
+        // …and the day a note embeds is the site's day (D2).
+        expect(lightTable().siteDay('2026-05-26T05:30:00.000Z')).toBe('2026-05-25');
+      } finally {
+        process.env.TZ = saved;
+      }
+    });
+  }
 });

@@ -18,7 +18,8 @@ export default Object.freeze({
   location: {
     name: 'YOUR CITY',
     region: '',     // optional; joined as "YOUR CITY, ST" in the footer
-    coords: [0, 0], // weather API (Open-Meteo) — your city's lat/lon
+    coords: [0, 0], // weather API (Open-Meteo) — your city's lat/lon; [0, 0] keeps the footer temperature off
+    units: 'fahrenheit', // footer temperature: 'fahrenheit' or 'celsius'
   },
   // Your calendar, as an IANA zone name ('Europe/Berlin', 'Asia/Tokyo',
   // 'America/New_York' — the full list is the tz database).

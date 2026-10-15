@@ -185,6 +185,88 @@ document.getElementById('lb-nav-next').addEventListener('click', function(e) {
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
 });
 
+// ---- Month rail: the roll's index ----
+//
+// One mark per month, newest first, spread over whatever height sits between
+// the nav and the footer (the rail is bounded in CSS; the marks share it). It
+// replaced a decorative column of rotated "MON YYYY" labels, 125px a month,
+// that had outgrown an iPad's landscape viewport at six months (2026-10-15).
+//   · the month you are reading is lit, and the year above the rail follows it;
+//   · a tap scrolls to that month's newest day;
+//   · with less than DENSE_PX a month, labels give way to ticks except on the
+//     first month, each January and the current one (.is-dense).
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+const DENSE_PX = 26;
+let _railMonths = [];
+let _railCurrent = '';
+
+function _railFit() {
+  const rail = document.getElementById('month-rail');
+  const track = rail && rail.querySelector('.rail-track');
+  if (!rail || rail.hidden || !track || !_railMonths.length) return;
+  rail.classList.toggle('is-dense', track.clientHeight / _railMonths.length < DENSE_PX);
+}
+
+function _railSetCurrent(month) {
+  if (!month || month === _railCurrent) return;
+  _railCurrent = month;
+  document.querySelectorAll('#rail-marks .rail-month').forEach((b) => {
+    const on = b.dataset.month === month;
+    b.classList.toggle('current', on);
+    if (on) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
+  });
+  const year = document.getElementById('rail-year');
+  if (year) year.textContent = month.slice(0, 4);
+}
+
+function buildMonthRail(days) {
+  const rail = document.getElementById('month-rail');
+  const marks = document.getElementById('rail-marks');
+  if (!rail || !marks) return;
+  _railMonths = [...new Set(days.map((d) => d.slice(0, 7)))];
+  // One month has nothing to index.
+  if (_railMonths.length < 2) return;
+
+  _railMonths.forEach((m, i) => {
+    const [y, mo] = m.split('-');
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'rail-month' + ((i === 0 || mo === '01') ? ' is-anchor' : '');
+    btn.dataset.month = m;
+    btn.setAttribute('aria-label', `${MONTH_NAMES[parseInt(mo, 10) - 1]} ${y}`);
+    // A January opens a year, so it says which: the year above the rail only
+    // names the month you are in, and a dense rail can hold several Januaries.
+    const yr = mo === '01' ? `<span class="rail-label-yr">\u2019${y.slice(2)}</span>` : '';
+    btn.innerHTML = '<span class="rail-tick" aria-hidden="true"></span>'
+      + `<span class="rail-label" aria-hidden="true">${getMonthLabel(m + '-01').slice(0, 3)}${yr}</span>`;
+    btn.addEventListener('click', () => {
+      const target = document.querySelector(`.day-block[data-date^="${m}"]`);
+      if (!target) return;
+      const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+    });
+    li.appendChild(btn);
+    marks.appendChild(li);
+  });
+  rail.hidden = false;
+  _railSetCurrent(_railMonths[0]);
+  _railFit();
+
+  // The month being read is the one whose day block crosses a thin band
+  // a little above the middle of the viewport.
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) _railSetCurrent((e.target.dataset.date || '').slice(0, 7));
+      }
+    }, { rootMargin: '-38% 0px -58% 0px', threshold: 0 });
+    document.querySelectorAll('#binder .day-block').forEach((b) => io.observe(b));
+  }
+}
+
 // ---- Load buffer ----
 async function loadBuffer() {
   const binder = document.getElementById('binder');
@@ -240,15 +322,7 @@ async function loadBuffer() {
   // End line
   endEl.innerHTML = '<span class="accent">//</span> END_OF_BUFFER <span class="accent">//</span>';
 
-  // Build month rail
-  const months = [...new Set(days.map(d => d.slice(0, 7)))];
-  const railMarks = document.getElementById('rail-marks');
-  months.forEach((m, i) => {
-    const mark = document.createElement('div');
-    mark.className = 'rail-mark' + (i === 0 ? ' current' : '');
-    mark.textContent = getMonthLabel(m + '-01');
-    railMarks.appendChild(mark);
-  });
+  buildMonthRail(days);
 
   const _hasFrameParam = new URLSearchParams(window.location.search).has('f');
   if (_hasFrameParam || /^#frame-\d+$/.test(window.location.hash)) {
@@ -271,7 +345,7 @@ loadBuffer();
 let __mobileRevealTimer;
 window.addEventListener('resize', () => {
   clearTimeout(__mobileRevealTimer);
-  __mobileRevealTimer = setTimeout(initMobileScrollReveal, 200);
+  __mobileRevealTimer = setTimeout(() => { initMobileScrollReveal(); _railFit(); }, 200);
 });
 window.addEventListener('orientationchange', () => {
   setTimeout(initMobileScrollReveal, 300);

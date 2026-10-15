@@ -4,7 +4,7 @@ import {
 import siteConfig from './src/shared/config.js';
 import { withCors, handleCORS, demoModeRes, jsonRes } from './src/shared/http.js';
 import { securityHeaders, withCsp } from './src/shared/csp.js';
-import { readCachedTemp, refreshLocalTemp } from './src/edge/weather.js';
+import { readCachedTemp, refreshLocalTemp, weatherEnabled } from './src/edge/weather.js';
 import { pageDisabled, publicPages } from './src/shared/pages.js';
 import { resolveShortLink } from './src/shared/shortlinks.js';
 import { runArchiveCapture } from './src/cron/archive.js';
@@ -27,7 +27,7 @@ import {
 } from './src/edge/chrome.js';
 import {
   handleManifest, handleSitemap, handleFeed, handlePodcastFeed, handleBufferSummary, handleSiteSettings, handleVersion,
-  handleAnalogsToken,
+  handleAnalogsToken, handleRobots,
 } from './src/api/site-meta.js';
 import { handleDevFeed, warmDevFeed } from './src/api/devfeed.js';
 import { handleGetStorage, handleMeasureStorage, measureStorage } from './src/api/storage.js';
@@ -104,11 +104,12 @@ const LEGACY_REDIRECTS = {
 const EXACT_ROUTES = new Map([
   ['GET /archive/manifest.html', (request, env) => handleManifest(request, env)],
   ['GET /sitemap.xml', (request, env) => handleSitemap(request, env)],
+  ['GET /robots.txt', (request) => handleRobots(request)],
   ['GET /feed.xml', (request, env) => handleFeed(request, env)],
   // RSS 2.0, separate from the Atom blog feed on purpose — podcast apps need
   // RSS, and only tracks the author marked `episode` belong in one.
   ['GET /podcast.xml', (request, env) => handlePodcastFeed(request, env)],
-  ['GET /api/buffer-summary', (request, env) => handleBufferSummary(request, env)],
+  ['GET /api/buffer-summary', (request, env, url, ctx) => handleBufferSummary(request, env, ctx)],
   // The /dev page's commit grid + activity log. Public and cache-first;
   // 404s unless site.config.js names repos under `devFeed`.
   ['GET /api/devfeed', (request, env, url, ctx) => handleDevFeed(request, env, url, ctx)],
@@ -132,9 +133,9 @@ const EXACT_ROUTES = new Map([
   ['PUT /api/drafts', (request, env) => handlePutDraft(request, env)],
   ['DELETE /api/drafts', (request, env) => handleDeleteDraft(request, env)],
   ['GET /api/og-cards', (request, env) => handleOgCards(request, env)],
-  // Pulse. The GET is public and edge-cached (60s) — it feeds the homepage card
+  // Pulse. The GET is public and colo-cached (30s; 60s in the browser) — it feeds the homepage card
   // the way /api/buffer-summary feeds the RAW daily. The rest is console-only.
-  ['GET /api/pulse', (request, env) => handleGetPulse(request, env)],
+  ['GET /api/pulse', (request, env, url, ctx) => handleGetPulse(request, env, ctx)],
   ['POST /api/pulse', (request, env) => handlePostPulse(request, env)],
   ['DELETE /api/pulse', (request, env) => handleDeletePulse(request, env)],
   ['GET /api/pulse/log', (request, env) => handlePulseLog(request, env)],
@@ -244,7 +245,17 @@ export default {
     // deliberately do not — same as the old ladder. Prefix routes below aren't
     // in the table because their pathname varies (bench/raw filename, cdn key,
     // shortlink code).
-    const routeKey = `${request.method} ${url.pathname}`;
+    let routeKey = `${request.method} ${url.pathname}`;
+    // HEAD is GET without a body, and the runtime drops the body itself, so a
+    // HEAD on a GET route runs the GET handler. It used to fall through to the
+    // asset layer and answer 404 for /sitemap.xml, both feeds and every public
+    // API — exactly what feed validators, podcast directories and uptime
+    // monitors send (maintenance review 2026-10-15, D3). Resolved BEFORE the
+    // demo gate below, so a HEAD can never walk round a locked GET.
+    if (request.method === 'HEAD' && !EXACT_ROUTES.has(routeKey)
+      && EXACT_ROUTES.has(`GET ${url.pathname}`)) {
+      routeKey = `GET ${url.pathname}`;
+    }
     if (siteConfig.demoMode && DEMO_LOCKED_ROUTES.has(routeKey)) {
       return withCors(demoModeRes(routeKey.split(' ')[1]), url.origin);
     }
@@ -285,7 +296,14 @@ export default {
 
     // BENCH RAW download (prefix — filename varies)
     if (url.pathname.startsWith('/api/bench/raw/') && request.method === 'GET') {
-      const filename = decodeURIComponent(url.pathname.slice('/api/bench/raw/'.length));
+      // A malformed escape (`%E0%A4%A`) threw out of the router and answered
+      // the runtime's error page; it is a bad request (D7, 2026-10-15).
+      let filename;
+      try {
+        filename = decodeURIComponent(url.pathname.slice('/api/bench/raw/'.length));
+      } catch {
+        return withCors(jsonRes({ ok: false, error: 'bad filename' }, 400), url.origin);
+      }
       return withCors(await handleBenchRawDownload(request, env, filename), url.origin);
     }
 
@@ -447,9 +465,12 @@ export default {
 
     // Weather: read cache only (never block on upstream); refresh in background
     // when the entry is cold or older than the freshness window.
-    const cachedTemp = await readCachedTemp(url.origin);
+    // No coordinates set yet (the shipped [0, 0]) means no weather at all: no
+    // cache read, no refresh, and the footer keeps its `--°` placeholder.
+    const wxOn = weatherEnabled();
+    const cachedTemp = wxOn ? await readCachedTemp(url.origin) : null;
     const temp = cachedTemp ? cachedTemp.temp : null;
-    if (!cachedTemp || cachedTemp.stale) {
+    if (wxOn && (!cachedTemp || cachedTemp.stale)) {
       ctx.waitUntil(refreshLocalTemp(url.origin));
     }
 

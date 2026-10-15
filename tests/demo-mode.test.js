@@ -65,6 +65,14 @@ describe('demoMode: true — every locked route refuses, explained', () => {
     expect(body.error).toMatch(/demo mode/i);
   });
 
+  it('a HEAD on a locked GET is locked too', async () => {
+    // HEAD runs the GET handler (D3, 2026-10-15). It must be resolved to the
+    // GET key BEFORE the demo gate, or HEAD would walk round the PII lock.
+    const res = await worker.fetch(
+      new Request('https://example.com/api/subscribers/export', { method: 'HEAD' }), env, ctx);
+    expect(res.status).toBe(403);
+  });
+
   it('locks the routes that write or touch PII — the full expected set', () => {
     // Pinned as a literal so ADDING a mutation route to EXACT_ROUTES forces a
     // decision here: lock it or consciously leave it open.

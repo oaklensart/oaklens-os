@@ -25,6 +25,58 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-15 (maintenance: one frame number for everyone, and the month rail)
+
+> ⚠️ **ACTION REQUIRED, if your `site.config.js` has no `timezone`.** Frame
+> days (and so frame numbers) are now counted in your site's time zone for
+> every reader, including you in the console. Without a `timezone` that zone
+> is UTC, so if you live elsewhere, frames you shot in the evening may now
+> number by the next day's date. Before merging, add your zone, for example
+> `timezone: 'America/New_York'` (the list is the IANA tz database). If you
+> already set it, there is nothing to do.
+
+- **Every reader sees the same frame numbers.** The buffer page counted days
+  in each visitor's own time zone, so a reader in another country could see
+  a frame under a different number than you, or than your homepage's RAW
+  card. All pages now use your site's zone.
+- **A Field Note's buffer embed shows the day you picked.** It matched the UTC
+  date, so evening frames landed on the wrong day.
+- **The buffer page's month rail fits any screen.** It grew 125px a month and
+  had started running under the nav and footer on an iPad. It now sits
+  between them at any length, lights the month you're reading, and jumps to
+  a month when you tap it.
+- **Titles with quotes or `&` display correctly** on the archive, the wall and
+  the Field Notes list.
+
+## 2026-10-15 (maintenance: server fixes)
+
+**Nothing to do.** Safe to merge. One optional new config key.
+
+- **Faster homepage and archive.** `/api/buffer-summary` was spending about
+  half a second of server CPU per request (Cloudflare's free plan allows
+  10 ms) building date formatters inside a sort. It now takes a few
+  milliseconds, and its answer, like `/api/pulse`'s, is kept in Cloudflare's
+  cache instead of being recomputed for every new visitor.
+- **HEAD requests work.** A HEAD to `/sitemap.xml`, `/feed.xml`,
+  `/podcast.xml` or any public API answered 404. Feed validators, podcast
+  directories and uptime monitors send HEAD; they now get what a GET gets.
+- **A site name with `&` displays correctly.** "Smith & Co" showed as
+  "Smith &amp; Co" on the homepage and About page.
+- **No weather until you set a place.** With `location.coords` at the shipped
+  `[0, 0]`, the footer used to report the sea off West Africa. It now shows
+  `--°` until you set your city's coordinates.
+- **New, optional:** `location.units: 'celsius'` for the footer temperature.
+  Leave it out and nothing changes (fahrenheit).
+- **Your Field Notes are in the sitemap**, and there is a `/robots.txt` that
+  points search engines at it.
+- **Publish and sync keep working past 1 MB.** GitHub stops inlining a file
+  over 1 MB, which would have broken sync for a large `buffer.json` (roughly
+  4,000 frames) and let the empty-overwrite guard skip its check. Both now
+  read large files another way, and the guard holds a publish it cannot check.
+- **Quieter logs and tests.** Bad URLs and `null` request bodies answer 400
+  instead of an error page; the daily Wayback job no longer logs an error on
+  a site that never turned it on; `npm test` no longer prints network errors.
+
 ## 2026-10-15 (the docs, checked against the code)
 
 **Nothing to do.** A read of every guide against what the engine actually

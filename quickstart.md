@@ -107,7 +107,9 @@ location: {
   name: 'YOUR CITY',
   region: '',
   coords: [0, 0],
+  units: 'fahrenheit',
 },
+timezone: 'America/New_York',
 ```
 
 `wordmark` is the logo text. Split it in two if you want the second half in your
@@ -116,10 +118,16 @@ theme's accent colour — `{ stem: 'STUDIO', accent: '.COM' }` renders
 
 `coords` is your city's latitude and longitude, and it's used for one thing: the
 small weather reading in the footer. Any "what are the coordinates of…" search
-gives you the two numbers.
+gives you the two numbers. Until you set them the footer shows `--°`. `units`
+is `'fahrenheit'` or `'celsius'`.
+
+`timezone` is the calendar your site keeps, as a name from the time zone
+database (`'Europe/Berlin'`, `'Asia/Tokyo'`). It decides which day a photo
+belongs to, and so its frame number, for every visitor. Leave it out and the
+site counts days in UTC, which puts your evening shots on tomorrow's date.
 
 **How you know it worked.** Your name is in the browser tab and the footer, and
-the footer weather is your weather instead of a spot in the Atlantic.
+the footer shows your weather instead of `--°`.
 
 ### 02 · Pick your look
 

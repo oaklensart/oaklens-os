@@ -41,6 +41,8 @@ export async function handleSubscribe(request, env) {
   let body;
   try {
     body = await request.json();
+    // `null` parses; reading .email off it threw past this catch (D9).
+    if (!body || typeof body !== 'object') throw new Error('not an object');
   } catch {
     return jsonRes({ ok: false, error: 'invalid email' }, 400);
   }

@@ -30,7 +30,7 @@ import { getToken, isLoggedIn, pushDraft, deleteDraft, uploadFilesWithRetry } fr
 import { renderMarkdown } from '../markdown-engine.js';
 import { toast, escapeHTML, openSheet, closeSheet } from './chrome.js';
 import { CDN_BASE, SITE_LOCATION, _resizeToWebP, generateVariants } from './assets.js';
-import { cleanFilename, readFileAsDataURL, todayISO, uid, ymd } from './utils.js';
+import { cleanFilename, readFileAsDataURL, siteDay, todayISO, uid, ymd } from './utils.js';
 
 let fnCurrentBufferDates = [];   // selected dates for current post's buffer_dates field
 let fnSelectedFrameIds = new Set(); // selected frames in frame browser
@@ -451,7 +451,7 @@ function _fnRenderPreview() {
   if (fnCurrentBufferDates.length > 0) {
     const byDay = {};
     STATE.buffer.forEach(e => {
-      const day = ymd(e.captured_at || e.published_at);
+      const day = siteDay(e.captured_at || e.published_at);
       (byDay[day] = byDay[day] || []).push(e);
     });
     Object.values(byDay).forEach(arr => arr.sort((a, b) => (a.filename || '').localeCompare(b.filename || '')));
@@ -569,7 +569,7 @@ function _fnRenderPreview() {
   // Restore inline buffer-date placeholders
   const byDayAll = {};
   STATE.buffer.forEach(e => {
-    const day = ymd(e.captured_at || e.published_at);
+    const day = siteDay(e.captured_at || e.published_at);
     (byDayAll[day] = byDayAll[day] || []).push(e);
   });
   bodyHtml = bodyHtml.replace(/%%BUFDATE_(\d+)%%/g, (_, idx) => {
@@ -1333,7 +1333,8 @@ let _frameNums = { key: null, map: new Map() };
 export function getBufferFrameNumbers() {
   const key = STATE.buffer.map((e) => `${e.id}\u0001${e.captured_at || e.published_at || ''}\u0001${e.filename || ''}`).join('\u0002');
   if (key === _frameNums.key) return _frameNums.map;
-  const day = (v) => (v ? ymd(v) : '');
+  // The site's day, as on the live light table (D1, 2026-10-15).
+  const day = (v) => siteDay(v);
   const rows = STATE.buffer.map((e) => ({ e, d: day(e.captured_at || e.published_at), f: e.filename || '' }));
   rows.sort((a, b) => a.d.localeCompare(b.d) || a.f.localeCompare(b.f));
   const map = new Map();
@@ -1361,7 +1362,7 @@ export function fnRenderBufferDates() {
 
   const byDay = {};
   STATE.buffer.forEach(e => {
-    const day = ymd(e.captured_at || e.published_at);
+    const day = siteDay(e.captured_at || e.published_at);
     (byDay[day] = byDay[day] || []).push(e);
   });
   Object.values(byDay).forEach(arr => arr.sort((a, b) => (a.filename || '').localeCompare(b.filename || '')));
@@ -1413,7 +1414,7 @@ export function fnRenderFrameBrowser() {
   const frameNumbers = getBufferFrameNumbers();
   const byDay = {};
   STATE.buffer.forEach(e => {
-    const day = ymd(e.captured_at || e.published_at);
+    const day = siteDay(e.captured_at || e.published_at);
     (byDay[day] = byDay[day] || []).push(e);
   });
   Object.values(byDay).forEach(arr => arr.sort((a, b) => (a.filename || '').localeCompare(b.filename || '')));

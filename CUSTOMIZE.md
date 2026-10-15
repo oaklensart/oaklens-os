@@ -49,7 +49,7 @@ When the same result is possible more than one way, pick the Safe way.
 | Support page words and payment links | `site.config.js` → `support` | Safe |
 | Remove the small "OS" link in the footer | `site.config.js` → add `poweredBy: false` | Safe |
 | Your own short links (`yoursite.com/prints`) | `site.config.js` → `shortLinks` | Safe |
-| Dates in your time zone | `site.config.js` → `timezone` | Safe |
+| Dates in your time zone (and which day, so which frame number, a photo gets) | `site.config.js` → `timezone` | Safe |
 | Posts, pictures, audio, Pulse | The console, at `/dev/field-console` on your site | Safe |
 | About page words | `about/index.html`: the text inside `<main>` | Watch |
 | Other wording on a page (a heading, a label) | That page's `.html` file | Watch |

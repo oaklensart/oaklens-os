@@ -40,33 +40,75 @@
 import { verifyToken } from '../shared/auth.js';
 import { jsonRes, d1MissingRes, isMissingTableError, d1TablesMissingRes, CORS_HEADERS } from '../shared/http.js';
 import { normalizePulseInput, pulseToPublic, defaultTtlHours } from '../shared/pulse.js';
+import { edgeCache, inBackground } from '../edge/data.js';
 
 // No `kicker`. The card names itself (src/shared/pulse.js PULSE_LABEL), so there
 // is no per-row title to select, insert or hand to the browser.
 const COLS = 'id, text, glyphs, state, foot_left, foot_right, local_time, posted_at, expires_at';
 
-// 60s: fresh enough that a pulse posted from the darkroom feels live, cheap
-// enough that a front page does not put D1 on the hot path of every visit.
+// 60s in the visitor's browser: fresh enough that a pulse posted from the
+// darkroom feels live.
 const PUBLIC_CACHE = 'public, max-age=60';
 
+// …and 30s in the colo cache, which is what actually keeps D1 off the hot path.
+// The browser header alone never did: a Worker's response does not pass through
+// Cloudflare's CDN cache, so every NEW visitor was a D1 read (maintenance
+// review 2026-10-15, W5; this comment and migrations/0002 claimed otherwise).
+// A post or a take-down purges the author's own colo; any other colo catches up
+// within the TTL, the same staleness the browser header already accepts.
+const EDGE_TTL = 30;
+
+export function _pulseCacheUrl(origin) {
+  return `${origin}/__pulse`;
+}
+
 function publicRes(pulse) {
-  return new Response(JSON.stringify({ pulse: pulse || null }), {
+  return publicBody(JSON.stringify({ pulse: pulse || null }));
+}
+function publicBody(body) {
+  return new Response(body, {
     headers: { 'Content-Type': 'application/json', 'Cache-Control': PUBLIC_CACHE, ...CORS_HEADERS },
   });
 }
 
+// Best effort, own colo only (caches.default is per data centre).
+async function purgePulseCache(request) {
+  const cache = edgeCache();
+  if (!cache) return;
+  try { await cache.delete(new Request(_pulseCacheUrl(new URL(request.url).origin))); } catch { /* best-effort */ }
+}
+
 // ---- GET /api/pulse — public ----
-export async function handleGetPulse(request, env) {
+export async function handleGetPulse(request, env, ctx) {
   if (!env.DB) return publicRes(null);
+  const cache = edgeCache();
+  const cacheKey = cache ? new Request(_pulseCacheUrl(new URL(request.url).origin)) : null;
+  if (cache) {
+    try {
+      const hit = await cache.match(cacheKey);
+      if (hit) return publicBody(await hit.text());
+    } catch { /* cache unavailable: read D1 */ }
+  }
   try {
     const row = await env.DB.prepare(
       `SELECT ${COLS} FROM pulses WHERE expires_at > ?1 ORDER BY posted_at DESC LIMIT 1`
     ).bind(Date.now()).first();
-    return publicRes(pulseToPublic(row));
+    const pulse = pulseToPublic(row);
+    const body = JSON.stringify({ pulse: pulse || null });
+    if (cache) {
+      // Never past the pulse's own expiry: a cached answer must not keep a
+      // pulse on the homepage after it has run out.
+      const left = pulse && pulse.expiresAt ? Math.floor((pulse.expiresAt - Date.now()) / 1000) : EDGE_TTL;
+      const ttl = Math.max(1, Math.min(EDGE_TTL, left));
+      inBackground(ctx, cache.put(cacheKey, new Response(body, {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ttl}` },
+      })));
+    }
+    return publicBody(body);
   } catch (err) {
     // Includes the unmigrated-D1 case. The homepage asked a question it can
     // live without an answer to, so it gets the same "no pulse" it would get on
-    // a quiet Tuesday. Logged, not surfaced.
+    // a quiet Tuesday. Logged, not surfaced, and not cached.
     console.error('[pulse] read failed:', err.message);
     return publicRes(null);
   }
@@ -80,6 +122,7 @@ export async function handlePostPulse(request, env) {
   let body;
   try {
     body = await request.json();
+    if (!body || typeof body !== 'object') throw new Error('not an object');
   } catch {
     return jsonRes({ ok: false, error: 'invalid request body' }, 400);
   }
@@ -118,6 +161,7 @@ export async function handlePostPulse(request, env) {
 
   // Returning the stored shape lets the console show exactly what the homepage
   // will show, without a second round trip to read it back.
+  await purgePulseCache(request);
   return jsonRes({ ok: true, pulse: pulseToPublic({ id, ...m }) }, 200);
 }
 
@@ -148,6 +192,7 @@ export async function handleDeletePulse(request, env) {
     // whether there was anything to take down, but the count is the honest
     // answer and it makes a stacked backlog visible in the response.
     const retired = (res && res.meta && res.meta.changes) || 0;
+    await purgePulseCache(request);
     return jsonRes({ ok: true, retired }, 200);
   } catch (err) {
     if (isMissingTableError(err)) return d1TablesMissingRes('Pulse');

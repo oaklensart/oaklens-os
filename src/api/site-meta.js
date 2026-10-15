@@ -20,7 +20,7 @@ import {
 } from '../shared/podcast.js';
 import { escapeHtml, baseName, localDay } from '../shared/text.js';
 import { CORS_HEADERS, jsonRes } from '../shared/http.js';
-import { loadDataJson, _deployToken } from '../edge/data.js';
+import { loadDataJson, _deployToken, edgeCache, inBackground } from '../edge/data.js';
 import { _frameImg, OG_IMG_WIDTH } from '../edge/chrome.js';
 
 // ---- GET /api/version ----
@@ -283,6 +283,22 @@ export async function handleSitemap(request, env) {
       }
     } catch { /* no registry, no listing */ }
   }
+  // Every published Field Note, at the address the page and the Atom feed use.
+  // The writing surface is first-class (the 2026-08-13 pivot) and the sitemap
+  // listed none of it (maintenance review 2026-10-15, W9). posts.json holds
+  // published notes only, and is already in the edge cache. The slug is held
+  // to the page's own shape (getPostMeta), which also keeps it XML-safe.
+  if (!pageDisabled('/field-notes')) {
+    try {
+      const posts = await loadDataJson(HOST, env, 'data/posts.json');
+      for (const p of (Array.isArray(posts) ? posts : [])) {
+        if (!p || typeof p.fn_id !== 'string' || !/^[a-z0-9-]+$/i.test(p.fn_id)) continue;
+        const day = feedDate(p).slice(0, 10);
+        const lastmod = day > '1970-01-01' ? `<lastmod>${day}</lastmod>` : '';
+        xml += `\n  <url><loc>${HOST}/field-notes/post?slug=${p.fn_id}</loc>${lastmod}</url>`;
+      }
+    } catch { /* no posts, no listing */ }
+  }
   // Composed cards, each at its own permanent address (chunk 6). Listed on the
   // same terms as everything above — a card earns its line by being something
   // the engine would actually render. `composedPick`'s rule in one place it
@@ -313,6 +329,33 @@ export async function handleSitemap(request, env) {
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
       'Cache-Control': 'public, max-age=86400',
+    },
+  });
+}
+
+// ---- GET /robots.txt ----
+//
+// There was none, so every crawler's first request ran the whole 404 page path
+// (weather read, HTMLRewriter, site chrome) to say so (maintenance review
+// 2026-10-15, W10). Built per request because a Sitemap line must be absolute
+// and the origin is the request's: a fork on *.workers.dev gets its own.
+// It keeps crawlers off the API and the console document, which answer
+// nothing a search index wants, and asks nothing else of them.
+export function handleRobots(request) {
+  const origin = new URL(request.url).origin;
+  return new Response([
+    'User-agent: *',
+    'Disallow: /api/',
+    'Disallow: /dev/field-console',
+    '',
+    `Sitemap: ${origin}/sitemap.xml`,
+    '',
+  ].join('\n'), {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'public, max-age=86400',
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }
@@ -585,13 +628,17 @@ ${[channelLines, items].filter(Boolean).join('\n')}
 // up to more card slots later is a front-end-only change (no Worker redeploy).
 export function _featuredRawFrames(arr, limit = 4) {
   const entries = Array.isArray(arr) ? arr : [];
-  const numbered = [...entries].sort((a, b) => {
-    const d = localDay(a.captured_at || a.published_at, siteConfig.timezone)
-      .localeCompare(localDay(b.captured_at || b.published_at, siteConfig.timezone));
-    return d !== 0 ? d : (a.filename || '').localeCompare(b.filename || '');
-  });
+  // Each frame's day is computed ONCE, then sorted on. Computing it inside the
+  // comparator called localDay twice per comparison — n·log n date formats
+  // for an answer that needs n (maintenance review 2026-10-15, W1).
+  const numbered = entries
+    .map((e) => ({ e, day: localDay(e.captured_at || e.published_at, siteConfig.timezone) }))
+    .sort((a, b) => {
+      const d = a.day.localeCompare(b.day);
+      return d !== 0 ? d : (a.e.filename || '').localeCompare(b.e.filename || '');
+    });
   const numById = new Map();
-  numbered.forEach((e, i) => numById.set(e.id, i + 1));
+  numbered.forEach(({ e }, i) => numById.set(e.id, i + 1));
 
   return entries
     .filter((e) => e && e.featured && !e.dark && e.filename)
@@ -651,16 +698,53 @@ export function _latestShowable(arr) {
   return live.reduce((a, b) => ((a.captured_at || '') > (b.captured_at || '') ? a : b));
 }
 
-export async function handleBufferSummary(request, env) {
+// THE ANSWER IS CACHED AT THE EDGE, KEYED BY THE DEPLOY. Its only input is
+// buffer.json, which changes only when a deploy lands, so the computed body is
+// kept in the colo cache under the deploy token (the same scope loadDataJson
+// uses) and a publish is a new key, never a purge. Before this, the 60 s
+// Cache-Control above reached each visitor's browser and nothing else: a Worker
+// response never passes through Cloudflare's CDN cache, so every new visitor
+// recomputed the summary (maintenance review 2026-10-15, W5). With no
+// version_metadata binding the token is the constant 'v0', so the entry falls
+// back to the data cache's short TTL instead of outliving a publish.
+const SUMMARY_EDGE_TTL = 86400;          // seconds, when the key carries the deploy
+const SUMMARY_EDGE_TTL_UNVERSIONED = 300;
+
+function summaryRes(body) {
+  return new Response(body, {
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': BUFFER_SUMMARY_CACHE, ...CORS_HEADERS },
+  });
+}
+
+export function _summaryCacheUrl(origin, env) {
+  return `${origin}/__summary/${_deployToken(env)}`;
+}
+
+export async function handleBufferSummary(request, env, ctx) {
   const url = new URL(request.url);
-  const empty = (extra = {}) =>
-    new Response(JSON.stringify({ frames: 0, ...extra }), {
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': BUFFER_SUMMARY_CACHE, ...CORS_HEADERS },
-    });
+  const cache = edgeCache();
+  const cacheKey = cache ? new Request(_summaryCacheUrl(url.origin, env)) : null;
+  if (cache) {
+    try {
+      const hit = await cache.match(cacheKey);
+      if (hit) return summaryRes(await hit.text());
+    } catch { /* cache unavailable: compute */ }
+  }
+  const keep = (body) => {
+    if (!cache) return;
+    const ttl = _deployToken(env) === 'v0' ? SUMMARY_EDGE_TTL_UNVERSIONED : SUMMARY_EDGE_TTL;
+    inBackground(ctx, cache.put(cacheKey, new Response(body, {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${ttl}` },
+    })));
+  };
   try {
     const data = await loadDataJson(url.origin, env, 'data/buffer.json');
     const arr = Array.isArray(data) ? data : [];
-    if (!arr.length) return empty();
+    if (!arr.length) {
+      const body = JSON.stringify({ frames: 0 });
+      keep(body);
+      return summaryRes(body);
+    }
 
     const latest = _latestShowable(arr);
     const days = new Set(arr.map((b) => localDay(b.captured_at || b.published_at, siteConfig.timezone))).size;
@@ -669,17 +753,18 @@ export async function handleBufferSummary(request, env) {
       ? localDay(latest.captured_at || latest.published_at, siteConfig.timezone).slice(5).replace('-', '.')
       : '';
 
-    return new Response(JSON.stringify({
+    const body = JSON.stringify({
       frames: arr.length,
       days,
       lastDate,
       latest: latest ? { filename: latest.filename, focus: latest.focus || '' } : null,
       featured: _featuredRawFrames(arr),
-    }), {
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': BUFFER_SUMMARY_CACHE, ...CORS_HEADERS },
     });
+    keep(body);
+    return summaryRes(body);
   } catch (err) {
+    // A read that failed is not cached: the next request tries again.
     console.error('[buffer-summary]', err.message);
-    return empty();
+    return summaryRes(JSON.stringify({ frames: 0 }));
   }
 }

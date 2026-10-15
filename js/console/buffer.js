@@ -20,7 +20,7 @@ import { getToken } from '../console-api.js';
 import { showToast, startProgress, updateProgress, endProgress } from '../console-telemetry.js';
 import { toast, showView } from './chrome.js';
 import { cdnThumb, cdnSrcset, generateVariants, _hasOgCard, _ogCardGen } from './assets.js';
-import { cleanFilename, computeHash, findDuplicateByHash, readEXIFDate, readFileAsDataURL, todayISO, uid, ymd } from './utils.js';
+import { cleanFilename, computeHash, findDuplicateByHash, readEXIFDate, readFileAsDataURL, siteDay, todayISO, uid } from './utils.js';
 import { _enqueueUpload } from './upload.js';
 
 // ---- Burst linking (buffer surface) — ephemeral selection state, never persisted ----
@@ -231,7 +231,7 @@ export function renderBuffer() {
   // Group by capture date (sorted order preserves within-day sequence)
   const byDay = {};
   sorted.forEach(p => {
-    const day = ymd(p.captured_at || p.published_at);
+    const day = siteDay(p.captured_at || p.published_at);   // the site's day (D1)
     (byDay[day] = byDay[day] || []).push(p);
   });
   // Sort within each day by filename (camera sequence order)

@@ -17,12 +17,29 @@
      - graceful CDN image fallback  (cdnImgError + CDN_PLACEHOLDER)
      - the "get the drop" subscribe (submitGTD)
      - a debounced viewport-settle hook (onViewportSettle) for overlay re-fit
+     - escapeHtml, for owner text going into a template literal
 
    Per-page code keeps only what is genuinely page-specific — e.g. each page's
    one-line cdnSrc(filename, size) adapter that binds its CDN section, plus
    page-only helpers (wall's cdnFull, archive's localDay, field-notes'
    formatDate). Keeping cdnSrc's call sites byte-identical is deliberate: the
    shared code changes, the thousands of `cdnSrc(x, 480)` calls do not. */
+
+/* ---- Text into markup -------------------------------------------------------
+   Owner-written text (a title, a caption, a place) becomes HTML on several
+   pages through template literals. Unescaped, a quote in a title cut its alt
+   text short and a `<` or `&` swallowed what followed; a Site-in-a-ZIP export
+   runs from file:// with no CSP behind it (maintenance review 2026-10-15, D8).
+   Same five characters as src/shared/text.js escapeHtml. */
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 /* ---- CDN base resolution ---------------------------------------------------
    CDN root from the worker-injected <meta name="cdn-base"> (site.config.js
