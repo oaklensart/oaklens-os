@@ -11,12 +11,17 @@
 
 import siteConfig from '../shared/config.js';
 
-const wxCacheKey = (origin) => `${origin}/__wx_cache`;
+// The scale is in the key so switching `units` can't serve the old number for
+// 90 minutes. Fahrenheit keeps the original key: every existing cache entry
+// (and tests/card-address.test.js's seeded one) is fahrenheit.
+const wxCacheKey = (origin) =>
+  `${origin}/__wx_cache${temperatureUnit() === 'celsius' ? '_c' : ''}`;
 const WX_FRESH_MS = 90 * 60 * 1000; // revalidate in the background after 90 min
 
 // Read the cached temp without ever touching the upstream API.
 // Returns { temp, stale } or null when the cache is cold.
 export async function readCachedTemp(origin) {
+  if (!weatherEnabled()) return null;
   const cached = await caches.default.match(new Request(wxCacheKey(origin)));
   if (!cached) return null;
   try {
@@ -28,12 +33,43 @@ export async function readCachedTemp(origin) {
   }
 }
 
+// Is there a place to report on? `[0, 0]` is the shipped default — both the
+// engine backfill and the example config — and a real temperature for the sea
+// off West Africa in a new fork's footer is worse than none (maintenance
+// review 2026-10-15, D5). Anything that is not two finite numbers is off too.
+export function weatherEnabled(location = siteConfig.location) {
+  const c = location && location.coords;
+  if (!Array.isArray(c) || c.length !== 2) return false;
+  const [lat, lon] = c.map(Number);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  return !(lat === 0 && lon === 0);
+}
+
+// Open-Meteo's own unit names. Anything unrecognised reads as fahrenheit,
+// which is what every site showed before the key existed.
+export function temperatureUnit(location = siteConfig.location) {
+  return location && location.units === 'celsius' ? 'celsius' : 'fahrenheit';
+}
+
+// One refresh per isolate at a time. While the entry is stale EVERY HTML
+// request asks for one, and without this each of them started its own
+// Open-Meteo call (maintenance review 2026-10-15, W6).
+let _inflight = null;
+
 // Fetch Open-Meteo and refresh the cache. Safe to run inside ctx.waitUntil.
-export async function refreshLocalTemp(origin) {
+export function refreshLocalTemp(origin) {
+  if (!weatherEnabled()) return Promise.resolve();
+  if (!_inflight) {
+    _inflight = _refresh(origin).finally(() => { _inflight = null; });
+  }
+  return _inflight;
+}
+
+async function _refresh(origin) {
   try {
     const [lat, lon] = siteConfig.location.coords;
     const res = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&temperature_unit=fahrenheit`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&temperature_unit=${temperatureUnit()}`
     );
     if (!res.ok) {
       console.error(`[wx] Open-Meteo responded ${res.status}`);

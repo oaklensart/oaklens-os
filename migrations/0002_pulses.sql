@@ -48,5 +48,5 @@ CREATE TABLE IF NOT EXISTS pulses (
 );
 
 -- The current-pulse read is "newest unexpired", on every homepage request that
--- misses the 60s edge cache. Both columns are in the index so it never scans.
+-- misses the 30s colo cache (src/api/pulse.js). Both columns are in the index so it never scans.
 CREATE INDEX IF NOT EXISTS idx_pulses_live ON pulses(expires_at DESC, posted_at DESC);

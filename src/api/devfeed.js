@@ -379,8 +379,22 @@ async function buildLog(repos, token) {
     .slice(0, LOG_MAX);
 }
 
+// One rebuild per isolate at a time. While the payload is aged EVERY request
+// to /api/devfeed asks for one, and each is up to 40 GitHub calls against an
+// anonymous limit of 60 an hour; without this a burst of visitors started a
+// burst of rebuilds (maintenance review 2026-10-15, W6). Later callers share
+// the running one's result.
+let _inflight = null;
+
 // Fetch both halves and write both tiers. Safe inside ctx.waitUntil.
-export async function refreshDevFeed(origin, env, previous) {
+export function refreshDevFeed(origin, env, previous) {
+  if (!_inflight) {
+    _inflight = _refreshDevFeed(origin, env, previous).finally(() => { _inflight = null; });
+  }
+  return _inflight;
+}
+
+async function _refreshDevFeed(origin, env, previous) {
   const cfg = feedConfig();
   if (!cfg) return null;
   const token = env.GITHUB_TOKEN || null;

@@ -46,6 +46,40 @@ export function ymd(date) {
   const d = (date instanceof Date) ? date : new Date(date);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+// The SITE's calendar day for a frame's timestamp (site.config.js → timezone,
+// edge-injected into the console shell as <meta name="site-timezone">). Frame
+// numbers, buffer day groups and a note's buffer_dates are all bucketed by it,
+// so they agree with the live site for every reader and on a device in another
+// zone (maintenance review 2026-10-15, D1). Same rules as the light table and
+// the server's localDay: a bare YYYY-MM-DD passes through, an unparseable
+// value or invalid zone reads the UTC date, and no meta keeps the device's day.
+// `ymd` stays the DEVICE's day, for things that are about the device: today's
+// date on a new note, a filename stamp.
+let _siteDayFmt;
+export function siteDay(v) {
+  if (!v) return '';
+  const s = String(v);
+  if (s.length <= 10 || !s.includes('T')) return s.slice(0, 10);
+  const d = new Date(s);
+  if (isNaN(d)) return s.slice(0, 10);
+  if (_siteDayFmt === undefined) {
+    const tz = (typeof document !== 'undefined')
+      ? document.querySelector('meta[name="site-timezone"]')?.content : null;
+    _siteDayFmt = null;
+    if (tz) {
+      try {
+        _siteDayFmt = new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+      } catch { _siteDayFmt = 'utc'; }
+    }
+  }
+  if (_siteDayFmt === 'utc') return d.toISOString().slice(0, 10);
+  if (_siteDayFmt) return _siteDayFmt.format(d);
+  return ymd(d);
+}
+/** @internal test seam: forget the resolved zone. */
+export function _resetSiteDay() { _siteDayFmt = undefined; }
 export function ymdDots(date) {
   return ymd(date).replace(/-/g, "·");
 }

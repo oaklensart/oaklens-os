@@ -41,7 +41,7 @@ async function loadPosts() {
 
   posts.forEach((post, i) => {
     const entry = document.createElement('a');
-    entry.href = `/field-notes/post?slug=${post.fn_id || post.id}`;
+    entry.href = `/field-notes/post?slug=${encodeURIComponent(post.fn_id || post.id || '')}`;
     entry.className = 'fn-entry reveal';
     entry.style.animationDelay = `${Math.min(i * 0.05, 0.5)}s`;
 
@@ -52,10 +52,10 @@ async function loadPosts() {
     entry.innerHTML = `
       ${thumbHtml}
       <div class="fn-entry-body">
-        <div class="fn-entry-id">${post.fn_id || ''}</div>
-        <div class="fn-entry-name">${post.title}</div>
+        <div class="fn-entry-id">${escapeHtml(post.fn_id || '')}</div>
+        <div class="fn-entry-name">${escapeHtml(post.title)}</div>
         <div class="fn-entry-meta">
-          ${post.location}<span class="sep">·</span>${formatDate(post.date)}
+          ${escapeHtml(post.location)}<span class="sep">·</span>${escapeHtml(formatDate(post.date))}
         </div>
       </div>
     `;

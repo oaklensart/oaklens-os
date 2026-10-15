@@ -72,10 +72,11 @@ async function submitArchiveCapture(env, target) {
 }
 
 export async function runArchiveCapture(env) {
-  if (!env.ARCHIVE_S3_ACCESS || !env.ARCHIVE_S3_SECRET) {
-    console.error('[archive] S3 keys not configured');
-    return;
-  }
+  // Off is a choice, not a fault: the Wayback capture is an optional feature,
+  // and the first request's [health] line already lists it as off. This used to
+  // console.error every day on every fork that never opted in (maintenance
+  // review 2026-10-15, H3) — a daily red line in the logs for nothing broken.
+  if (!env.ARCHIVE_S3_ACCESS || !env.ARCHIVE_S3_SECRET) return;
   if (!siteConfig.url) {
     console.warn('[archive] site.config url not set — skipping Wayback capture');
     return;

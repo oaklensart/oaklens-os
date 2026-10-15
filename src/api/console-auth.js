@@ -130,6 +130,8 @@ export async function handleAuth(request, env) {
   let body;
   try {
     body = await request.json();
+    // `null` parses; reading .password off it threw past this catch (D9).
+    if (!body || typeof body !== 'object') throw new Error('not an object');
   } catch {
     return jsonRes({ ok: false, error: 'invalid request' }, 400);
   }

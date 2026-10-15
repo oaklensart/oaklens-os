@@ -55,6 +55,42 @@ function _utf8ToBase64(str) {
   return btoa(binary);
 }
 
+// base64 (GitHub's encoding, line-wrapped) -> UTF-8 string.
+function _base64ToUtf8(b64) {
+  return new TextDecoder().decode(
+    Uint8Array.from(atob(String(b64).replace(/\s/g, '')), (c) => c.charCodeAt(0))
+  );
+}
+
+// A file's text at `ref`, whatever its size.
+//
+// ⚠️ THE CONTENTS API STOPS INLINING AT 1 MB. Between 1 and 100 MB it answers
+// `content: ''` with `encoding: 'none'`, and decoding that gave '' — which sync
+// reported as a broken file and the empty-overwrite guard could not parse, so
+// it waved an empty manifest through over a full one: the exact incident the
+// guard exists for. buffer.json grows ~250 bytes a frame and passes 1 MB near
+// 4,000 frames (maintenance review 2026-10-15, L1). Past the line the blob is
+// read by the sha the contents answer already carries (git/blobs serves up to
+// 100 MB). Anything unreadable throws a non-404, which every caller treats as
+// "we do not know what is on main".
+export async function _readFileText(token, owner, repo, path, ref) {
+  const data = await _ghFetch(token, owner, repo, `contents/${path}?ref=${ref}`);
+  const inlined = data && typeof data.content === 'string' && data.encoding !== 'none'
+    && (data.content.length > 0 || !(data.size > 0));
+  if (inlined) return _base64ToUtf8(data.content);
+  if (data && typeof data.sha === 'string') {
+    // The file EXISTS (contents just said so), so any failure here, a 404
+    // included, means "unknown", never "absent": the guard reads a 404 as
+    // nothing to protect, and that must stay the contents API's answer alone.
+    const blob = await _ghFetch(token, owner, repo, `git/blobs/${data.sha}`)
+      .catch((err) => { throw Object.assign(err, { status: 0 }); });
+    if (blob && blob.encoding === 'base64' && typeof blob.content === 'string') {
+      return _base64ToUtf8(blob.content);
+    }
+  }
+  throw Object.assign(new Error(`GitHub returned no readable content for ${path}`), { status: 0 });
+}
+
 // main's current commit SHA, by two roads.
 //
 // The git-refs endpoint is the direct one, but it is not the only one that
@@ -270,6 +306,8 @@ export async function handlePublish(request, env) {
   let body;
   try {
     body = await request.json();
+    // `null` parses; reading .files off it threw past this catch (D9).
+    if (!body || typeof body !== 'object') throw new Error('not an object');
   } catch {
     return jsonRes({ ok: false, error: 'invalid request body' }, 400);
   }
@@ -345,12 +383,26 @@ export async function handlePublish(request, env) {
     // 404 means absent. Anything else means we don't KNOW what is on main, and
     // the only safe answer to that is to refuse and let the author retry.
     const unknown = [];
+    // Read at the revision this publish is built on when the console says
+    // which: `ref=main` resolves on GitHub's eventually consistent side (the
+    // reason sync pins its reads, below). If main has moved past baseSha the
+    // commit is refused as stale anyway, so this compares against exactly
+    // what the publish would replace.
+    const guardRef = typeof body.baseSha === 'string' && /^[0-9a-f]{7,40}$/i.test(body.baseSha)
+      ? body.baseSha : 'main';
     await Promise.all(suspects.map(async (f) => {
       try {
-        const data = await _ghFetch(gh.token, owner, repo, `contents/${f.path}?ref=main`);
-        currentByPath[f.path] = new TextDecoder().decode(
-          Uint8Array.from(atob(data.content.replace(/\s/g, '')), (c) => c.charCodeAt(0))
-        );
+        const text = await _readFileText(gh.token, owner, repo, f.path, guardRef);
+        // A zero-byte file holds nothing to protect, same as an absent one.
+        if (!text.trim()) { currentByPath[f.path] = null; return; }
+        // A copy on main we cannot parse is not "nothing to protect": the
+        // guard used to skip it, and an unreadable read is how a manifest
+        // over 1 MB looked (L1). Unknown, so held, like any failed read.
+        try { JSON.parse(text); } catch {
+          unknown.push({ path: f.path, status: null, message: 'main\'s copy could not be read as JSON' });
+          return;
+        }
+        currentByPath[f.path] = text;
       } catch (err) {
         if (err.status === 404) {
           currentByPath[f.path] = null;   // genuinely absent on main → nothing to protect
@@ -475,12 +527,8 @@ export async function handleSync(request, env) {
     // Prevent path traversal
     if (filePath.includes('..') || filePath.startsWith('/')) return;
     try {
-      const data = await _ghFetch(gh.token, owner, repo, `contents/${filePath}?ref=${contentRef}`);
-      const content = JSON.parse(
-        new TextDecoder().decode(
-          Uint8Array.from(atob(data.content.replace(/\s/g, '')), c => c.charCodeAt(0))
-        )
-      );
+      // _readFileText: past 1 MB the contents API inlines nothing (L1).
+      const content = JSON.parse(await _readFileText(gh.token, owner, repo, filePath, contentRef));
       results[filePath] = { ok: true, content };
     } catch (err) {
       results[filePath] = { ok: false, error: err.message };

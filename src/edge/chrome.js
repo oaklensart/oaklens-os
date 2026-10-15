@@ -898,11 +898,14 @@ export function injectSiteChrome(rewriter, url) {
 
   // Folio-hero identity: the template carries placeholder copy; the config
   // decides the real name/tagline (same posture as the mailto rewrite below).
+  // RAW STRINGS, NOT escapeHtml(): setInnerContent's default text mode escapes
+  // for us, so escaping first made "Smith & Co" render as "Smith &amp; Co"
+  // (maintenance review 2026-10-15, D4; tests/edge-text-escaping.test.js).
   rewriter.on('[data-site-name]', {
-    element(el) { el.setInnerContent(escapeHtml(siteConfig.name)); },
+    element(el) { el.setInnerContent(siteConfig.name); },
   });
   rewriter.on('[data-site-tagline]', {
-    element(el) { el.setInnerContent(escapeHtml(siteConfig.tagline || '')); },
+    element(el) { el.setInnerContent(siteConfig.tagline || ''); },
   });
 
   // Static HTML keeps a placeholder address; the config decides the real one.

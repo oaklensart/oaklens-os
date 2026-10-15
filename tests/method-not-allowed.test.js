@@ -73,6 +73,18 @@ describe('405 on a known path with the wrong method', () => {
     expect(res.status).not.toBe(405);
   });
 
+  it('answers a HEAD on a GET route with what the GET answers, not a 404', async () => {
+    // "Not 405" alone let a 404 through: HEAD fell past the table to the asset
+    // layer for every exact GET route (maintenance review 2026-10-15, D3).
+    for (const path of ['/api/version', '/sitemap.xml', '/.well-known/analogs.txt']) {
+      const get = await call('GET', path);
+      const head = await call('HEAD', path);
+      expect(head.status).toBe(get.status);
+      expect(head.headers.get('Content-Type')).toBe(get.headers.get('Content-Type'));
+    }
+    expect((await call('HEAD', '/api/version')).status).toBe(200);
+  });
+
   it('leaves an UNKNOWN path alone — that is a real 404, not a 405', async () => {
     // The map holds exact pathnames only, so prefix routes (/api/cdn/<key>,
     // /api/bench/raw/<file>, /p/<code>, short links) and ordinary pages are

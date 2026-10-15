@@ -230,7 +230,10 @@ export async function handleUpload(request, env) {
       continue;
     }
     try {
-      const buf = await file.arrayBuffer();
+      // The File itself, not `await file.arrayBuffer()`: formData() has already
+      // buffered the body, and arrayBuffer() made a second full copy inside a
+      // 128 MB isolate, which is what a long audio episode runs into first
+      // (maintenance review 2026-10-15, W7). R2's put takes a Blob as is.
       // A share stamp carries WHICH STYLE it was painted in, as R2 object
       // metadata. It has to live somewhere, or the console cannot reopen a
       // stamped frame and show the style that is actually live — which is the
@@ -246,7 +249,7 @@ export async function handleUpload(request, env) {
       // console treats as the card style, because that is what every stamp made
       // before this was.
       const style = stylesByPath[path];
-      await env.CDN.put(path, buf, {
+      await env.CDN.put(path, file, {
         httpMetadata: {
           contentType: file.type
             || (isAudio ? 'audio/mpeg' : isVideo ? 'video/mp4' : 'image/webp'),
@@ -278,7 +281,9 @@ export async function handleDeleteAssets(request, env) {
   }
 
   let body;
-  try { body = await request.json(); } catch {
+  // `null` and other non-objects parse fine and then throw on the first
+  // property read, which answered the runtime's error page, not a 400 (D9).
+  try { body = await request.json(); if (!body || typeof body !== 'object') throw new Error('not an object'); } catch {
     return jsonRes({ ok: false, error: 'invalid request' }, 400);
   }
 
@@ -383,7 +388,14 @@ export async function handleOgCards(request, env) {
 //     could not clear it everywhere. Same reasoning for 404s.
 //   · What it populates, `purgeCdnCache` deletes: one shared key builder.
 export async function handleCdnProxy(request, env, url, ctx) {
-  const key = decodeURIComponent(url.pathname.slice('/api/cdn/'.length));
+  // A malformed escape threw URIError out of the handler, so the visitor got
+  // the runtime's error page rather than this 400 (D7, 2026-10-15).
+  let key;
+  try {
+    key = decodeURIComponent(url.pathname.slice('/api/cdn/'.length));
+  } catch {
+    return new Response('bad key', { status: 400 });
+  }
   if (key.includes('..') || !CDN_PROXY_KEY_RE.test(key)) {
     return new Response('bad key', { status: 400 });
   }

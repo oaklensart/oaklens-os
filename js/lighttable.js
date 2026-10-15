@@ -16,10 +16,44 @@ window.LightTable = (() => {
 
   const BOLT_SVG = `<svg viewBox="0 0 10 16" xmlns="http://www.w3.org/2000/svg"><path d="M6.2 0L0 9.2h3.8L3 16l7-9.8H6.2L8.5 0z"/></svg>`;
 
-  // ---- Date helper (local timezone) ----
+  // ---- Date helper: the SITE's calendar day ----
+  //
+  // A frame's day decides its number (f#, positional and permanent), its day
+  // block and which note embeds it, so it must be the same day for every
+  // reader. This read the VISITOR's zone until 2026-10-15: a reader in London
+  // saw 93 of 731 frames under different numbers than the owner, and the
+  // homepage's RAW card (numbered on the server, in the site's zone) could
+  // disagree with this page (maintenance review, D1). The zone now comes from
+  // the edge (<meta name="site-timezone">, site.config.js → timezone), the
+  // same one src/shared/text.js localDay uses, and the rules match it:
+  //   · a bare YYYY-MM-DD passes through (no instant to convert);
+  //   · an unparseable value or an invalid zone degrades to the UTC date;
+  //   · no meta at all (a page saved before this) keeps the old device-local
+  //     behaviour rather than guessing.
+  let _dayFmt;   // undefined: not resolved yet · null: device local · 'utc'
+  function _siteDayFormat() {
+    if (_dayFmt !== undefined) return _dayFmt;
+    const tz = document.querySelector('meta[name="site-timezone"]')?.content;
+    _dayFmt = null;
+    if (tz) {
+      try {
+        _dayFmt = new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+      } catch { _dayFmt = 'utc'; }
+    }
+    return _dayFmt;
+  }
+
   function localDate(isoStr) {
     if (!isoStr) return '';
-    const d = new Date(isoStr);
+    const s = String(isoStr);
+    if (s.length <= 10 || !s.includes('T')) return s.slice(0, 10);
+    const d = new Date(s);
+    if (isNaN(d)) return s.slice(0, 10);
+    const f = _siteDayFormat();
+    if (f === 'utc') return d.toISOString().slice(0, 10);
+    if (f) return f.format(d);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
@@ -1249,6 +1283,9 @@ window.LightTable = (() => {
     cdnSrcset,
     imgError,
     formatDayHeader,
+    // The site's calendar day for a timestamp: the one rule frame numbers,
+    // day blocks and note embeds all bucket by.
+    siteDay: localDate,
     assignFrameNumbers,
     groupByDay,
     renderDayBlock,

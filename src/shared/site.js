@@ -70,6 +70,13 @@ export function siteMetaTags(origin) {
     `<meta name="site-name" content="${attrEscape(siteConfig.name)}">` +
     `<meta name="site-wordmark" content="${attrEscape(mark.text)}">` +
     `<meta name="site-wordmark-accent" content="${attrEscape(mark.accent)}">` +
+    // The calendar frame days are kept in (site.config.js → timezone). Frame
+    // numbers are positional by DAY, so every reader has to bucket days in the
+    // same zone: the light table read the visitor's own until 2026-10-15, and a
+    // reader in London saw 93 of 731 frames under different numbers than the
+    // owner did (maintenance review, D1). Already public: every date the site
+    // renders is in it.
+    `<meta name="site-timezone" content="${attrEscape(siteConfig.timezone || 'UTC')}">` +
     // The Apple Music flag rides to the client the same way as the wordmark:
     // js/markdown-engine.js (post page AND console preview import it) reads
     // this to decide whether a bare share link becomes a player or stays a

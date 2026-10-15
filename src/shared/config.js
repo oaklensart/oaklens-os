@@ -40,8 +40,12 @@ export const BACKFILL = Object.freeze({
   email: '',
   contactName: '',
   // The crash this whole module exists to prevent. `coords` must be a
-  // two-number array: weather.js destructures it without looking.
-  location: { name: '', region: '', coords: [0, 0] },
+  // two-number array: weather.js destructures it without looking. [0, 0] is
+  // also read as "not set yet": the footer temperature stays off rather than
+  // reporting the sea at 0°N 0°E (src/edge/weather.js, weatherEnabled).
+  // `units` is the footer temperature's scale, 'fahrenheit' or 'celsius';
+  // fahrenheit because every site rendered it before the key existed.
+  location: { name: '', region: '', coords: [0, 0], units: 'fahrenheit' },
   // Filtered against pages{} before render, so an empty nav is a valid site.
   nav: [],
   // The IANA zone this project keeps its calendar in — the one `localDay()`

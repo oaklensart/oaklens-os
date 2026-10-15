@@ -8,14 +8,32 @@ const CDN_SECTION = 'archive';
 function cdnSrc(filename, size) { return cdnUrl(CDN_SECTION, filename, size); }
 function cdnSrcset(filename) { return cdnSrcsetFor(CDN_SECTION, filename); }
 
-// Local calendar day, matching the FRAME stamp convention used across the
-// lighttable (localDate/ymd both read getDate()). Slicing the raw ISO string
-// would read the UTC day and can land off-by-one from the baked-in stamp.
+// The site's calendar day (site.config.js → timezone, edge-injected as
+// <meta name="site-timezone">): the same rule as the buffer page's light table
+// and the server's localDay, so a date reads the same for every visitor. It
+// read the visitor's own zone until 2026-10-15 (maintenance review, D1). A bare
+// YYYY-MM-DD passes through; an invalid zone reads the UTC date; no meta at
+// all keeps the device's day.
+let _archiveDayFmt;
 function localDay(iso) {
   if (!iso) return '';
   const s = String(iso);
   if (s.length <= 10 || !s.includes('T')) return s.slice(0, 10);
   const d = new Date(s);
+  if (isNaN(d)) return s.slice(0, 10);
+  if (_archiveDayFmt === undefined) {
+    const tz = document.querySelector('meta[name="site-timezone"]')?.content;
+    _archiveDayFmt = null;
+    if (tz) {
+      try {
+        _archiveDayFmt = new Intl.DateTimeFormat('en-CA', {
+          timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+        });
+      } catch { _archiveDayFmt = 'utc'; }
+    }
+  }
+  if (_archiveDayFmt === 'utc') return d.toISOString().slice(0, 10);
+  if (_archiveDayFmt) return _archiveDayFmt.format(d);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
@@ -26,6 +44,7 @@ function localDay(iso) {
 function gearLine(entry) {
   return [entry.camera, entry.lens, entry.medium]
     .map(v => (v || '').trim()).filter(Boolean)
+    .map(escapeHtml)
     .join('<span class="pipe">|</span>');
 }
 
@@ -36,7 +55,7 @@ function renderCard(entry) {
   card.dataset.entry = JSON.stringify(entry);
 
   const hashLine = entry.hash
-    ? `<div class="archive-card-hash">${entry.hash}</div>`
+    ? `<div class="archive-card-hash">${escapeHtml(entry.hash)}</div>`
     : '';
 
   card.innerHTML = `
@@ -46,15 +65,15 @@ function renderCard(entry) {
         src="${cdnSrc(entry.filename, 1024)}"
         srcset="${cdnSrcset(entry.filename)}"
         sizes="(max-width: 560px) 100vw, (max-width: 1100px) 50vw, 33vw"
-        alt="${entry.title}"
+        alt="${escapeHtml(entry.title)}"
         loading="lazy"
         ${entry.focus ? `style="object-position:${entry.focus}"` : ''}
       >
     </div>
     <div class="archive-card-tag">
-      <div class="archive-card-title">${entry.title}</div>
-      ${entry.sub ? `<div class="archive-card-sub">${entry.sub}</div>` : ''}
-      <div class="archive-card-location">${entry.location}</div>
+      <div class="archive-card-title">${escapeHtml(entry.title)}</div>
+      ${entry.sub ? `<div class="archive-card-sub">${escapeHtml(entry.sub)}</div>` : ''}
+      <div class="archive-card-location">${escapeHtml(entry.location)}</div>
       <div class="archive-card-meta">
         ${gearLine(entry)}
       </div>

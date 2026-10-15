@@ -101,9 +101,9 @@ async function loadWall() {
 
     card.innerHTML = `
       ${badgeHtml}
-      <img src="${cdnSrc(w.filename || w.src, 1024)}" alt="${w.title}" loading="lazy" ${w.focus ? `style="object-position:${w.focus}"` : ''}>
+      <img src="${cdnSrc(w.filename || w.src, 1024)}" alt="${escapeHtml(w.title)}" loading="lazy" ${w.focus ? `style="object-position:${w.focus}"` : ''}>
       <div class="wall-card-info">
-        <div class="wall-card-info-title">${w.title}</div>
+        <div class="wall-card-info-title">${escapeHtml(w.title)}</div>
       </div>
     `;
 

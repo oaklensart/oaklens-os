@@ -39,7 +39,9 @@ function makeCdn(keys = []) {
       if (opts && opts.range) return { ...base, range: opts.range };
       return base;
     },
-    async put(key, _buf, opts) {
+    async put(key, body, opts) {
+      // The upload's File itself (a Blob), never a second in-memory copy (W7).
+      if (!(body instanceof Blob)) throw new Error('put() was given a copy, not the File');
       stored.push(key);
       objects.set(key, { contentType: opts?.httpMetadata?.contentType });
     },

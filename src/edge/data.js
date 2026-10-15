@@ -24,6 +24,26 @@
 
 const _DATA_CACHE_TTL = 300; // seconds
 
+// The colo cache, or null where there is none (`caches` is a Workers global
+// that the unit tests mostly leave undefined). A missing cache is "always a
+// miss", never a fault.
+export function edgeCache() {
+  try {
+    return (typeof caches !== 'undefined' && caches.default) || null;
+  } catch {
+    return null;
+  }
+}
+
+// Run a cache write without holding the response (CLAUDE.md: side effects go
+// under waitUntil). With no ctx it is still started, just not waited on, and a
+// failure is swallowed: a cache that did not fill is a miss next time.
+export function inBackground(ctx, promise) {
+  const p = Promise.resolve(promise).catch(() => {});
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(p);
+  return p;
+}
+
 // The deploy token every cache key is scoped by. Sanitised to [A-Za-z0-9-] so
 // it is always one safe path segment whatever a future runtime puts in `id`,
 // and clamped so a pathological value can't blow out the key. 'v0' is the
@@ -35,9 +55,10 @@ export function _deployToken(env) {
 }
 
 export async function loadDataJson(origin, env, path) {
-  const cache = caches.default;
+  // No cache (a test, a non-Workers host) is a read straight from the assets.
+  const cache = edgeCache();
   const cacheKey = new Request(`${origin}/__datacache/${_deployToken(env)}/${path}`);
-  const hit = await cache.match(cacheKey);
+  const hit = cache ? await cache.match(cacheKey) : null;
   if (hit) return hit.json();
   const res = await env.ASSETS.fetch(new Request(`${origin}/${path}`));
   if (!res.ok) {
@@ -49,8 +70,10 @@ export async function loadDataJson(origin, env, path) {
     throw err;
   }
   const body = await res.text();
-  await cache.put(cacheKey, new Response(body, {
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${_DATA_CACHE_TTL}` },
-  }));
+  if (cache) {
+    await cache.put(cacheKey, new Response(body, {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': `public, max-age=${_DATA_CACHE_TTL}` },
+    }));
+  }
   return JSON.parse(body);
 }

@@ -64,6 +64,9 @@ async function renderSurface({ page, mod }, respond) {
   w.submitGTD = () => {};
   w.initViewportReflow = () => {};
   w.setVhVar = () => {};
+  w.escapeHtml = (v) => (v == null ? '' : String(v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;'));
   // lighttable.js — the buffer's numbering/grouping helpers.
   w.LightTable = {
     assignFrameNumbers: () => new Map(),
