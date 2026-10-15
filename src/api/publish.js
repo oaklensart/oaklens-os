@@ -119,6 +119,43 @@ export function _emptyOverwriteGuard(files, currentByPath) {
   return null;
 }
 
+// git's own id for a file's content: sha1 over "blob <byte length>\0" + bytes.
+// The same value main's tree lists for that path, so equal ids mean equal bytes.
+export async function _gitBlobSha(content) {
+  const body = new TextEncoder().encode(content);
+  const head = new TextEncoder().encode(`blob ${body.length}\0`);
+  const buf = new Uint8Array(head.length + body.length);
+  buf.set(head);
+  buf.set(body, head.length);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-1', buf));
+  return Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// path -> blob id for every file main holds in the directories this publish
+// writes to (data/, posts/ — PUBLISHABLE_PATH allows exactly one level).
+// Best effort: any failure returns null and the caller uploads every file, as
+// it always did, so this can make a publish lighter but never wrong.
+async function _mainBlobShas(token, owner, repo, treeSha, files) {
+  try {
+    const dirs = [...new Set(files.map((f) => f.path.split('/')[0]))];
+    const root = await _ghFetch(token, owner, repo, `git/trees/${treeSha}`);
+    const out = new Map();
+    await Promise.all(dirs.map(async (dir) => {
+      const entry = (root.tree || []).find((e) => e.path === dir && e.type === 'tree');
+      if (!entry) return;   // directory not on main yet: everything in it is new
+      const sub = await _ghFetch(token, owner, repo, `git/trees/${entry.sha}`);
+      if (sub.truncated) throw new Error(`tree for ${dir}/ truncated`);
+      for (const e of sub.tree || []) {
+        if (e.type === 'blob') out.set(`${dir}/${e.path}`, e.sha);
+      }
+    }));
+    return out;
+  } catch (err) {
+    console.warn(`[publish] couldn't read main's tree, uploading every file: ${err.message}`);
+    return null;
+  }
+}
+
 async function _commitFiles(token, owner, repo, files, expectedHeadSha) {
   // Get current HEAD
   const ref = await _ghFetch(token, owner, repo, 'git/ref/heads/main');
@@ -134,9 +171,26 @@ async function _commitFiles(token, owner, repo, files, expectedHeadSha) {
   const currentCommit = await _ghFetch(token, owner, repo, `git/commits/${commitSha}`);
   const treeSha = currentCommit.tree.sha;
 
+  // Upload only what changed. The console sends every manifest and post on
+  // every publish (~20 files), and each one used to become a blob POST — so a
+  // publish that changed one frame was twenty writes, all of them counted
+  // against GitHub's content-creation limit (and quick retries spend it
+  // faster). On a weak link the whole publish outran the console's deadline
+  // three times running (2026-10-14); fewer writes is less to wait on. A file
+  // whose git blob id already matches main is left to base_tree, which keeps
+  // it as it is.
+  const onMain = await _mainBlobShas(token, owner, repo, treeSha, files);
+  const changed = [];
+  for (const f of files) {
+    if (onMain && onMain.get(f.path) === await _gitBlobSha(f.content)) continue;
+    changed.push(f);
+  }
+  // Nothing differs → nothing to commit (see the identical-tree note below).
+  if (!changed.length) return commitSha;
+
   // Create blobs concurrently — each is an independent POST; only the tree/commit
   // steps below depend on the results. Promise.all preserves array order.
-  const treeItems = await Promise.all(files.map(async ({ path, content }) => {
+  const treeItems = await Promise.all(changed.map(async ({ path, content }) => {
     const encoded = _utf8ToBase64(content);
     const blob = await _ghFetch(token, owner, repo, 'git/blobs', {
       method: 'POST',

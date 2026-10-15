@@ -25,6 +25,20 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-14 (Publish on a weak connection)
+
+**Nothing to do.** Two fixes for publishing over a slow or patchy link:
+
+- **Publish sends GitHub only what changed.** It used to re-save every data
+  file and every post on each publish, about twenty writes for a one-frame
+  change. Now it saves just the files that are different, so a publish is
+  quicker and lighter.
+- **A publish that runs out of time says so.** On an iPad or iPhone (Safari),
+  a slow publish failed with "Fetch is aborted". It now says the publish did
+  not confirm and asks you to check GitHub before you try again, as it always
+  did on other browsers. The wait before giving up is also longer: 60 seconds,
+  up from 30.
+
 ## 2026-10-12, last (Ideas capture files ideas away)
 
 **Nothing to do.** On the Bridge's **Ideas capture**, a thought you type

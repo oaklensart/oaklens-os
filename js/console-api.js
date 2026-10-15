@@ -15,8 +15,9 @@
 // radio and never latched red — the lamp already shows OFFLINE).
 // err.status === 401 means the session expired (already handled centrally —
 // callers usually just return); anything else is a server-reported error with
-// the server's message. AbortError passes through untouched so callers can
-// distinguish a user-driven cancel from a failure.
+// the server's message. AbortError passes through untouched — only when the
+// caller's own signal fired — so callers can distinguish a user-driven cancel
+// from a failure.
 //
 // Cellular hardening: idempotent wrappers retry transient failures (status 0
 // and 502/503/504) with exponential backoff inside one telemetry span, so the
@@ -86,14 +87,21 @@ export const isDemoMode = (err) =>
 // minutes without erroring — a deadline turns that into a retryable failure
 // so the UI always resolves. 0 disables (multi-minute RAW downloads).
 // Exported so field tuning (or tests) can adjust without a deploy.
-export const API_TIMEOUTS = { json: 20000, upload: 90000, commit: 30000, raw: 0 };
+// commit is longer than json on purpose: a publish is several GitHub
+// round-trips behind one request, it is never auto-retried, and on a weak
+// link it legitimately outran 30s — the owner's iPad gave up on a commit that
+// went through first time on a hotspot (2026-10-14). The deadline only decides
+// when we stop waiting, so waiting longer costs nothing but a slower "did not
+// confirm" on a socket that is truly dead.
+export const API_TIMEOUTS = { json: 20000, upload: 90000, commit: 60000, raw: 0 };
 
-// Compose the caller's signal (manual SKIP) with the deadline. The abort
-// *reason* survives composition, so a timeout surfaces as TimeoutError and a
-// user cancel as AbortError — they take different paths in apiFetch.
-function _composeSignal(timeoutMs, upstream) {
-  if (!timeoutMs) return upstream;
-  const deadline = AbortSignal.timeout(timeoutMs);
+// Compose the caller's signal (manual SKIP) with the deadline. In Chromium and
+// Firefox the abort *reason* survives composition, so a timeout surfaces as
+// TimeoutError and a user cancel as AbortError. WebKit does not: it rejects a
+// deadline-aborted fetch with its own AbortError ("Fetch is aborted"), so
+// _requestOnce asks the signals themselves which one fired.
+function _composeSignal(deadline, upstream) {
+  if (!deadline) return upstream;
   if (!upstream) return deadline;
   if (AbortSignal.any) return AbortSignal.any([upstream, deadline]);
   const c = new AbortController();   // Safari < 17.4 fallback
@@ -124,12 +132,22 @@ async function _requestOnce(path, { method, headers, body, auth, signal, raw, ti
     if (token) h.Authorization = `Bearer ${token}`;
   }
 
+  const deadline = timeoutMs ? AbortSignal.timeout(timeoutMs) : null;
   let res;
   try {
-    res = await fetch(path, { method, headers: h, body, signal: _composeSignal(timeoutMs, signal) });
+    res = await fetch(path, { method, headers: h, body, signal: _composeSignal(deadline, signal) });
   } catch (err) {
-    if (err.name === 'TimeoutError') throw new ApiError(`timed out after ${Math.round(timeoutMs / 1000)}s`, 0);
-    if (err.name === 'AbortError') throw err;   // caller-driven cancel, not a failure
+    // Only the caller's own signal makes a cancel. Any other abort is a
+    // failure: the deadline (named as such even where WebKit calls it plain
+    // AbortError), or the browser cutting the request off. Passing those
+    // through as AbortError made a Safari timeout look like a SKIP — no
+    // retry, no lamp, and a publish that said "Fetch is aborted" instead of
+    // "did not confirm, check GitHub" (2026-10-14).
+    if (err.name === 'AbortError' && signal?.aborted) throw err;   // caller-driven cancel, not a failure
+    if (err.name === 'TimeoutError' || deadline?.aborted) {
+      throw new ApiError(`timed out after ${Math.round(timeoutMs / 1000)}s`, 0);
+    }
+    if (err.name === 'AbortError') throw new ApiError(`network: the request was cut off (${err.message})`, 0);
     throw new ApiError(`network: ${err.message}`, 0);
   }
 
