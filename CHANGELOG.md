@@ -25,6 +25,15 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-23 (Field Notes: typing at the bottom of a long note)
+
+**Nothing to do.** In the console's Field Notes editor, writing near the
+bottom of a long note made the page jump back up with every keystroke, and
+the line you were typing slid under the insert buttons. The editor now holds
+its place while it resizes the writing area, and keeps the line you are
+typing above the buttons. Installed console apps pick it up on their next
+open.
+
 ## 2026-10-15 (maintenance: one frame number for everyone, and the month rail)
 
 > ⚠️ **ACTION REQUIRED, if your `site.config.js` has no `timezone`.** Frame

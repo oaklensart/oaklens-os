@@ -426,8 +426,22 @@ export function _fnAutoGrow() {
     _fnGrowQueued = false;
     const ta = document.getElementById("fn-body");
     if (!ta) return;
+    // Collapsing to "auto" to measure shrinks the canvas for a moment, and the
+    // browser clamps its scroll to fit — so every keystroke near the foot of a
+    // long note threw the page back up and left the caret under the dock.
+    // Hold the canvas's place across the measure.
+    const canvas = document.getElementById("fn-canvas");
+    const top = canvas ? canvas.scrollTop : 0;
     ta.style.height = "auto";
     ta.style.height = `${ta.scrollHeight}px`;
+    if (!canvas) return;
+    canvas.scrollTop = top;
+    // Writing at the end: keep the last line above the dock. The canvas's
+    // bottom padding is the dock's clearance, so that is the line to stay over.
+    if (document.activeElement !== ta || ta.selectionEnd !== ta.value.length) return;
+    const clear = parseFloat(getComputedStyle(canvas).paddingBottom) || 0;
+    const over = ta.getBoundingClientRect().bottom - (canvas.getBoundingClientRect().bottom - clear);
+    if (over > 0) canvas.scrollTop += over;
   });
 }
 
