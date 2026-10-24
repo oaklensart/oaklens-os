@@ -18,7 +18,9 @@ const html = readFileSync(join(ROOT, 'dev/field-console.html'), 'utf8');
 const BODY = html.match(/<body[^>]*>([\s\S]*)<\/body>/i)[1].replace(/<script[\s\S]*?<\/script>/gi, '');
 const LIVE_KEY = 'oaklens_bridge_live';
 const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
-const TOKEN = `${b64({ alg: 'none' })}.${b64({ exp: Math.floor(Date.now() / 1000) + 3600 })}.x`;
+// Two days, not an hour: the tests below run on a clock pinned to midday, which
+// can be later than the real time plus an hour.
+const TOKEN = `${b64({ alg: 'none' })}.${b64({ exp: Math.floor(Date.now() / 1000) + 2 * 86400 })}.x`;
 const SAMPLE_TITLES = ['First Shadow', 'In Flight', 'Golden Ray', 'Learning to See Again'];
 
 const text = (id) => (document.getElementById(id)?.textContent || '').replace(/\s+/g, ' ').trim();
@@ -50,7 +52,12 @@ async function bridge({ remembered = null } = {}) {
   return B;
 }
 
-const NOW = Date.now();
+// Midday, and the clock is pinned to it (pinClock). A fact seen today reads as
+// a time ("as of 23:59"); one seen yesterday reads "just now" or "yesterday".
+// WARM's facts are a minute old, so on the real clock a run in the first minute
+// after midnight saw them as yesterday's and failed (CI, 2026-10-24 00:00 UTC).
+const NOW = new Date().setHours(12, 0, 0, 0);
+const pinClock = () => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(NOW); };
 const WARM = {
   slots: [{ key: 'a', kind: 'archive', kicker: 'archive', title: 'Say Yes', thumb: '' }],
   frontPulse: null,
@@ -65,6 +72,8 @@ const WARM = {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('nothing answers: each fact says so, none is invented', () => {
+  beforeEach(pinClock);
+
   it('cold (nothing remembered): no LIVE claim, no front page, no "Nothing live"', async () => {
     answer([[/./, 500]]);
     const B = await bridge();
@@ -113,6 +122,8 @@ describe('nothing answers: each fact says so, none is invented', () => {
 });
 
 describe('the front page, when the live site will not answer', () => {
+  beforeEach(pinClock);
+
   it('says how old what it shows is, and shows no sample frame', async () => {
     await import('../js/recent-index.js');
     answer([[/\/data\//, 503], [/\/api\/buffer-summary/, 503]]);

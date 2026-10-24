@@ -323,7 +323,7 @@ npm install            # once per environment
 npm test               # vitest — must be green before "done"
 npx wrangler deploy --dry-run   # bundle check (what CI runs)
 npx wrangler dev       # local Worker + real HTMLRewriter (console/asset path)
-npx wrangler deploy    # deploy Worker/src changes (front-end deploys via git push main)
+npx wrangler deploy    # ONLY a fork with no repo connected; with one, `git push origin main` is the deploy (DoD §5)
 scripts/doctor.sh      # read-only health check (tooling, placeholders, secrets)
 scripts/os-leak-scan.sh  # sanitization / identity-leak scan + local .git/config credential check
 ```
