@@ -348,15 +348,27 @@ async function _paintStory() {
   }
 }
 
-/** Save the story: to the share sheet where the device has one for files (an
- *  iPad, a phone: straight to Photos or a story), a download where it does not. */
+/** Where the story goes. A touch device with a share sheet for files (an iPad,
+ *  a phone) gets the sheet: straight to Photos or a story. A desktop (a mouse or
+ *  trackpad drives it, the console's usual test) gets a download, even where it
+ *  has a sheet: the Mac's offers AirDrop, Mail and Notes but no folder, so the
+ *  file had nowhere on the computer to go (the owner, 2026-10-23). */
+export function storySaveRoute(file) {
+  let desktop = false;
+  try { desktop = matchMedia('(pointer: fine)').matches; } catch { /* no matchMedia: ask the sheet */ }
+  if (desktop) return 'download';
+  return navigator.canShare && navigator.canShare({ files: [file] }) ? 'share' : 'download';
+}
+
+/** Save the story: the share sheet or a download, by storySaveRoute. A sheet
+ *  that fails (not one that is dismissed) falls back to the download. */
 export async function sendOutSaveStory() {
   if (!_story || !_target) return;
   const blob = await canvasBlob(_story);
   const name = shareFileName(_target.stem, 'story');
   const file = new File([blob], name, { type: blob.type || 'image/webp' });
   _sent();
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+  if (storySaveRoute(file) === 'share') {
     try { await navigator.share({ files: [file], title: _target.name }); return; } catch (err) {
       if (err && err.name === 'AbortError') return;
     }

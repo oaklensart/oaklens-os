@@ -25,6 +25,15 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-23 (Save the story downloads on a computer)
+
+**Nothing to do.** In the console's Send it out drawer, **Save the story**
+on a computer now downloads the story card, so it lands in your downloads
+folder. It used to open the system share sheet, which on a Mac offers
+AirDrop, Mail and Notes but nowhere on the computer to put the file. On a
+phone or an iPad it still opens the share sheet, straight to Photos or a
+story.
+
 ## 2026-10-23 (Field Notes: typing at the bottom of a long note)
 
 **Nothing to do.** In the console's Field Notes editor, writing near the

@@ -6,7 +6,7 @@
 // story's chrome leaves clear. The owner: "You publish to ground you own
 // first, then push to the platforms, never the reverse."
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -267,6 +267,35 @@ describe('the story card, with the QR or without', () => {
     expect(g.qr).toBeUndefined();
     expect(g.card.y).toBeGreaterThanOrEqual(0);
     expect(g.card.y + g.card.h).toBeLessThanOrEqual(1920);
+  });
+});
+
+describe('saving the story: a download on a desktop, the sheet on a touch device', () => {
+  const file = new File(['x'], 'f-story.webp', { type: 'image/webp' });
+  const as = (fine, canShare) => {
+    globalThis.matchMedia = (q) => ({ matches: q === '(pointer: fine)' && fine });
+    Object.defineProperty(navigator, 'canShare', { value: canShare, configurable: true, writable: true });
+  };
+  afterEach(() => { delete globalThis.matchMedia; delete navigator.canShare; });
+
+  it('a desktop downloads, even with a share sheet that takes files (the Mac\'s has no folder)', () => {
+    as(true, () => true);
+    expect(O.storySaveRoute(file)).toBe('download');
+  });
+  it('a touch device with a sheet for files gets the sheet: straight to Photos or a story', () => {
+    as(false, () => true);
+    expect(O.storySaveRoute(file)).toBe('share');
+  });
+  it('a touch device without one downloads', () => {
+    as(false, () => false);
+    expect(O.storySaveRoute(file)).toBe('download');
+    as(false, undefined);
+    expect(O.storySaveRoute(file)).toBe('download');
+  });
+  it('the save goes through the route, and a dismissed sheet saves nothing', () => {
+    const src = readFileSync(join(ROOT, 'js/console/send-out.js'), 'utf8');
+    expect(src).toMatch(/if \(storySaveRoute\(file\) === 'share'\)/);
+    expect(src).toMatch(/if \(err && err\.name === 'AbortError'\) return;/);
   });
 });
 
