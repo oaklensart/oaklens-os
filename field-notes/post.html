@@ -22,7 +22,7 @@
   if (light) d.setAttribute('data-theme', 'light');
 })();
 </script>
-<link rel="stylesheet" href="../css/main.css?v=43">
+<link rel="stylesheet" href="../css/main.css?v=45">
 <script src="/js/mode-toggle.js?v=1" defer></script>
 <link rel="sitemap" type="application/xml" href="/sitemap.xml">
 <!-- Marked.js for markdown rendering -->
@@ -397,9 +397,11 @@
 }
 
 /* ---- APPLE MUSIC EMBED ---- */
+/* No background of its own: the player is narrower than the column, and a
+   painted wrapper showed as bars either side of it — invisible on Midnight,
+   two black slabs on Daylight. The player carries its own rounded panel. */
 .apple-music-embed {
   margin: 24px 0;
-  background: #000;
   overflow: hidden;
 }
 
@@ -547,7 +549,7 @@
 </footer>
 
 <script src="/js/audio-player.js?v=9" defer></script>
-<script src="/js/page-fn-post.js?v=8" defer></script>
+<script src="/js/page-fn-post.js?v=9" defer></script>
 
 </body>
 </html>

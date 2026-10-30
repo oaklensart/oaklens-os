@@ -6,6 +6,22 @@
 const CDN_SECTION = 'archive';
 function cdnSrc(filename, size) { return cdnUrl(CDN_SECTION, filename, size); }
 
+// A note with no hero but an interactive block (manual §5.11) shows that
+// block in its thumbnail instead of "// NO HERO", drifting and inert — the
+// list's version of the homepage's `live` card (manual §5.32.2), behind the
+// same instance switch (<meta name="site-live-cards">, off on a fork) and the
+// same module rule (tests/live-card.test.js holds the three to one pattern).
+const LIVE_MODULE_RE = /^\/(?!\/)[\w./-]+\.js(\?v=[\w.-]+)?$/;
+function interactiveModule(post) {
+  const body = typeof post.body === 'string' ? post.body : '';
+  const m = /<div\b[^>]*\bclass="fn-interactive"[^>]*\bdata-module="([^"]+)"/.exec(body);
+  const src = m ? m[1] : '';
+  return (LIVE_MODULE_RE.test(src) && !src.includes('..')) ? src : '';
+}
+function liveCardsOn() {
+  return document.querySelector('meta[name="site-live-cards"]')?.content === 'on';
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
@@ -45,9 +61,12 @@ async function loadPosts() {
     entry.className = 'fn-entry reveal';
     entry.style.animationDelay = `${Math.min(i * 0.05, 0.5)}s`;
 
+    const liveSrc = !post.hero && liveCardsOn() ? interactiveModule(post) : '';
     const thumbHtml = post.hero
       ? `<img class="fn-entry-thumb" src="${cdnSrc(post.hero, 480)}" alt="" loading="lazy"${post.focus ? ` style="object-position:${post.focus}"` : ''}>`
-      : `<div class="fn-entry-thumb no-hero">// NO HERO</div>`;
+      : liveSrc
+        ? `<div class="fn-entry-thumb no-hero fn-entry-live" aria-hidden="true"><div class="fn-live-stage"></div></div>`
+        : `<div class="fn-entry-thumb no-hero">// NO HERO</div>`;
 
     entry.innerHTML = `
       ${thumbHtml}
@@ -60,6 +79,14 @@ async function loadPosts() {
       </div>
     `;
     list.appendChild(entry);
+    // Mounted into an inner box: the block's ambient styles size their own
+    // host (width: auto), which would collapse the fixed thumbnail. A failed
+    // import (offline export, a moved file) leaves the dark box, wordless.
+    if (liveSrc) {
+      import(liveSrc)
+        .then((m) => m.default(entry.querySelector('.fn-live-stage'), { ambient: true }))
+        .catch(() => {});
+    }
   });
 
   countEl.innerHTML = `<span class="accent">${posts.length}</span> FIELD NOTES`;

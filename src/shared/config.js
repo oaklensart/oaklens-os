@@ -88,6 +88,7 @@ export const BACKFILL = Object.freeze({
   legacyRedirects: false,
   webAnalytics: false,
   appleMusicEmbeds: false,
+  liveCards: false,
   demoMode: false,
   repoConnected: false,
   poweredBy: true,

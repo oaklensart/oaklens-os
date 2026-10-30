@@ -25,6 +25,33 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-24 (A homepage card that moves — off unless you turn it on)
+
+**Nothing to do.** If you've put an interactive block in a field note, you can
+now show it moving inside that note's homepage card, under the title. It's
+off by default. To use it, add `liveCards: true` to `site.config.js`, then
+choose **Live block** in the note's card layout in the console's Cards view.
+With the setting off, your cards are exactly as they were. With it on, a
+note that has a block but no hero picture also shows the block, moving, in
+its thumbnail on the Field Notes list instead of "NO HERO".
+
+## 2026-10-24 (No black bars beside a music player in Daylight)
+
+**Nothing to do.** An Apple Music player in a field note sat inside a black
+box slightly wider than the player. On a dark page you never saw it; in
+Daylight it showed as a black bar on each side. The box is see-through now,
+so the player sits straight on your page in either mode.
+
+## 2026-10-23 (Interactive blocks in field notes)
+
+**Nothing to do.** A field note can now hold something you can play with,
+not just read: put
+`<div class="fn-interactive" data-module="/embeds/your-thing/main.js"></div>`
+on its own line, and the published post loads that script from your own site
+and hands it the box to draw in. Only scripts on your own site are loaded.
+The console's live preview shows an empty box; the PREVIEW button shows the
+real thing. Notes without one are unchanged.
+
 ## 2026-10-23 (Save the story downloads on a computer)
 
 **Nothing to do.** In the console's Send it out drawer, **Save the story**

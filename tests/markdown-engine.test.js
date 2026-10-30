@@ -270,3 +270,14 @@ describe('link and image schemes', () => {
     expect(out).not.toContain('data:text/html');
   });
 });
+
+// The player is narrower than the post column. A wrapper with a background of
+// its own showed as two black bars either side of it on Daylight (owner
+// report, 2026-10-24); the wrapper must paint nothing and let the page show.
+describe('the Apple Music wrapper on the post page', () => {
+  it('paints no background of its own', () => {
+    const html = readFileSync(join(import.meta.dirname, '..', 'field-notes', 'post.html'), 'utf8');
+    const rule = html.match(/\.apple-music-embed\s*\{([^}]*)\}/)[1];
+    expect(rule).not.toMatch(/background/);
+  });
+});

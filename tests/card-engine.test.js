@@ -234,7 +234,9 @@ describe('the hero layout — the engine\'s first real layout', () => {
     // 'overlay' joined both picture-capable kinds in chunk 3; 'hero' is still
     // the text kind's alone — it is what a NOTE does with its picture, where
     // overlay is what any card does with one.
-    expect(RI.cardLayouts.text).toEqual(['default', 'hero', 'overlay']);
+    // 'live' (2026-10-24) is gated on an interactive block and on the instance
+    // flag, not on a picture — tests/live-card.test.js.
+    expect(RI.cardLayouts.text).toEqual(['default', 'hero', 'overlay', 'live']);
     expect(RI.cardLayouts.photo).toEqual(['default', 'overlay']);
     expect(RI.cardLayouts.audio).toEqual(['default']);
     expect(RI.cardLayouts.pulse).toEqual(['default']);

@@ -954,6 +954,43 @@ html {
   letter-spacing: -0.005em;
 }
 
+/* ---- LIVE layout (data-layout="live") — the note's interactive block ----
+   js/recent-index.js textLiveCard: the words tile's kicker and title on top,
+   the note's interactive block drifting in the rest (.wk-live), the place
+   line at the foot. The GROUND is the pulse card's derived recipe (see .wk-pulse
+   below for why it is derived and never enumerated), in the accent unless a
+   composed card's palette says otherwise: the palette rules further down
+   outrank this one and set --pulse-rgb, which is why it is read here through
+   a fallback rather than declared. Only an instance with `liveCards: true`
+   ever stamps this layout. */
+.wk-text[data-layout="live"] {
+  --pulse-veil: rgba(0, 0, 0, 0.55);
+  justify-content: flex-start;
+  background:
+    radial-gradient(circle at 84% 8%, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.20) 0%, transparent 58%),
+    linear-gradient(168deg, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.11) 0%, rgba(var(--pulse-rgb, var(--accent-rgb)), 0.03) 58%, rgba(var(--pulse-rgb, var(--accent-rgb)), 0) 100%),
+    linear-gradient(var(--pulse-veil), var(--pulse-veil)),
+    var(--surface-2);
+  border-color: rgba(var(--pulse-rgb, var(--accent-rgb)), 0.28);
+}
+:root[data-theme="light"] .wk-text[data-layout="live"] {
+  --pulse-veil: rgba(255, 255, 255, 0.45);
+  border-color: rgba(var(--pulse-rgb, var(--accent-rgb)), 0.34);
+}
+/* The stage takes every pixel the head and foot leave, edge to edge, and never
+   takes a pointer: the card is one link. Edge to edge is the negative margins
+   WITH width: auto — a stated width (the block's own stylesheet once set 100%)
+   keeps the content width and the left margin slides it 16px off centre. */
+.wk-text[data-layout="live"] .wk-live {
+  flex: 1 1 auto;
+  min-height: 220px;
+  width: auto;
+  margin: 0 -16px;
+  position: relative;
+  pointer-events: none;
+}
+.wk-text[data-layout="live"] .wk-t-meta { margin-top: 0; }
+
 /* ---- OVERLAY layout (data-layout="overlay") — writing ON a picture ----
    docs/cards-core-complete.md chunk 3. The image ladder, v1: the same nodes the
    picture-led card already draws, with the body moved inside the 4:5 well and

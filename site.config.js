@@ -144,6 +144,10 @@ export default Object.freeze({
   // Field Notes renderer turn a pasted music.apple.com share link into a
   // player. Left off, a share link in a post renders as a plain link.
   // appleMusicEmbeds: true,
+  // Live homepage cards. OFF by default. A Field Note that opens with an
+  // interactive block can then wear the "Live" layout in the console's Cards
+  // view: its title over that block, moving, inside the homepage card.
+  // liveCards: true,
   // Demo mode: run this instance as a public, browse-only showcase. Everyone
   // can log in with the password you share and explore the whole console, but
   // every write — uploads, deletes, drafts, publish, even the subscribe form —

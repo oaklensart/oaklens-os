@@ -61,6 +61,12 @@ async function loadMarkdownEngine() {
   return import('/js/markdown-engine.js?v=5');
 }
 
+// An interactive block's module: a root-relative .js path on this origin
+// (an optional ?v= for cache-busting), never `//host` or a scheme.
+function isInteractiveModule(src) {
+  return typeof src === 'string' && /^\/(?!\/)[\w./-]+\.js(\?v=[\w.-]+)?$/.test(src) && !src.includes('..');
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');
@@ -258,6 +264,21 @@ async function loadPost() {
         });
       }
     })();
+
+    // ---- Interactive blocks ----
+    // `<div class="fn-interactive" data-module="/path/to/module.js"></div>` in
+    // a body imports that module and hands it the div (its default export).
+    // Same-origin root paths only: the strict script-src ('self') enforces it
+    // anyway, this keeps a typo from becoming a console error. A block that
+    // fails to load stays an empty div and the note still reads. The console
+    // preview never runs these (renderMarkdown is DOM-free); PREVIEW does.
+    wrap.querySelectorAll('.fn-interactive[data-module]').forEach((el) => {
+      const src = el.dataset.module;
+      if (!isInteractiveModule(src)) return;
+      import(src).then((m) => m.default(el)).catch((err) => {
+        console.warn('[fn-interactive]', src, err);
+      });
+    });
 
     // ---- Fetch buffer.json once for all embed types ----
     const inlineDateEls = [...document.querySelectorAll('.buffer-date[data-date]')];

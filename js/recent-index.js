@@ -631,7 +631,10 @@
     // typographic tile. Opt-in per post (the FN composer writes
     // card: { layout: 'hero' }) and gated on the picture actually being
     // there — see CARD_GATES below.
-    text: ['default', 'hero', 'overlay'],
+    // 'live': the note's interactive block (manual §5.11) drifting in the tile
+    // under its title. Gated on the block AND on the instance switching live
+    // cards on — see the live layout section below.
+    text: ['default', 'hero', 'overlay', 'live'],
     audio: ['default'],
     pulse: ['default'],
     // No `composed` here. A composed card is one of the kinds above wearing
@@ -723,6 +726,32 @@
   function hasFramePicture(entry, over) {
     return !!(composedMedia(over) || heroFilename({ hero: entry && entry.filename }));
   }
+  // ---- the live layout's gate ----
+  // A note that carries an interactive block (`<div class="fn-interactive"
+  // data-module="/…/x.js">`, manual §5.11) can hand its tile to that block.
+  // Two things must hold: the block names a module this engine will import
+  // (same-origin root path, the post page's own rule — js/page-fn-post.js
+  // isInteractiveModule; tests/live-card.test.js holds the two to one
+  // pattern), and the INSTANCE has switched live cards on (site.config.js →
+  // `liveCards: true`, worker-injected as <meta name="site-live-cards">, the
+  // site-apple-music seam). Off is the engine default, so a fork's cards
+  // never import anything.
+  var LIVE_MODULE_RE = /^\/(?!\/)[\w./-]+\.js(\?v=[\w.-]+)?$/;
+  function interactiveModule(entry) {
+    var body = entry && typeof entry.body === 'string' ? entry.body : '';
+    var m = /<div\b[^>]*\bclass="fn-interactive"[^>]*\bdata-module="([^"]+)"/.exec(body);
+    var src = m ? m[1] : '';
+    return (LIVE_MODULE_RE.test(src) && src.indexOf('..') === -1) ? src : '';
+  }
+  function liveCardsOn() {
+    if (typeof document === 'undefined') return false;
+    var meta = document.querySelector('meta[name="site-live-cards"]');
+    return !!meta && meta.content === 'on';
+  }
+  function hasLiveBlock(entry) {
+    return liveCardsOn() && !!interactiveModule(entry);
+  }
+
   var CARD_GATES = {
     photo: {
       overlay: hasFramePicture,
@@ -730,6 +759,7 @@
     text: {
       hero: hasNotePicture,
       overlay: hasNotePicture,
+      live: hasLiveBlock,
     },
   };
 
@@ -1246,6 +1276,50 @@
     return a;
   }
 
+  // ---- field-note card, LIVE layout (CARD_LAYOUTS.text: 'live') ----
+  // The words tile's head — kicker and title — over the note's interactive
+  // block, which takes the rest of the tile and drifts there. The block is
+  // mounted with { ambient: true }: it draws and takes no input, so the card
+  // stays ONE link and a tap anywhere opens the note. The ground is the pulse
+  // card's derived gradient (css/main.css, LIVE layout), so a composed card's
+  // palette tints it the way it tints any words card.
+  //
+  // The import is the only async thing on the card and it may fail — offline
+  // (the file:// export cannot import a module), a moved file, an old cached
+  // page. Failing leaves the stage empty on its gradient: a quiet tile with a
+  // title, never a broken one. Only reachable through hasLiveBlock.
+  function textLiveCard(post, over) {
+    var o = over || null;
+    var a = cardRoot('wk-text', hrefOf('text', post, o), o, 'words');
+
+    var kicker = el('span', 'wk-kicker');
+    var dot = el('span', 'wk-dot');
+    dot.setAttribute('aria-hidden', 'true');
+    kicker.appendChild(dot);
+    kicker.appendChild(document.createTextNode(labelOf(o, 'Field Note')));
+
+    var title = el('div', 'wk-t-title');
+    title.textContent = textOf(o, post, 'title');
+
+    var stage = el('div', 'wk-live');
+    stage.setAttribute('aria-hidden', 'true');
+
+    a.appendChild(kicker);
+    a.appendChild(title);
+    a.appendChild(stage);
+    if (!o) {
+      var meta = el('div', 'wk-t-meta');
+      meta.textContent = [post.location, yearOf(post)].filter(Boolean).join(' · ');
+      a.appendChild(meta);
+    }
+    var src = interactiveModule(post);
+    try {
+      import(src).then(function (m) { return m.default(stage, { ambient: true }); })
+        .catch(function () { /* stays an empty stage on its gradient */ });
+    } catch (e) { /* no dynamic import here (an old engine, a test VM) */ }
+    return a;
+  }
+
   // (There is no composedCard(). A composed card is a photo, text or audio card
   // with overrides — see the `overrides` helpers and cardRoot above, and
   // composedKind for how a record chooses. docs/cards-core-complete.md chunk 1.)
@@ -1708,6 +1782,7 @@
     // picture — one picture-led builder, two layouts, rather than a second
     // picture branch in the typographic tile.
     text: function (item, layout) {
+      if (layout === 'live') return textLiveCard(item.data, item.over);
       return (layout === 'hero' || layout === 'overlay')
         ? textHeroCard(item.data, item.over, layout)
         : textCard(item.data, item.over);

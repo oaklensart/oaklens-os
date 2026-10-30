@@ -2571,13 +2571,16 @@ function readoutHtml(rows) {
 // disappearing — the picker reads the registry, so it widens by itself and this
 // map only makes it friendlier.
 const LAYOUT_LABEL = {
-  text: { default: 'Standard tile', hero: 'Hero forward', overlay: 'Words on the picture' },
+  text: { default: 'Standard tile', hero: 'Hero forward', overlay: 'Words on the picture', live: 'Live block' },
   // `overlay` is the photo kind's only choice besides its one shape, so its
   // default needs a name here too — the picker only draws for a kind with two.
   photo: { default: 'Picture and caption', overlay: 'Words on the picture' },
   // A composed card's three words live in DRESSING_LABEL: they name (kind,
   // layout) PAIRS, not layouts, and dressingPickerHtml draws them.
 };
+// `live` is gated on something other than a picture (js/recent-index.js
+// hasLiveBlock), so its blocked chip says what it is actually waiting for.
+const LIVE_BLOCKED = 'Needs an interactive block in the note, and liveCards: true in site.config.js';
 function layoutLabel(kind, name) {
   return (LAYOUT_LABEL[kind] && LAYOUT_LABEL[kind][name]) || name;
 }
@@ -2607,7 +2610,8 @@ function layoutPickerHtml(slot) {
       || RI.layoutFor(kind, { ...entry, card: { ...(entry.card || {}), layout: name } }) === name;
     const tip = usable
       ? `Show this card as: ${layoutLabel(kind, name)}`
-      : 'Needs a picture on the entry before this layout can be used';
+      : name === 'live' ? LIVE_BLOCKED
+        : 'Needs a picture on the entry before this layout can be used';
     return `<button class="layout-chip${on ? ' is-on' : ''}${usable ? '' : ' is-blocked'}"
       onclick="cardsSetLayout('${escapeAttrJS(slot.kind)}','${escapeAttrJS(slot.id)}','${escapeAttrJS(name)}')"
       aria-pressed="${on ? 'true' : 'false'}" title="${escapeHTML(tip)}">
@@ -2639,7 +2643,10 @@ function dressingPickerHtml(card) {
   if (kind === 'audio') return '';
   const current = _dressingOf(card);
   const extra = ((RI.cardLayouts && RI.cardLayouts[kind]) || [])
-    .filter((n) => n !== 'default' && n !== 'hero');
+    // `live` too: it wears the NOTE's own interactive block, and a composed
+    // card has no body to carry one, so on a composed card it could only ever
+    // be a greyed chip. It is picked on the note's own slot (layoutPickerHtml).
+    .filter((n) => n !== 'default' && n !== 'hero' && n !== 'live');
   const q = `'${escapeAttrJS(card.id)}'`;
   const chips = ['auto', 'picture', 'words'].concat(extra).map((key) => {
     const on = key === current;
@@ -2648,7 +2655,7 @@ function dressingPickerHtml(card) {
     const label = DRESSING_LABEL[key] || layoutLabel(kind, key);
     const name = !target ? '—'
       : `${target.kind || kind}${target.layout ? ` · ${target.layout}` : ''}`;
-    const tip = !usable ? 'Needs a picture on the card before it can lead with one'
+    const tip = !usable ? (key === 'live' ? LIVE_BLOCKED : 'Needs a picture on the card before it can lead with one')
       : key === 'auto' ? 'The picture leads when there is one; the words when there is not'
         : key === 'picture' ? 'Lead with the picture, whatever else the card carries'
           : key === 'words' ? 'The words tile, picture or not — drop cap and all'

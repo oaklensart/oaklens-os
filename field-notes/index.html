@@ -22,7 +22,7 @@
   if (light) d.setAttribute('data-theme', 'light');
 })();
 </script>
-<link rel="stylesheet" href="../css/main.css?v=43">
+<link rel="stylesheet" href="../css/main.css?v=45">
 <script src="/js/mode-toggle.js?v=1" defer></script>
 <link rel="sitemap" type="application/xml" href="/sitemap.xml">
 <style>
@@ -100,6 +100,21 @@
   font-size: 0.55rem;
   color: var(--gray-700);
   letter-spacing: 1.5px;
+}
+
+/* A note's interactive block standing in for a hero (js/page-fn-list.js):
+   it fills the box and takes no pointer, so the row stays one link. */
+.fn-entry-thumb.fn-entry-live {
+  position: relative;
+  overflow: hidden;
+}
+/* Two classes on purpose: the block's own stylesheet (injected after this
+   one) gives its host `position: relative`, which at one class would win the
+   tie and shrink the stage to nothing inside this flex box. */
+.fn-entry-thumb .fn-live-stage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .fn-entry-body {
@@ -229,7 +244,7 @@
 </footer>
 
 <script src="/js/site-common.js?v=4"></script>
-<script src="/js/page-fn-list.js?v=6" defer></script>
+<script src="/js/page-fn-list.js?v=7" defer></script>
 
 </body>
 </html>

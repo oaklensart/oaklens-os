@@ -16,7 +16,7 @@
 // Mutations (/api/* upload, publish, sync) always require the network and are
 // never intercepted or cached — this SW only serves the static shell.
 
-const CACHE = 'oaklens-console-v297';
+const CACHE = 'oaklens-console-v301';
 const SHELL = '/dev/field-console.html';
 // Same-origin shell assets. The js/ versions here must match the import map in
 // field-console.html exactly — that map is where a module's version is decided,
@@ -48,7 +48,7 @@ const SHELL_ASSETS = [
   '/js/console/share.js?v=5',
   '/js/console/asset-library.js?v=5',
   '/js/console/audio.js?v=19',
-  '/js/console/cards.js?v=39',
+  '/js/console/cards.js?v=40',
   '/js/console/publish.js?v=37',
   '/js/console/session.js?v=21',
   '/js/console/bench.js?v=3',
@@ -63,7 +63,7 @@ const SHELL_ASSETS = [
   // logic, which the shell pulls in as a classic <script> so the Cards view
   // previews with the real selection code. Precached like everything else so an
   // installed PWA keeps its preview offline.
-  '/js/recent-index.js?v=34',
+  '/js/recent-index.js?v=35',
   '/js/qr.js?v=1',
   // Same story, same reason: the shared audio module, pulled in as a classic
   // <script> so the SETS shelf resolves a set through the code the public

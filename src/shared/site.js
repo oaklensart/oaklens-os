@@ -83,6 +83,9 @@ export function siteMetaTags(origin) {
     // plain link. CSP frame-src is the enforcement; this keeps the rendered
     // page honest about it.
     `<meta name="site-apple-music" content="${siteConfig.appleMusicEmbeds === true ? 'on' : 'off'}">` +
+    // Live homepage cards (the `live` text layout): js/recent-index.js reads
+    // this before it will import a note's interactive block into its tile.
+    `<meta name="site-live-cards" content="${siteConfig.liveCards === true ? 'on' : 'off'}">` +
     `<link rel="alternate" type="application/atom+xml" title="${attrEscape(`${siteConfig.name} — Field Notes`)}" href="/feed.xml">` +
     // The podcast feed, for the crawlers and podcast apps that look for one.
     //
