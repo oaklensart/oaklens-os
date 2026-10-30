@@ -25,6 +25,17 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-25 (Your own buttons in the footer — none unless you add them)
+
+**Nothing to do.** The homepage footer can now show small buttons of your own
+ahead of the OS chip: an 88×31 web button, or a strip for another project of
+yours. Upload the image to your site's CDN (the console's Library will do),
+then list it in `site.config.js` under `footerButtons`, by its key on the CDN
+rather than a web address; the example config shows the shape. Without the
+setting your footer is exactly as it was. The image has to be on your own CDN
+so your site's security policy doesn't need loosening and the button comes
+along in a Site-in-a-ZIP export.
+
 ## 2026-10-24 (A short link can choose its own host)
 
 **Nothing to do.** If you run two hostnames and scope your short links to one

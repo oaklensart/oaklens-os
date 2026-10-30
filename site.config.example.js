@@ -190,6 +190,20 @@ export default Object.freeze({
   // change or remove your listing later without an email round-trip, and what
   // protects your seat if the domain ever lapses.
   // webring: { node: 7, slug: 'your-slug' },
+  // FOOTER BUTTONS — small badges of your own (an 88x31 web button, a project
+  // of yours) in the homepage footer, ahead of the chips. None by default.
+  // Upload the image to your site's CDN first (the console's Library, or any
+  // way you put files in your R2 bucket) and give its key here, not a URL: an
+  // image from another site would be blocked by your site's security policy
+  // and would be missing from the Site-in-a-ZIP export. Width and height are
+  // the size it shows at (a 2x image looks sharper on phones); at most 31 tall,
+  // so a button never stretches the footer. For light-on-black art (a glowing
+  // display), add `emissive: true` and its black melts into the footer, light
+  // in Midnight and ink in Daylight; leave it off for a colour button.
+  // footerButtons: [
+  //   { href: 'https://your-other-site.example', image: 'buttons/your-button.gif',
+  //     width: 88, height: 31, alt: 'Your other site' },
+  // ],
   // A COMMIT FEED at /api/devfeed, for a page of your own that wants to show
   // what you have been building. OFF by default — with no block here the
   // endpoint 404s and nothing calls GitHub. Two lists, and the difference

@@ -298,6 +298,10 @@ Keep commits focused on one change; write a message that explains *why*, not jus
   (`poweredBy: false` removes it): quiet, one page, and removable.
   ⚠️ **Seat numbers start at 0 and 0 is falsy** — guard with
   `Number.isInteger(n) && n >= 0`, never `if (!n)`.
+  The owner's **footer buttons** (`footerButtons`, `src/edge/chrome.js`) hold
+  to the same posture: none unless listed, and each image is a **key on the
+  site's own CDN, never a URL**, so they widen no directive and travel with the
+  export (`tests/footer-buttons.test.js`).
 
 ---
 

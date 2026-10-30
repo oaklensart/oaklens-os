@@ -48,6 +48,7 @@ When the same result is possible more than one way, pick the Safe way.
 | Turn pages on or off | `site.config.js` → `pages` | Safe |
 | Support page words and payment links | `site.config.js` → `support` | Safe |
 | Remove the small "OS" link in the footer | `site.config.js` → add `poweredBy: false` | Safe |
+| A small button of your own in the footer (an 88×31, a project of yours) | upload the image to your CDN, then `site.config.js` → `footerButtons` (the example config shows how) | Safe |
 | Your own short links (`yoursite.com/prints`) | `site.config.js` → `shortLinks` | Safe |
 | Dates in your time zone (and which day, so which frame number, a photo gets) | `site.config.js` → `timezone` | Safe |
 | Posts, pictures, audio, Pulse | The console, at `/dev/field-console` on your site | Safe |

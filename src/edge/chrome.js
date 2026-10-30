@@ -596,7 +596,8 @@ export function injectSupport(rewriter, support = siteConfig.support || {}) {
 // ---- Footer chips: attribution + webring membership ----
 //
 // Two small hairline chips in the homepage footer, both edge-injected from a
-// single `<span data-site-chips>` hook so the served markup carries neither.
+// single `<span data-site-chips>` hook so the served markup carries neither
+// (the owner's footer buttons, below, go into the same hook).
 //
 // One hook, not two, and not a `.footer-right` handler: that class exists on
 // every page in the tree, so keying off it would silently widen a one-page
@@ -614,10 +615,66 @@ export function injectSupport(rewriter, support = siteConfig.support || {}) {
 // and no stylesheet change means no cache-bust across every page.
 const OS_PROJECT_URL = 'https://github.com/oaklensart';
 
+// ---- Footer buttons: the owner's own small badges, ahead of the chips ----
+//
+// `site.config.js` → `footerButtons: [{ href, image, width, height, alt,
+// emissive? }]`: an 88x31 web button, or a strip for a project of the owner's.
+// OFF unless listed (the example config lists none), for the webring's reason:
+// a fork must not inherit a link to someone else's site.
+//
+// `emissive: true` is for light-on-black art (an LED display): the image is
+// blended into the footer by `difference`, so its black ground disappears into
+// the footer's own, whatever shows through it, and its light turns to ink on
+// Daylight's cream, the way the chips' text does. It would invert a colour
+// button, so it's per button and off unless asked.
+//
+// `image` is a KEY ON THIS SITE'S OWN CDN, never a URL. Hotlinking one would
+// widen img-src for every fork and render broken in the Site-in-a-ZIP — the
+// reason the ring's own 88x31 isn't shown (manual §5.24). A CDN key needs no
+// CSP change, the exporter already mirrors the CDN images a page references
+// into its cdn/ folder, and replacing the file under the same key updates it.
+//
+// Read exact-shaped, like webringNode(): an entry with anything missing or
+// out of range renders nothing rather than something half-right. Height is
+// capped at 31 (the 88x31 button's) so a badge can never stretch the footer.
+//
+// The layout rides on the element (style-src allows inline), so this adds no
+// stylesheet change and no cache-bust either. `top`, not `middle`: a middle
+// image grows the 39 px footer by a pixel; top keeps it, level with the chips.
+const BUTTON_HREF_RE = /^(https:\/\/[^\s"'<>]+|\/(?!\/)[^\s"'<>]*)$/;
+const BUTTON_KEY_RE = /^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]*\.(gif|png|webp)$/;
+
+/** The configured footer buttons that are whole and safe; [] when none. */
+export function footerButtonList(config) {
+  const list = config && Array.isArray(config.footerButtons) ? config.footerButtons : [];
+  return list.filter((b) => b && typeof b === 'object'
+    && typeof b.href === 'string' && BUTTON_HREF_RE.test(b.href)
+    && typeof b.image === 'string' && BUTTON_KEY_RE.test(b.image)
+    && typeof b.alt === 'string' && b.alt.trim() !== '' && b.alt.length <= 120
+    && Number.isInteger(b.width) && b.width > 0 && b.width <= 240
+    && Number.isInteger(b.height) && b.height > 0 && b.height <= 31
+    && (b.emissive === undefined || typeof b.emissive === 'boolean'));
+}
+
+// The CDN base the same way src/shared/site.js cdnBase() derives it, but from
+// the config passed in, so a frozen test config drives it too.
+const _configCdnBase = (config, origin) => (config.cdnBase || `${origin}/api/cdn`).replace(/\/+$/, '');
+
 // Takes the whole config rather than reading it, so on/off/both-off are
-// drivable against a frozen object (same reason as _supportTiersHtml).
-export function _footerChipsHtml(config = siteConfig) {
+// drivable against a frozen object (same reason as _supportTiersHtml). The
+// origin is only for a footer button on a site with no cdnBase (/api/cdn).
+export function _footerChipsHtml(config = siteConfig, origin = '') {
   const chips = [];
+
+  // The owner's buttons first, so the platform's two chips keep the edge.
+  for (const b of footerButtonList(config)) {
+    chips.push(
+      `<a class="footer-button" href="${escapeHtml(b.href)}" rel="noopener" title="${escapeHtml(b.alt)}"`
+      + ' style="display:inline-block;margin-left:14px;vertical-align:top;line-height:0">'
+      + `<img src="${escapeHtml(`${_configCdnBase(config, origin)}/${b.image}`)}" width="${b.width}" height="${b.height}"`
+      + ` alt="${escapeHtml(b.alt)}" loading="lazy" decoding="async"`
+      + ` style="display:block${b.emissive ? ';mix-blend-mode:difference' : ''}"></a>`);
+  }
 
   if (config.poweredBy !== false) {
     chips.push(
@@ -643,8 +700,8 @@ export function _footerChipsHtml(config = siteConfig) {
 // Registered on every HTML response like the nav and the support hooks. The
 // placeholder lives only in the homepage footer, so this is inert everywhere
 // else — including on the 404 document served in a gated page's place.
-export function injectFooterChips(rewriter, config = siteConfig) {
-  const html = _footerChipsHtml(config);
+export function injectFooterChips(rewriter, config = siteConfig, origin = '') {
+  const html = _footerChipsHtml(config, origin);
   rewriter.on('[data-site-chips]', {
     element(el) {
       // Nothing configured: take the placeholder out rather than leave an
@@ -888,8 +945,8 @@ export function injectSiteChrome(rewriter, url) {
   // The support page's tiers + copy (selectors exist only on that page).
   injectSupport(rewriter);
 
-  // The footer's OS + webring chips (the hook exists only on the homepage).
-  injectFooterChips(rewriter);
+  // The footer's buttons, OS + webring chips (the hook exists only on the homepage).
+  injectFooterChips(rewriter, siteConfig, url.origin);
 
   // Config-gated console surfaces. Registered unconditionally like the rest:
   // the data-console-feature hook exists only in the console shell, so this is

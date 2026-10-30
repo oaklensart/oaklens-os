@@ -9,6 +9,9 @@ vi.mock('../site.config.js', async (importOriginal) => {
   const actual = await importOriginal();
   const config = { ...actual.default, poweredBy: false };
   delete config.webring;
+  // and none of the owner's footer buttons, which share the hook (this
+  // instance lists one; tests/footer-buttons.test.js turns them on)
+  delete config.footerButtons;
   return { default: Object.freeze(config) };
 });
 

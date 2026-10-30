@@ -92,6 +92,10 @@ export const BACKFILL = Object.freeze({
   demoMode: false,
   repoConnected: false,
   poweredBy: true,
+  // Small buttons in the homepage footer, ahead of the chips: none unless the
+  // instance lists them. Each image is a key on the site's own CDN, never a URL
+  // (src/edge/chrome.js → footerButtonList says why).
+  footerButtons: [],
   // The client portal (`/c/*` + `/p/<code>` links). OFF unless explicitly true.
   // Instance-scoped: the engine strips the portal from forks entirely (see
   // scripts/os-extract.mjs), so the code that reads this flag exists only on an
