@@ -506,6 +506,12 @@ html {
   min-height: 44px;
 }
 
+/* No spin here: the button is the whole row, so turning it half round swung
+   the glyph to the menu's far edge, and a phone keeps :hover after a tap. */
+.nav-mobile .mode-toggle:hover {
+  transform: none;
+}
+
 /* ---- HAMBURGER (mobile) ---- */
 
 .nav-hamburger {
