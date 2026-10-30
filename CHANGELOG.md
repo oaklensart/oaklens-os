@@ -25,6 +25,13 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-29 (Your footer buttons show up on phones too)
+
+**Nothing to do.** A phone hides the right side of the footer, so the buttons
+you list under `footerButtons` never showed there. They now also sit in one
+centered row at the bottom of the phone menu, on every page. Same list, so
+there's nothing new to set; with no buttons listed, the menu is unchanged.
+
 ## 2026-10-25 (Your own buttons in the footer — none unless you add them)
 
 **Nothing to do.** The homepage footer can now show small buttons of your own

@@ -191,7 +191,8 @@ export default Object.freeze({
   // protects your seat if the domain ever lapses.
   // webring: { node: 7, slug: 'your-slug' },
   // FOOTER BUTTONS — small badges of your own (an 88x31 web button, a project
-  // of yours) in the homepage footer, ahead of the chips. None by default.
+  // of yours) in the homepage footer, ahead of the chips, and on a phone at
+  // the bottom of the menu, where the footer has no room. None by default.
   // Upload the image to your site's CDN first (the console's Library, or any
   // way you put files in your R2 bucket) and give its key here, not a URL: an
   // image from another site would be blocked by your site's security policy

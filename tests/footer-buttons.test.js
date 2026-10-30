@@ -3,7 +3,8 @@
 // The claims this file holds: a button renders only when it is whole (read
 // exact-shaped, like the webring seat); its image is always a key on the site's
 // own CDN, so the CSP never widens and the Site-in-a-ZIP mirrors it; it can
-// never stretch the footer; and a fork inherits none.
+// never stretch the footer; a phone, which hides the footer's right side, gets
+// the same buttons at the foot of its menu; and a fork inherits none.
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../site.config.js', async (importOriginal) => {
@@ -17,7 +18,7 @@ vi.mock('../site.config.js', async (importOriginal) => {
   };
 });
 
-const { footerButtonList, _footerChipsHtml } = await import('../src/edge/chrome.js');
+const { footerButtonList, _footerChipsHtml, _menuButtonsHtml } = await import('../src/edge/chrome.js');
 const { buildCsp } = await import('../src/shared/csp.js');
 const { mapReference } = await import('../js/site-export-core.js');
 const { resolveConfig } = await import('../src/shared/config.js');
@@ -102,6 +103,43 @@ describe('the markup', () => {
   });
 });
 
+describe('the phone menu', () => {
+  const TWO = { footerButtons: [{ ...WHOLE, height: 18, emissive: true }, { ...WHOLE, href: '/town', alt: 'Town' }] };
+
+  it('carries the same buttons, in the same order, from the same list', () => {
+    const html = _menuButtonsHtml({ ...TWO, cdnBase: 'https://cdn.example.com' });
+    expect(html.match(/class="menu-button"/g)).toHaveLength(2);
+    expect(html.indexOf('href="https://friend.example"')).toBeLessThan(html.indexOf('href="/town"'));
+    expect(html).toContain('src="https://cdn.example.com/buttons/friend.gif"');
+  });
+
+  it('draws each picture exactly as the footer does', () => {
+    const img = (h) => h.match(/<img[^>]+>/)[0];
+    for (const b of TWO.footerButtons) {
+      expect(img(_menuButtonsHtml({ footerButtons: [b] }, 'https://site.example')))
+        .toBe(img(_footerChipsHtml({ ...only(b) }, 'https://site.example')));
+    }
+  });
+
+  it('centres them on one row under a hairline', () => {
+    const html = _menuButtonsHtml(TWO);
+    expect(html).toMatch(/^<div class="nav-mobile-buttons" style="[^"]*display:flex/);
+    expect(html).toContain('justify-content:center');
+    expect(html).toContain('border-top:1px solid');
+  });
+
+  it('pads each one to a 44 px tap target, whatever its height', () => {
+    expect(_menuButtonsHtml({ footerButtons: [{ ...WHOLE, height: 18 }] })).toContain('padding:13px 6px');
+    expect(_menuButtonsHtml({ footerButtons: [{ ...WHOLE, height: 31 }] })).toContain('padding:7px 6px');
+  });
+
+  it('is no row at all when there are none', () => {
+    expect(_menuButtonsHtml({})).toBe('');
+    expect(_menuButtonsHtml({ footerButtons: [] })).toBe('');
+    expect(_menuButtonsHtml({ footerButtons: [{}] })).toBe('');
+  });
+});
+
 describe('what it costs the rest of the site: nothing', () => {
   it('widens no CSP directive', () => {
     const img = buildCsp('https://site.example', true).split(';').map((d) => d.trim()).find((d) => d.startsWith('img-src'));
@@ -120,5 +158,6 @@ describe('what it costs the rest of the site: nothing', () => {
 
   it('is none at all on a fork: the example config lists no buttons', () => {
     expect(footerButtonList(resolveConfig(example))).toEqual([]);
+    expect(_menuButtonsHtml(resolveConfig(example))).toBe('');
   });
 });

@@ -418,13 +418,15 @@ function _enabledNav() {
   return siteConfig.nav.filter((item) => !pageDisabled(item.href.split(/[?#]/)[0]));
 }
 
-function _navMobileHtml(pathname) {
+function _navMobileHtml(pathname, origin) {
   const links = _enabledNav().map((item) => {
     const active = _navActive(item.href, pathname) ? ' class="active"' : '';
     return `<a href="${escapeHtml(item.href)}"${active}>${escapeHtml(item.label)}</a>`;
   });
   links.push(`<a href="mailto:${escapeHtml(siteConfig.email)}">&#9993; Contact</a>`);
   if ((siteConfig.theme || {}).toggle !== false) links.push(_modeToggleHtml());
+  const buttons = _menuButtonsHtml(siteConfig, origin);
+  if (buttons) links.push(buttons);
   return links.join('\n  ');
 }
 
@@ -660,6 +662,35 @@ export function footerButtonList(config) {
 // the config passed in, so a frozen test config drives it too.
 const _configCdnBase = (config, origin) => (config.cdnBase || `${origin}/api/cdn`).replace(/\/+$/, '');
 
+// One button's picture, the same in the footer and the phone menu.
+function _buttonImgHtml(b, config, origin) {
+  return `<img src="${escapeHtml(`${_configCdnBase(config, origin)}/${b.image}`)}" width="${b.width}" height="${b.height}"`
+    + ` alt="${escapeHtml(b.alt)}" loading="lazy" decoding="async"`
+    + ` style="display:block${b.emissive ? ';mix-blend-mode:difference' : ''}">`;
+}
+
+// The same buttons at the foot of the phone menu. A phone hides the footer's
+// right side (css/main.css, max-width 900px), chips and all, so without this
+// row a phone visitor never sees them. One centered row under a hairline, so
+// they read as the owner's other things rather than more of this site's
+// sections. Each link is padded to a 44 px tap target around its 18-31 px
+// picture; the padding and the hover's background are reset inline over the
+// `.nav-mobile a` row style. Inline for the footer's reason: no stylesheet
+// change, no cache-bust. Same list, so a fork with none gets no row at all.
+export function _menuButtonsHtml(config = siteConfig, origin = '') {
+  const list = footerButtonList(config);
+  if (!list.length) return '';
+  const links = list.map((b) => {
+    const pad = Math.max(0, Math.ceil((44 - b.height) / 2));
+    return `<a class="menu-button" href="${escapeHtml(b.href)}" rel="noopener" title="${escapeHtml(b.alt)}"`
+      + ` style="display:block;padding:${pad}px 6px;line-height:0;background:none">`
+      + `${_buttonImgHtml(b, config, origin)}</a>`;
+  });
+  return '<div class="nav-mobile-buttons" style="display:flex;flex-wrap:wrap;justify-content:center;'
+    + 'column-gap:12px;margin:8px 24px 0;padding-top:8px;border-top:1px solid var(--gray-800)">'
+    + `${links.join('')}</div>`;
+}
+
 // Takes the whole config rather than reading it, so on/off/both-off are
 // drivable against a frozen object (same reason as _supportTiersHtml). The
 // origin is only for a footer button on a site with no cdnBase (/api/cdn).
@@ -671,9 +702,7 @@ export function _footerChipsHtml(config = siteConfig, origin = '') {
     chips.push(
       `<a class="footer-button" href="${escapeHtml(b.href)}" rel="noopener" title="${escapeHtml(b.alt)}"`
       + ' style="display:inline-block;margin-left:14px;vertical-align:top;line-height:0">'
-      + `<img src="${escapeHtml(`${_configCdnBase(config, origin)}/${b.image}`)}" width="${b.width}" height="${b.height}"`
-      + ` alt="${escapeHtml(b.alt)}" loading="lazy" decoding="async"`
-      + ` style="display:block${b.emissive ? ';mix-blend-mode:difference' : ''}"></a>`);
+      + `${_buttonImgHtml(b, config, origin)}</a>`);
   }
 
   if (config.poweredBy !== false) {
@@ -939,7 +968,7 @@ export function injectSiteChrome(rewriter, url) {
     element(el) { el.setInnerContent(_navLinksHtml(url.pathname), { html: true }); },
   });
   rewriter.on('.nav-mobile', {
-    element(el) { el.setInnerContent(_navMobileHtml(url.pathname), { html: true }); },
+    element(el) { el.setInnerContent(_navMobileHtml(url.pathname, url.origin), { html: true }); },
   });
 
   // The support page's tiers + copy (selectors exist only on that page).
