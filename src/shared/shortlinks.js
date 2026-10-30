@@ -48,10 +48,24 @@ const RESERVED = new Set([
   ...PUBLIC_PAGES.map((p) => p.replace(/^\//, '')).filter(Boolean),
 ]);
 
+// A value is either the target URL, scoped by `shortLinkHost` below, or
+// `{ url, host }`: a link that names its OWN host prefix, overriding the
+// table's. That is for the instance that runs two hostnames and has one link
+// belonging to the other side (software links on `os.`, one personal link on
+// the apex, say). A value of any other shape resolves to nothing, like a typo.
+function entryOf(value) {
+  if (typeof value === 'string') return { url: value, host: null };
+  if (value && typeof value === 'object' && typeof value.url === 'string') {
+    return { url: value.url, host: typeof value.host === 'string' ? value.host : null };
+  }
+  return null;
+}
+
 /** Config keys, lowercased once — the lookup is case-insensitive either side. */
 const TABLE = new Map(
   Object.entries(siteConfig.shortLinks || {})
-    .map(([code, target]) => [String(code).toLowerCase(), target]),
+    .map(([code, target]) => [String(code).toLowerCase(), entryOf(target)])
+    .filter(([, entry]) => entry),
 );
 
 // Optional hostname scope (`site.config.js` → `shortLinkHost`). A fork has one
@@ -76,11 +90,15 @@ const HOST_SCOPE = String(siteConfig.shortLinkHost || '');
  */
 export function resolveShortLink(pathname, hostname = '') {
   if (!TABLE.size) return null;
-  if (HOST_SCOPE && !String(hostname).startsWith(HOST_SCOPE)) return null;
   const code = pathname.replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
   if (!CODE_RE.test(code) || RESERVED.has(code)) return null;
-  const target = TABLE.get(code);
-  if (typeof target !== 'string') return null;
+  const entry = TABLE.get(code);
+  if (!entry) return null;
+  // The link's own host wins over the table's; either is a prefix the request
+  // host must start with, and an empty one answers everywhere.
+  const scope = entry.host !== null ? entry.host : HOST_SCOPE;
+  if (scope && !String(hostname).startsWith(scope)) return null;
+  const target = entry.url;
   // Absolute http(s) only. The value is owner-written, so this is not a trust
   // boundary — it is a typo boundary: a relative path or a `javascript:` paste
   // would either loop through this same resolver or ship a redirect the

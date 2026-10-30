@@ -25,6 +25,13 @@ resources. Keep yours. [setup.md](setup.md) has the exact commands.
 
 ---
 
+## 2026-10-24 (A short link can choose its own host)
+
+**Nothing to do.** If you run two hostnames and scope your short links to one
+of them with `shortLinkHost`, a single link can now answer on the other one
+instead: write it as `{ url: 'https://…', host: 'yoursite.com' }` rather than
+a plain address. Plain addresses work exactly as before.
+
 ## 2026-10-24 (A homepage card that moves — off unless you turn it on)
 
 **Nothing to do.** If you've put an interactive block in a field note, you can

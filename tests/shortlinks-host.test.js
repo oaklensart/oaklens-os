@@ -14,7 +14,14 @@ vi.mock('../site.config.js', async (importOriginal) => {
     default: Object.freeze({
       ...actual.default,
       shortLinkHost: 'links.',
-      shortLinks: { talk: 'https://example.com/a-talk' },
+      shortLinks: {
+        talk: 'https://example.com/a-talk',
+        // a link naming its own host: the OTHER side of a two-host instance
+        notes: { url: 'https://example.com/field-notes/post?slug=fn-001', host: 'example.com' },
+        // malformed values resolve to nothing, like a typo
+        broken: { host: 'example.com' },
+        odd: 42,
+      },
     }),
   };
 });
@@ -61,5 +68,29 @@ describe('a scoped table answers on its own host only', () => {
 
   it('treats a missing hostname as out of scope, never as a wildcard', () => {
     expect(resolveShortLink('/talk')).toBeNull();
+  });
+});
+
+describe('a link that names its own host', () => {
+  it('answers on its host even though the table is scoped elsewhere', async () => {
+    const res = await get('example.com', '/notes');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe('https://example.com/field-notes/post?slug=fn-001');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('is a 404 on the table\'s host — one address, not two', () => {
+    expect(resolveShortLink('/notes', 'links.example.com')).toBeNull();
+  });
+
+  it('leaves the rest of the table on the table\'s scope', () => {
+    expect(resolveShortLink('/talk', 'example.com')).toBeNull();
+    expect(resolveShortLink('/talk', 'links.example.com')).toBe('https://example.com/a-talk');
+  });
+
+  it('ignores an entry with no url, or one that is not a link at all', () => {
+    expect(resolveShortLink('/broken', 'example.com')).toBeNull();
+    expect(resolveShortLink('/odd', 'example.com')).toBeNull();
+    expect(resolveShortLink('/odd', 'links.example.com')).toBeNull();
   });
 });

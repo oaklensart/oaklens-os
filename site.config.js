@@ -121,6 +121,8 @@ export default Object.freeze({
   // a fresh site redirects nothing. A code is one lowercase word (letters,
   // digits, hyphens) and cannot shadow one of your own pages.
   //   shortLinks: { prints: 'https://…', talk: 'https://…' },
+  // A link can also name the host it answers on, overriding shortLinkHost
+  // below for that one link: { url: 'https://example.com/a-post', host: 'example.com' }.
   shortLinks: {},
   // If you run more than one hostname and want the short links to belong to
   // only one of them, name its prefix — e.g. 'links.' or 'go.'. Empty (the
