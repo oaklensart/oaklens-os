@@ -15,8 +15,11 @@ vi.mock('../site.config.js', async (importOriginal) => {
 });
 
 const { buildCsp } = await import('../src/shared/csp.js');
+const { cdnBase } = await import('../src/shared/site.js');
 
 const ORIGIN = 'https://example.com';
+const CDN = new URL(cdnBase(ORIGIN)).origin;
+const thirdParty = (list) => list.filter((h) => h !== CDN);
 const directive = (policy, name) =>
   policy.split('; ').find((d) => d.startsWith(`${name} `)) || '';
 const hosts = (policy, name) =>
@@ -29,7 +32,7 @@ describe('site.config.js → webAnalytics: true', () => {
   });
 
   it('adds the beacon connect host to the strict policy', () => {
-    expect(hosts(buildCsp(ORIGIN, true), 'connect-src'))
+    expect(thirdParty(hosts(buildCsp(ORIGIN, true), 'connect-src')))
       .toEqual(['https://cloudflareinsights.com']);
   });
 
@@ -37,7 +40,7 @@ describe('site.config.js → webAnalytics: true', () => {
     const policy = buildCsp(ORIGIN, false);
     expect(hosts(policy, 'script-src'))
       .toEqual(['https://cdn.jsdelivr.net', 'https://static.cloudflareinsights.com']);
-    expect(hosts(policy, 'connect-src'))
+    expect(thirdParty(hosts(policy, 'connect-src')))
       .toEqual(['https://cdn.jsdelivr.net', 'https://cloudflareinsights.com']);
   });
 

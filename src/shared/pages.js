@@ -37,6 +37,9 @@ export const PAGE_ROUTES = {
   listen: '/listen', card: '/card',
 };
 
+// A page that needs config to exist at all is off without it (none yet).
+const needsConfig = {};
+
 // Console infrastructure under /dev/ that must never be gated — disabling the
 // public /dev page must not lock the owner out of their own console.
 export const CONSOLE_PATHS = [
@@ -45,11 +48,11 @@ export const CONSOLE_PATHS = [
 ];
 
 export function pageDisabled(pathname) {
-  const pages = siteConfig.pages;
-  if (!pages) return false;
+  const pages = siteConfig.pages || {};
   if (CONSOLE_PATHS.some((p) => pathname === p || pathname.startsWith(p))) return false;
   for (const [key, root] of Object.entries(PAGE_ROUTES)) {
-    if (pages[key] === false && (pathname === root || pathname.startsWith(root + '/'))) return true;
+    if (!(pathname === root || pathname.startsWith(root + '/'))) continue;
+    if (pages[key] === false || (needsConfig[key] && !needsConfig[key]())) return true;
   }
   return false;
 }
